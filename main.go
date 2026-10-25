@@ -8,21 +8,27 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"github.com/psdcoder/agentdiff/internal/gitx"
 	"github.com/psdcoder/agentdiff/internal/store"
 )
 
 // startPath is the repository to open: the first argument, or the working
-// directory when started from a terminal inside a repository.
-func startPath() string {
+// directory when started from a terminal inside a repository. Only an
+// argument that is not a repository is an error worth showing.
+func startPath() (string, bool) {
 	for _, arg := range os.Args[1:] {
 		if !strings.HasPrefix(arg, "-") {
-			return arg
+			return arg, true
 		}
 	}
-	if wd, err := os.Getwd(); err == nil && wd != "/" {
-		return wd
+	wd, err := os.Getwd()
+	if err != nil || wd == "/" {
+		return "", false
 	}
-	return ""
+	if _, err := gitx.Open(wd); err != nil {
+		return "", false
+	}
+	return wd, true
 }
 
 func main() {
@@ -37,7 +43,7 @@ func main() {
 			{Role: mygo.RoleAppMenu},
 			{Label: "File", Submenu: []*mygo.MenuItem{
 				{Label: "Open Repository…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { a.chooseRepo() }},
-				{Label: "Refresh", Accelerator: "CmdOrCtrl+Shift+R", Click: func(*mygo.MenuItem, *mygo.Window) {
+				{Label: "Refresh", Accelerator: "CmdOrCtrl+R", Click: func(*mygo.MenuItem, *mygo.Window) {
 					if a.repo != nil {
 						a.reload()
 						a.win.Invalidate()
@@ -59,13 +65,8 @@ func main() {
 			StateKey:  "main",
 			Content:   ui.View(a.view),
 		})
-		if p := startPath(); p != "" {
-			a.win.Update(func() {
-				a.openRepo(p)
-				if a.repo == nil && len(os.Args) < 2 {
-					a.repoErr = ""
-				}
-			})
+		if p, ok := startPath(); ok {
+			a.win.Update(func() { a.openRepo(p) })
 		}
 	})
 	if err := mygo.App.Run(); err != nil {

@@ -16,9 +16,6 @@ func (a *app) view(c *ui.Context) {
 		a.welcome(c)
 		return
 	}
-	if c.Shortcut(ui.Cmd, ui.KeyR) {
-		a.reload()
-	}
 	t := c.Theme()
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)

@@ -200,9 +200,6 @@ func (a *app) reload() {
 			for _, f := range files {
 				a.diffs[f.Path] = &fileDiff{change: f, loading: true}
 			}
-			if a.page != "overview" && !strings.HasPrefix(a.page, "file:") && !strings.HasPrefix(a.page, "group:") {
-				return
-			}
 			if f, ok := strings.CutPrefix(a.page, "file:"); ok && a.diffs[f] == nil {
 				a.page = "overview"
 			}

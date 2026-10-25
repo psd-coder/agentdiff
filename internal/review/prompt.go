@@ -106,7 +106,7 @@ func DirectoryGroups(files []string) []Group {
 	for _, f := range files {
 		d := path.Dir(f)
 		if d == "." {
-			d = "/"
+			d = "Repository root"
 		}
 		if _, ok := byDir[d]; !ok {
 			dirs = append(dirs, d)

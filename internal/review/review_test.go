@@ -31,7 +31,7 @@ func TestParseOverview(t *testing.T) {
 			md:       "## Overview\nText",
 			wantBody: "## Overview\nText",
 			wantGroups: []Group{
-				{Title: "/", Files: []string{"README.md"}},
+				{Title: "Repository root", Files: []string{"README.md"}},
 				{Title: "a", Files: []string{"a/x.go", "a/y.go"}},
 				{Title: "b", Files: []string{"b/z.go"}},
 			},
@@ -41,7 +41,7 @@ func TestParseOverview(t *testing.T) {
 			md:       "Text\n```json\n{\"groups\": [oops]}\n```",
 			wantBody: "Text\n```json\n{\"groups\": [oops]}\n```",
 			wantGroups: []Group{
-				{Title: "/", Files: []string{"README.md"}},
+				{Title: "Repository root", Files: []string{"README.md"}},
 				{Title: "a", Files: []string{"a/x.go", "a/y.go"}},
 				{Title: "b", Files: []string{"b/z.go"}},
 			},
