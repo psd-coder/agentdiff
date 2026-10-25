@@ -27,8 +27,15 @@ func (a *app) overviewPage(c *ui.Context) {
 				case ov != nil && ov.Markdown != "":
 					ui.Button(c, "Regenerate").Disabled(len(a.files) == 0).OnClick(a.generateOverview)
 				}
+				if ov != nil || len(a.rev.Threads) > 0 {
+					ui.Button(c, "Start over").Tooltip("Delete the overview and comments of this scope").OnClick(a.confirmStartOver)
+				}
 			})
 			a.summaryLine(c)
+			if run == nil && !a.loading && ov.Stale(a.fileNames()) {
+				ui.Text(c, "The changed files differ from the ones this overview was written for. Regenerate it, or start over.").
+					Padding(10, 14).Radius(8).Background(t.Warning.Alpha(0.15)).Border(1, t.Warning)
+			}
 			switch {
 			case a.loading:
 				ui.Row(c).Gap(8).Children(func() {

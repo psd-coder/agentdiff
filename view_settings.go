@@ -59,6 +59,9 @@ func (a *app) openSettings() {
 		status:   map[agent.Provider]string{},
 	}
 	a.settings = f
+	if a.win == nil {
+		return
+	}
 	for _, p := range providers {
 		f.status[p] = "Checking…"
 		a.async(func() {

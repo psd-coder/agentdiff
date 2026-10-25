@@ -90,3 +90,22 @@ func TestReviewRoundTrip(t *testing.T) {
 		t.Error("reviews of different repos share a file")
 	}
 }
+
+func TestDeleteReview(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	r := s.LoadReview("/repo", scope)
+	r.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	if err := s.SaveReview(r); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteReview("/repo", scope); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.LoadReview("/repo", scope); len(got.Threads) != 0 {
+		t.Errorf("threads after delete = %d", len(got.Threads))
+	}
+	if err := s.DeleteReview("/repo", scope); err != nil {
+		t.Errorf("deleting a missing review: %v", err)
+	}
+}

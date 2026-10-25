@@ -218,14 +218,32 @@ func Args(cfg Config, req Request) []string {
 	return nil
 }
 
+var readOnlyCommands = []string{
+	"git diff", "git show", "git log", "git status", "git blame", "git ls-files", "git rev-parse",
+	"grep", "rg", "ls", "cat", "head", "tail", "wc",
+}
+
+// readOnlyRules allows each command also with an rtk prefix: rtk's hook
+// rewrites commands before Claude checks its rules.
+func readOnlyRules() []string {
+	rules := make([]string, 0, 2*len(readOnlyCommands))
+	for _, c := range readOnlyCommands {
+		rules = append(rules, "Bash("+c+":*)", "Bash(rtk "+c+":*)")
+	}
+	return rules
+}
+
+// claudeArgs keeps Claude read-only: in dontAsk mode a tool call that no
+// allow rule matches is refused instead of asked about, so the allow list
+// below, plus the user's own rules, is all that Bash may run.
 func claudeArgs(cfg Config, req Request) []string {
 	args := []string{
 		"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
 		"--tools", "Read,Grep,Glob,Bash",
+		"--permission-mode", "dontAsk",
 		"--allowedTools",
-		"Bash(git diff:*)", "Bash(git show:*)", "Bash(git log:*)",
-		"Bash(git status:*)", "Bash(git blame:*)", "Bash(git ls-files:*)",
 	}
+	args = append(args, readOnlyRules()...)
 	if cfg.Model != "" {
 		args = append(args, "--model", cfg.Model)
 	}

@@ -258,6 +258,35 @@ func (a *app) groups() []review.Group {
 	return review.DirectoryGroups(a.fileNames())
 }
 
+// startOver forgets the review of the current scope: its overview,
+// threads and viewed files.
+func (a *app) startOver() {
+	a.stopOverview()
+	for _, t := range a.rev.Threads {
+		a.stopThread(t)
+	}
+	if err := a.store.DeleteReview(a.repo.Root, a.scope); err != nil {
+		log.Printf("delete review: %v", err)
+	}
+	a.rev = review.New(a.repo.Root, a.scope)
+	a.thread, a.page, a.savedPath = "", "overview", ""
+	a.drafts = map[string]string{}
+}
+
+func (a *app) confirmStartOver() {
+	go func() {
+		res, err := mygo.Dialog.Message(mygo.MessageOptions{
+			Parent: a.win, Type: mygo.MessageWarning,
+			Message: "Start this review over?",
+			Detail:  "The overview, all comments and threads, and the viewed marks of this scope are deleted.",
+			Buttons: []string{"Start Over", "Cancel"},
+		})
+		if err == nil && res.Button == 0 {
+			a.update(a.startOver)
+		}
+	}()
+}
+
 func (a *app) saveReview() {
 	if a.rev == nil {
 		return

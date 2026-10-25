@@ -223,3 +223,22 @@ func TestSettingsOverride(t *testing.T) {
 func lineRange(start, end int) editor.DiffLineRange {
 	return editor.DiffLineRange{Side: editor.DiffNew, Start: start, End: end}
 }
+
+func TestStaleOverviewAndStartOver(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Markdown: "## A\nx", Groups: []review.Group{{Title: "Old", Files: []string{"gone.go"}}}, Agent: agent.Claude}
+	a.comment(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "old note")
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if !tt.HasText("The changed files differ from the ones this overview was written for. Regenerate it, or start over.") {
+		t.Error("stale warning missing")
+	}
+	a.startOver()
+	tt.Frame()
+	if a.rev.Overview != nil || len(a.rev.Threads) != 0 {
+		t.Errorf("review after start over = %+v", a.rev)
+	}
+	if got := a.store.LoadReview(a.repo.Root, a.scope); len(got.Threads) != 0 {
+		t.Error("saved review survived start over")
+	}
+}

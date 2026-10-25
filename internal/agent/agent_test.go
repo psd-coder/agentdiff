@@ -6,23 +6,35 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestReadOnlyRules(t *testing.T) {
+	rules := readOnlyRules()
+	if !slices.Contains(rules, "Bash(git show:*)") || !slices.Contains(rules, "Bash(rtk git show:*)") {
+		t.Errorf("rules = %v", rules)
+	}
+	for _, r := range rules {
+		if strings.Contains(r, "sed") || strings.Contains(r, "find") {
+			t.Errorf("rule %q can write files", r)
+		}
+	}
+}
 
 func TestMain(m *testing.M) {
 	loginEnv = os.Environ
 	os.Exit(m.Run())
 }
 
-var claudeBase = []string{
+var claudeBase = append([]string{
 	"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
 	"--tools", "Read,Grep,Glob,Bash",
+	"--permission-mode", "dontAsk",
 	"--allowedTools",
-	"Bash(git diff:*)", "Bash(git show:*)", "Bash(git log:*)",
-	"Bash(git status:*)", "Bash(git blame:*)", "Bash(git ls-files:*)",
-}
+}, readOnlyRules()...)
 
 var codexBase = []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check"}
 

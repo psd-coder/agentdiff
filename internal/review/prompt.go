@@ -18,7 +18,7 @@ const DefaultQuestions = `Explain the changes:
 5. Explain non-beautiful changes.
 6. Tell about assumptions and rules which force non-beautiful changes.`
 
-const SystemPrompt = `You help a developer review code changes that a coding agent made. You only read: never edit files, never run commands that change the repository. Inspect changes with read-only git commands (git diff, git show, git log, git blame) and by reading files. Be concise and concrete. Reference code as path:line.`
+const SystemPrompt = `You help a developer review code changes that a coding agent made. You only read: never edit files, never run commands that change the repository. Inspect changes with read-only git commands (git diff, git show, git log, git blame, git status) and with the Read, Grep and Glob tools. Other shell commands are refused, so do not try them; simple pipes into grep, head, tail or wc are fine. Be concise and concrete. Reference code as path:line.`
 
 // OverviewPrompt asks for the overview and for the files grouped by
 // intent, in a JSON block that ParseOverview takes out again.

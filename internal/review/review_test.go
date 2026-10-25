@@ -196,3 +196,25 @@ func TestThreads(t *testing.T) {
 		t.Error("Busy/Discussed wrong")
 	}
 }
+
+func TestOverviewStale(t *testing.T) {
+	o := &Overview{Groups: []Group{{Files: []string{"a", "b"}}}}
+	tests := []struct {
+		files []string
+		want  bool
+	}{
+		{[]string{"b", "a"}, false},
+		{[]string{"a"}, true},
+		{[]string{"a", "c"}, true},
+		{[]string{"a", "b", "c"}, true},
+	}
+	for _, tt := range tests {
+		if got := o.Stale(tt.files); got != tt.want {
+			t.Errorf("Stale(%v) = %v, want %v", tt.files, got, tt.want)
+		}
+	}
+	var none *Overview
+	if none.Stale([]string{"a"}) || (&Overview{}).Stale([]string{"a"}) {
+		t.Error("overview without groups is stale")
+	}
+}

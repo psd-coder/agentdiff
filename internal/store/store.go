@@ -90,6 +90,14 @@ func (s Store) SaveReview(r *review.Review) error {
 	return writeJSON(s.reviewPath(r.Repo, r.Scope), r)
 }
 
+func (s Store) DeleteReview(repo string, scope gitx.Scope) error {
+	err := os.Remove(s.reviewPath(repo, scope))
+	if IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
 func readJSON(path string, v any) error {
 	b, err := os.ReadFile(path)
 	if err != nil {

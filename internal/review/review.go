@@ -164,3 +164,26 @@ func newID() string {
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+// Stale reports whether the overview was written for other files than
+// the ones changed now, as when the working tree moved on.
+func (o *Overview) Stale(files []string) bool {
+	if o == nil || len(o.Groups) == 0 {
+		return false
+	}
+	grouped := map[string]bool{}
+	for _, g := range o.Groups {
+		for _, f := range g.Files {
+			grouped[f] = true
+		}
+	}
+	if len(grouped) != len(files) {
+		return true
+	}
+	for _, f := range files {
+		if !grouped[f] {
+			return true
+		}
+	}
+	return false
+}
