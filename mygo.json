@@ -1,0 +1,6 @@
+{
+  "name": "AgentDiff",
+  "identifier": "dev.psdcoder.agentdiff",
+  "version": "0.1.0",
+  "out": "build"
+}
