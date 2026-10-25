@@ -30,7 +30,7 @@ go tool mygo build
 It worked when `build/darwin-<arch>/` holds `AgentDiff.app` and a `.dmg`, with `arm64` or `amd64` for `<arch>`. Open a repository from the app with Cmd+O, or start it on the repository you are in from a terminal:
 
 ```bash
-open -na build/darwin-arm64/AgentDiff.app --args "$PWD"
+open -n build/darwin-arm64/AgentDiff.app --args "$PWD"
 ```
 
 During development, `go run . /path/to/repo` starts the app on a repository. Without an argument the app opens the current directory when that is a git repository, and shows a welcome screen otherwise.
