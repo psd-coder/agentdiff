@@ -169,3 +169,9 @@ func (r *Repo) resolveCommit(ctx context.Context, ref string) (string, error) {
 	}
 	return sha, nil
 }
+
+// GitDir is the repository's git directory, which git leaves out of every
+// diff.
+func (r *Repo) GitDir(ctx context.Context) (string, error) {
+	return r.line(ctx, "rev-parse", "--absolute-git-dir")
+}

@@ -179,3 +179,13 @@ func TestCommits(t *testing.T) {
 		t.Error("Commits with option-like base succeeded")
 	}
 }
+
+func TestGitDir(t *testing.T) {
+	got, err := newTestRepo(t).open().GitDir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(got) != ".git" {
+		t.Errorf("GitDir = %q", got)
+	}
+}

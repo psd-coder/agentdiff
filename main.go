@@ -1,57 +1,72 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+
+	"github.com/psdcoder/agentdiff/internal/store"
 )
 
-// app is the state the window shows. Its view builds the interface from
-// it, on the main thread, whenever the window needs a frame: after input,
-// after Window.Update, and while something animates.
-type app struct {
-	name  string
-	count int
-}
-
-func (a *app) view(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Fill().Center().Gap(16).Padding(24).Children(func() {
-		ui.Text(c, "agentdiff-tmp").FontSize(26).Bold()
-		ui.TextInput(c, &a.name).Placeholder("Your name").Label("Name").Width(240)
-		greeting := "Hello!"
-		if a.name != "" {
-			greeting = fmt.Sprintf("Hello, %s!", a.name)
+// startPath is the repository to open: the first argument, or the working
+// directory when started from a terminal inside a repository.
+func startPath() string {
+	for _, arg := range os.Args[1:] {
+		if !strings.HasPrefix(arg, "-") {
+			return arg
 		}
-		ui.Text(c, greeting).TextColor(t.TextMuted)
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			if ui.Button(c, "−").Width(44).Clicked() {
-				a.count--
-			}
-			ui.Textf(c, "%d", a.count).FontSize(20).Width(48).TextAlign(ui.Center)
-			if ui.PrimaryButton(c, "+").Width(44).Clicked() {
-				a.count++
-			}
-		})
-	})
+	}
+	if wd, err := os.Getwd(); err == nil && wd != "/" {
+		return wd
+	}
+	return ""
 }
 
 func main() {
-	a := &app{}
+	var a *app
 	mygo.App.WhenReady(func() {
-		mygo.NewWindow(mygo.WindowOptions{
-			Title:     "agentdiff-tmp",
-			Width:     480,
-			Height:    360,
-			MinWidth:  320,
-			MinHeight: 280,
-			// Opens where the user left it last time.
-			StateKey: "main",
-			// The window shows the interface MyGo draws, not a web page.
-			Content: ui.View(a.view),
+		dir, err := mygo.App.Path(mygo.PathUserData)
+		if err != nil {
+			log.Fatal(err)
+		}
+		a = newApp(store.Store{Dir: dir})
+		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+			{Role: mygo.RoleAppMenu},
+			{Label: "File", Submenu: []*mygo.MenuItem{
+				{Label: "Open Repository…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { a.chooseRepo() }},
+				{Label: "Refresh", Accelerator: "CmdOrCtrl+Shift+R", Click: func(*mygo.MenuItem, *mygo.Window) {
+					if a.repo != nil {
+						a.reload()
+						a.win.Invalidate()
+					}
+				}},
+				mygo.Separator(),
+				{Role: mygo.RoleClose},
+			}},
+			{Role: mygo.RoleEditMenu},
+			{Role: mygo.RoleViewMenu},
+			{Role: mygo.RoleWindowMenu},
+		}))
+		a.win = mygo.NewWindow(mygo.WindowOptions{
+			Title:     "AgentDiff",
+			Width:     1400,
+			Height:    900,
+			MinWidth:  900,
+			MinHeight: 560,
+			StateKey:  "main",
+			Content:   ui.View(a.view),
 		})
+		if p := startPath(); p != "" {
+			a.win.Update(func() {
+				a.openRepo(p)
+				if a.repo == nil && len(os.Args) < 2 {
+					a.repoErr = ""
+				}
+			})
+		}
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
