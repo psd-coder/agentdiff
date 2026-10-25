@@ -56,7 +56,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 	th := &review.Thread{Anchor: review.Anchor{Kind: review.AnchorFile, File: names[0]}}
 	th.Messages = []review.Message{{Role: review.RoleUser, Text: "In one sentence: what is the riskiest part of this file's change?"}}
-	answer, forked := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: review.QuestionPrompt(th, th.Messages[0].Text), ResumeID: session, Fork: true})
+	answer, forked := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: review.QuestionPrompt(th, th.Messages[0].Text, false), ResumeID: session, Fork: true})
 	t.Logf("answer: %s", answer)
 	if forked == "" || forked == session {
 		t.Errorf("fork session = %q, overview session = %q", forked, session)

@@ -163,13 +163,17 @@ func TestExportEmpty(t *testing.T) {
 func TestQuestionPrompt(t *testing.T) {
 	th := &Thread{Anchor: Anchor{Kind: AnchorLines, File: "a.go", Side: SideNew, Start: 3, Quote: "x := 1"}}
 	th.Messages = []Message{{Role: RoleUser, Text: "why?"}}
-	p := QuestionPrompt(th, "why?")
-	if !strings.Contains(p, "a.go:3 (+)") || !strings.Contains(p, "x := 1") || !strings.HasSuffix(p, "why?") {
+	p := QuestionPrompt(th, "why?", false)
+	if !strings.Contains(p, "a.go:3 (+)") || !strings.Contains(p, "x := 1") || !strings.HasSuffix(p, "why?") || strings.Contains(p, "so far") {
 		t.Errorf("first prompt = %q", p)
 	}
 	th.Messages = append(th.Messages, Message{Role: RoleAgent, Text: "because"}, Message{Role: RoleUser, Text: "ok?"})
-	if p := QuestionPrompt(th, "ok?"); p != "ok?" {
-		t.Errorf("follow-up prompt = %q", p)
+	if p := QuestionPrompt(th, "ok?", true); p != "ok?" {
+		t.Errorf("prompt to a known session = %q", p)
+	}
+	p = QuestionPrompt(th, "ok?", false)
+	if !strings.Contains(p, "a.go:3 (+)") || !strings.Contains(p, "Reviewer: why?\n\nAgent: because") || strings.Contains(p, "Reviewer: ok?") || !strings.HasSuffix(p, "ok?") {
+		t.Errorf("prompt to a new session = %q", p)
 	}
 }
 

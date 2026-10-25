@@ -159,10 +159,11 @@ func ContextPrompt(scope, diffstat string) string {
 	return fmt.Sprintf("The change set under review is %s\n\nDiffstat:\n```\n%s\n```\n\nRead the changes you need before you answer.\n\n", scope, strings.TrimSpace(diffstat))
 }
 
-// QuestionPrompt is the message of a thread sent to the agent: the first
-// one says what the thread is about.
-func QuestionPrompt(t *Thread, text string) string {
-	if len(t.Messages) > 1 {
+// QuestionPrompt is the message of a thread sent to the agent. A session
+// that does not know the thread yet, a new or a forked one, gets what the
+// thread is about and what was said in it so far.
+func QuestionPrompt(t *Thread, text string, known bool) string {
+	if known {
 		return text
 	}
 	var b strings.Builder
@@ -183,8 +184,32 @@ func QuestionPrompt(t *Thread, text string) string {
 	default:
 		b.WriteString("It is about the change set as a whole.\n")
 	}
+	if earlier := history(t); earlier != "" {
+		b.WriteString("\nThe thread so far:\n\n")
+		b.WriteString(earlier)
+	}
 	b.WriteString("\nThe reviewer asks:\n\n")
 	b.WriteString(text)
+	return b.String()
+}
+
+// history is the thread's messages before the last one, which is the
+// question being sent.
+func history(t *Thread) string {
+	if len(t.Messages) < 2 {
+		return ""
+	}
+	var b strings.Builder
+	for _, m := range t.Messages[:len(t.Messages)-1] {
+		if strings.TrimSpace(m.Text) == "" {
+			continue
+		}
+		who := "Reviewer"
+		if m.Role == RoleAgent {
+			who = "Agent"
+		}
+		fmt.Fprintf(&b, "%s: %s\n\n", who, strings.TrimSpace(m.Text))
+	}
 	return b.String()
 }
 

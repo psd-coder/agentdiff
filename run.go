@@ -127,10 +127,11 @@ func (a *app) ask(t *review.Thread, text string) {
 	rev := a.rev
 	cfg, _ := a.cfg.Effective(rev.Settings)
 	t.Messages = append(t.Messages, review.Message{Role: review.RoleUser, Text: text, Time: time.Now()})
-	prompt := review.QuestionPrompt(t, text)
 	req := agent.Request{Dir: a.repo.Root, SystemPrompt: review.SystemPrompt}
+	known := t.SessionID != "" && t.Agent == cfg.Provider
+	prompt := review.QuestionPrompt(t, text, known)
 	switch {
-	case t.SessionID != "" && t.Agent == cfg.Provider:
+	case known:
 		req.ResumeID = t.SessionID
 	case rev.Overview != nil && rev.Overview.SessionID != "" && rev.Overview.Agent == cfg.Provider:
 		req.ResumeID, req.Fork = rev.Overview.SessionID, true
