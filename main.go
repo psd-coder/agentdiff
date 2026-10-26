@@ -39,23 +39,7 @@ func main() {
 			log.Fatal(err)
 		}
 		a = newApp(store.Store{Dir: dir})
-		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Role: mygo.RoleAppMenu},
-			{Label: "File", Submenu: []*mygo.MenuItem{
-				{Label: "Open Repository…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { a.chooseRepo() }},
-				{Label: "Refresh", Accelerator: "CmdOrCtrl+R", Click: func(*mygo.MenuItem, *mygo.Window) {
-					if a.repo != nil {
-						a.reload()
-						a.win.Invalidate()
-					}
-				}},
-				mygo.Separator(),
-				{Role: mygo.RoleClose},
-			}},
-			{Role: mygo.RoleEditMenu},
-			{Role: mygo.RoleViewMenu},
-			{Role: mygo.RoleWindowMenu},
-		}))
+		mygo.App.SetMenu(a.menu())
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "AgentDiff",
 			Width:     1400,

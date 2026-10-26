@@ -16,23 +16,45 @@ func (a *app) goTo(page string) {
 	if page == a.page {
 		return
 	}
-	a.history = append(a.history, a.page)
-	if len(a.history) > maxHistory {
-		a.history = a.history[1:]
-	}
+	a.history = push(a.history, a.page)
+	a.forward = nil
 	a.page = page
+}
+
+func push(pages []string, page string) []string {
+	pages = append(pages, page)
+	if len(pages) > maxHistory {
+		pages = pages[1:]
+	}
+	return pages
 }
 
 // goBack returns to the last page that still exists.
 func (a *app) goBack() {
-	for len(a.history) > 0 {
-		page := a.history[len(a.history)-1]
-		a.history = a.history[:len(a.history)-1]
+	if page, ok := a.pop(&a.history); ok {
+		a.forward = push(a.forward, a.page)
+		a.page = page
+	}
+}
+
+// goForward opens again the page Back left.
+func (a *app) goForward() {
+	if page, ok := a.pop(&a.forward); ok {
+		a.history = push(a.history, a.page)
+		a.page = page
+	}
+}
+
+// pop takes the last page that still exists off pages.
+func (a *app) pop(pages *[]string) (string, bool) {
+	for len(*pages) > 0 {
+		page := (*pages)[len(*pages)-1]
+		*pages = (*pages)[:len(*pages)-1]
 		if a.pageExists(page) {
-			a.page = page
-			return
+			return page, true
 		}
 	}
+	return "", false
 }
 
 func (a *app) pageExists(page string) bool {
@@ -47,7 +69,7 @@ func (a *app) pageExists(page string) bool {
 
 // resetNav forgets the history and the scroll places, for another scope.
 func (a *app) resetNav() {
-	a.page, a.history = "overview", nil
+	a.page, a.history, a.forward = "overview", nil, nil
 	a.scrolls = map[string]*ui.ScrollState{}
 }
 

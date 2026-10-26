@@ -91,6 +91,22 @@ To see what an agent did, click Agent log in the toolbar, or Log on the Overview
 
 Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedback page has the checkboxes Include agent replies and Include resolved threads.
 
+## Keyboard
+
+| Keys | What it does |
+| --- | --- |
+| Cmd+[ and Cmd+], or the mouse's back and forward buttons | Back and forward through the pages you opened |
+| Escape | Closes the side panel on top: a thread or question, then the agent log |
+| Cmd+1, Cmd+2, Cmd+3 | Overview, Questions & comments, Feedback |
+| Option+Cmd+Down, Option+Cmd+Up | Next and previous file, in review order |
+| Cmd+L | Agent log |
+| Cmd+R | Read the changes again |
+| Cmd+Shift+B | Compare branches |
+| Cmd+, | Settings |
+| Cmd+Enter | Sends the question or comment you are typing |
+
+The menu bar lists these under File, View and Go.
+
 ## Configuration
 
 Settings has two tabs. All reviews writes the global configuration. This review overrides it for the current repository and scope only.

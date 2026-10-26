@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
@@ -578,5 +579,68 @@ func TestQuestionPanel(t *testing.T) {
 	}
 	if a.question != w.ID {
 		t.Errorf("question = %q", a.question)
+	}
+}
+
+func TestKeyboardNavigation(t *testing.T) {
+	a := newTestApp(t)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+
+	a.stepFile(1)
+	first := a.page
+	a.stepFile(1)
+	second := a.page
+	a.stepFile(1)
+	if first != "file:api/handler.go" || second != "file:cache/cache.go" || a.page != second {
+		t.Errorf("files: %q, %q, then %q", first, second, a.page)
+	}
+	a.goBack()
+	if a.page != first {
+		t.Errorf("back = %q", a.page)
+	}
+	a.goForward()
+	if a.page != second {
+		t.Errorf("forward = %q", a.page)
+	}
+	a.goTo("feedback")
+	if len(a.forward) != 0 {
+		t.Error("a new page kept the forward history")
+	}
+
+	a.newThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
+	a.rev.Thread(a.thread).Messages = []review.Message{{Role: review.RoleUser, Text: "x"}}
+	a.toggleLog()
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	if a.thread != "" || !a.logOpen {
+		t.Errorf("Escape: thread %q, log %v", a.thread, a.logOpen)
+	}
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	if a.logOpen {
+		t.Error("Escape left the log open")
+	}
+	tt.Key(0, ui.KeyBack)
+	if a.page != second {
+		t.Errorf("mouse back = %q", a.page)
+	}
+
+	seen := map[string]string{}
+	var walk func(items []*mygo.MenuItem)
+	walk = func(items []*mygo.MenuItem) {
+		for _, it := range items {
+			if it.Accelerator != "" {
+				if other, ok := seen[it.Accelerator]; ok {
+					t.Errorf("%s is the shortcut of %q and %q", it.Accelerator, other, it.Label)
+				}
+				seen[it.Accelerator] = it.Label
+			}
+			walk(it.Submenu)
+		}
+	}
+	walk(a.menu().Items())
+	if seen["CmdOrCtrl+["] != "Back" {
+		t.Errorf("shortcuts = %v", seen)
 	}
 }

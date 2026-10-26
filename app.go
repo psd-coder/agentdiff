@@ -71,6 +71,7 @@ type app struct {
 
 	page      string
 	history   []string
+	forward   []string
 	scrolls   map[string]*ui.ScrollState
 	thread    string
 	drafts    map[string]string

@@ -17,6 +17,7 @@ func (a *app) view(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
+	a.keys(c)
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)
 		ui.Split(c, &a.sidebarW, func() { a.sidebar(c) }, func() {
@@ -64,15 +65,9 @@ func (a *app) toolbar(c *ui.Context) {
 			label += " · " + cfg.Model
 		}
 		ui.Text(c, label).FontSize(12).TextColor(t.TextMuted).SingleLine()
-		ui.Button(c, "Agent log").Tooltip("Every call to the agent: command, prompt, tool calls, output").OnClick(func() {
-			if a.logOpen && a.logTarget == "" {
-				a.logOpen = false
-				return
-			}
-			a.showLog("")
-		})
+		ui.Button(c, "Agent log").Tooltip("Every call to the agent: command, prompt, tool calls, tokens (Cmd+L)").OnClick(a.toggleLog)
 		ui.Button(c, "Refresh").Tooltip("Read the changes again (Cmd+R)").OnClick(a.reload)
-		ui.Button(c, "Settings").OnClick(a.openSettings)
+		ui.Button(c, "Settings").Tooltip("Cmd+,").OnClick(a.openSettings)
 		ui.Button(c, "Open…").Tooltip("Open another repository").OnClick(a.chooseRepo)
 		n := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
 		ui.PrimaryButton(c, fmt.Sprintf("Feedback (%d)", n)).OnClick(func() { a.goTo("feedback") })
@@ -250,9 +245,6 @@ func (a *app) fileItem(c *ui.Context, file string) {
 }
 
 func (a *app) main(c *ui.Context) {
-	if c.Shortcut(ui.Cmd, ui.KeyBracketLeft) {
-		a.goBack()
-	}
 	ui.Column(c).Fill().Children(func() {
 		a.backBar(c)
 		if a.loadErr != "" {

@@ -69,9 +69,6 @@ func (a *app) questionPanel(c *ui.Context) {
 			}
 			ui.Button(c, "Close").Tooltip("Escape").OnClick(a.closeQuestion)
 		})
-		if c.Shortcut(0, ui.KeyEscape) {
-			a.closeQuestion()
-		}
 		ui.Text(c, "About: "+a.targetLabel(target.parent, target.step)).FontSize(12).TextColor(t.TextMuted).
 			SingleLine().Padding(6, 12).BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
 		ui.Scroll(c.Key("q-" + a.question)).TrackScroll(a.scrollOf("question:" + a.question)).Grow(1).FillWidth().Children(func() {

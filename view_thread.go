@@ -28,9 +28,6 @@ func (a *app) threadPanel(c *ui.Context) {
 			}
 			ui.Button(c, "Close").Tooltip("Escape").OnClick(a.closeThread)
 		})
-		if c.Shortcut(0, ui.KeyEscape) {
-			a.closeThread()
-		}
 		if th.Anchor.Quote != "" && th.Anchor.Kind == review.AnchorLines {
 			ui.Text(c, strings.TrimRight(th.Anchor.Quote, "\n")).Font("monospace").FontSize(12).MaxLines(8).
 				Padding(8, 12).Background(t.Surface).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Selectable()
