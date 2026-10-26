@@ -38,7 +38,7 @@ func (a *app) groupPage(c *ui.Context, i int) {
 		return
 	}
 	g := groups[i]
-	ui.Scroll(c).Grow(1).FillWidth().Children(func() {
+	ui.Scroll(c.Key(fmt.Sprintf("group-%d", i))).TrackScroll(a.scrollOf(fmt.Sprintf("group:%d", i))).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Gap(6).Padding(16, 20).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
 			if g.Summary != "" {
@@ -77,7 +77,7 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 	ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 		name := ui.Text(c, f.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
 		if !page && name.Clicked() {
-			a.page = "file:" + f.Path
+			a.goTo("file:" + f.Path)
 		}
 		ui.Badge(c, statusLabel(f))
 		ui.Text(c, fmt.Sprintf("+%d", f.Additions)).FontSize(12).TextColor(t.Success)

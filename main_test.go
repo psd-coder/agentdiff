@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"image/png"
 	"os"
 	"os/exec"
@@ -491,4 +492,32 @@ func TestDeeperAhead(t *testing.T) {
 		t.Errorf("log lacks the total; texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "deeper-ahead")
+}
+
+func TestBackFromSnippet(t *testing.T) {
+	a := newTestApp(t)
+	var steps []review.Step
+	for i := range 8 {
+		steps = append(steps, review.Step{Title: fmt.Sprintf("Step %d", i), Text: "Text.\n\nMore text.", Refs: []review.Ref{{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7}}})
+	}
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: steps}}
+	tt := ui.NewTester(a.view, 1300, 600)
+	tt.Frame()
+	a.scrollOf("overview").Y = 400
+	tt.Frame()
+	a.openRef(steps[3].Refs[0])
+	if a.page != "file:cache/cache.go" {
+		t.Fatalf("page = %q", a.page)
+	}
+	tt.Frame()
+	if err := tt.Click("‹ Back to Overview"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.page != "overview" || len(a.history) != 0 {
+		t.Errorf("page = %q, history %q", a.page, a.history)
+	}
+	if y := a.scrollOf("overview").Y; y != 400 {
+		t.Errorf("overview scrolled to %v, want 400", y)
+	}
 }

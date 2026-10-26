@@ -69,7 +69,7 @@ func (a *app) toolbar(c *ui.Context) {
 		ui.Button(c, "Settings").OnClick(a.openSettings)
 		ui.Button(c, "Open…").Tooltip("Open another repository").OnClick(a.chooseRepo)
 		n := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
-		ui.PrimaryButton(c, fmt.Sprintf("Feedback (%d)", n)).OnClick(func() { a.page = "feedback" })
+		ui.PrimaryButton(c, fmt.Sprintf("Feedback (%d)", n)).OnClick(func() { a.goTo("feedback") })
 	})
 }
 
@@ -185,7 +185,7 @@ func (a *app) reviewNav(c *ui.Context) {
 		}
 	}).Fill().Label("Review").Changed()
 	if changed {
-		a.page = page
+		a.goTo(page)
 	}
 }
 
@@ -244,7 +244,11 @@ func (a *app) fileItem(c *ui.Context, file string) {
 }
 
 func (a *app) main(c *ui.Context) {
+	if c.Shortcut(ui.Cmd, ui.KeyBracketLeft) {
+		a.goBack()
+	}
 	ui.Column(c).Fill().Children(func() {
+		a.backBar(c)
 		if a.loadErr != "" {
 			a.errorState(c, "Could not read the changes", a.loadErr)
 			return

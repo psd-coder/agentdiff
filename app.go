@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 	"github.com/egoist/mygo/ui/markdown"
 
@@ -69,6 +70,8 @@ type app struct {
 	logPct    float32
 
 	page      string
+	history   []string
+	scrolls   map[string]*ui.ScrollState
 	thread    string
 	drafts    map[string]string
 	overviews map[*review.Review]*overviewRun
@@ -113,6 +116,7 @@ func newApp(s store.Store) *app {
 		scopePct:    34,
 		mainPct:     62,
 		page:        "overview",
+		scrolls:     map[string]*ui.ScrollState{},
 		exportAgent: true,
 	}
 }
@@ -224,7 +228,8 @@ func (a *app) reviewOf(s gitx.Scope) *review.Review {
 func (a *app) setScope(s gitx.Scope) {
 	a.scope, a.scopeID = s, scopeID(s)
 	a.rev = a.reviewOf(s)
-	a.page, a.thread = "overview", ""
+	a.resetNav()
+	a.thread = ""
 	a.exportDone, a.savedPath = false, ""
 	a.reload()
 }
@@ -331,7 +336,8 @@ func (a *app) startOver() {
 	delete(a.runs, a.rev)
 	a.rev = review.New(a.repo.Root, a.scope)
 	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
-	a.thread, a.page, a.savedPath = "", "overview", ""
+	a.thread, a.savedPath = "", ""
+	a.resetNav()
 	a.drafts = map[string]string{}
 }
 

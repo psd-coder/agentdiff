@@ -19,9 +19,9 @@ func (a *app) threadPanel(c *ui.Context) {
 		ui.Row(c).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			title := ui.Text(c, th.Anchor.Label()).Bold().SingleLine().Shrink(1).Grow(1).Tooltip("Go to it")
 			if title.Clicked() && th.Anchor.File != "" {
-				a.page = "file:" + th.Anchor.File
+				a.goTo("file:" + th.Anchor.File)
 			} else if title.Clicked() && th.Anchor.Kind == review.AnchorSection {
-				a.page = "overview"
+				a.goTo("overview")
 			}
 			if th.Agent != "" {
 				ui.Button(c, "Log").Tooltip("What the agent did in this thread").OnClick(func() { a.showLog(th.ID) })
@@ -150,7 +150,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 
 func (a *app) threadsPage(c *ui.Context) {
 	t := c.Theme()
-	ui.Scroll(c).Grow(1).FillWidth().Children(func() {
+	ui.Scroll(c).TrackScroll(a.scrollOf("threads")).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
 			ui.Text(c, "Comments").FontSize(22).Bold()
 			n := 0
@@ -185,7 +185,7 @@ func (a *app) threadRow(c *ui.Context, th *review.Thread) {
 	if row.Clicked() {
 		a.openThread(th.ID)
 		if th.Anchor.File != "" {
-			a.page = "file:" + th.Anchor.File
+			a.goTo("file:" + th.Anchor.File)
 		}
 	}
 }

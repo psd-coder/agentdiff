@@ -17,7 +17,7 @@ func (a *app) overviewPage(c *ui.Context) {
 	cfg, _ := a.cfg.Effective(a.rev.Settings)
 	run := a.overviewRunning()
 	ov := a.rev.Overview
-	ui.Scroll(c).Grow(1).FillWidth().Children(func() {
+	ui.Scroll(c).TrackScroll(a.scrollOf("overview")).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Overview").FontSize(22).Bold()
@@ -180,7 +180,7 @@ func (a *app) groupCards(c *ui.Context) {
 		ui.Column(c.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Padding(14, 18).Radius(10).Border(1, t.Border).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold().Grow(1)
-				ui.Button(c, "Review group").OnClick(func() { a.page = fmt.Sprintf("group:%d", gi) })
+				ui.Button(c, "Review group").OnClick(func() { a.goTo(fmt.Sprintf("group:%d", gi)) })
 			})
 			if g.Summary != "" {
 				ui.Text(c, g.Summary).TextColor(t.TextMuted)
@@ -195,7 +195,7 @@ func (a *app) groupCards(c *ui.Context) {
 					ui.Text(c, mark).Width(14).TextColor(t.Success)
 					link := ui.Text(c, f).Font("monospace").FontSize(12).TextColor(t.Accent).Cursor(ui.CursorPointer).SingleLine().Shrink(1)
 					if link.Clicked() {
-						a.page = "file:" + f
+						a.goTo("file:" + f)
 					}
 					if d != nil {
 						ui.Text(c, fmt.Sprintf("+%d −%d", d.change.Additions, d.change.Deletions)).FontSize(11).TextColor(t.TextMuted)

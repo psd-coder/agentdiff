@@ -192,7 +192,7 @@ type walkRun struct {
 // steps, or about the question for step -1.
 func (a *app) deeper(parent string, step int, question string) {
 	w := a.rev.AddWalk(parent, step, question)
-	a.page = "walk:" + w.ID
+	a.goTo("walk:" + w.ID)
 	a.runWalk(a.rev, w)
 }
 
@@ -345,6 +345,9 @@ func (a *app) deleteWalk(w *review.Walk) {
 	a.page = "overview"
 	if w.Parent != "" {
 		a.page = "walk:" + w.Parent
+	}
+	if n := len(a.history); n > 0 && a.history[n-1] == a.page {
+		a.history = a.history[:n-1]
 	}
 	a.saveReview()
 }

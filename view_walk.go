@@ -64,7 +64,7 @@ func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 		}
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			if deeper != nil {
-				ui.Button(c, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { a.page = "walk:" + deeper.ID })
+				ui.Button(c, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { a.goTo("walk:" + deeper.ID) })
 				if a.walkBusy(deeper.ID) {
 					ui.Spinner(c).Size(12, 12)
 				}
@@ -122,7 +122,7 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 		}
 	})
 	if row.Clicked() {
-		a.page = "walk:" + w.ID
+		a.goTo("walk:" + w.ID)
 	}
 }
 
@@ -291,7 +291,7 @@ func (a *app) openRef(r review.Ref) {
 	if d == nil || d.state == nil {
 		return
 	}
-	a.page = "file:" + r.File
+	a.goTo("file:" + r.File)
 	d.state.SetSelectedLines(editor.DiffLineRange{Side: diffSide(r.Side), Start: r.Start - 1, End: r.End - 1}, true)
 	a.reveal = &reveal{file: r.File, hunk: nearestHunk(d.state.Hunks(), r)}
 }
@@ -329,13 +329,13 @@ func (a *app) walkPage(c *ui.Context, id string) {
 	}
 	run := a.walkRuns[w.ID]
 	path := a.rev.WalkPath(w.ID)
-	ui.Scroll(c).Grow(1).FillWidth().Children(func() {
+	ui.Scroll(c.Key("walk-" + w.ID)).TrackScroll(a.scrollOf("walk:" + w.ID)).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
 				crumb := func(label, page string) {
 					link := ui.Text(c, excerpt(label, 40)).FontSize(12).TextColor(t.Accent).Cursor(ui.CursorPointer)
 					if link.Clicked() {
-						a.page = page
+						a.goTo(page)
 					}
 					ui.Text(c, "›").FontSize(12).TextColor(t.TextMuted)
 				}
