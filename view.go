@@ -197,7 +197,7 @@ func (a *app) walkItems(c *ui.Context, parent string, depth int) {
 			continue
 		}
 		item := ui.SidebarItem(c, "walk:"+w.ID, nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))
-		if a.walkRuns[w.ID] != nil {
+		if a.walkBusy(w.ID) {
 			item.Children(func() { ui.Spinner(c).Size(12, 12) })
 		}
 		if depth < 8 {

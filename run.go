@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 			last = time.Now()
 			a.update(func() {
 				run.items = append(run.items, items...)
+				run.addUsage(items)
 				if text != "" {
 					fn(agent.Event{Kind: agent.EventText, Text: text})
 				}
@@ -74,7 +76,14 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 				log.Printf("run log: %v", err)
 			}
 		}
-		a.update(func() { run.running = false })
+		a.update(func() {
+			run.running = false
+			if u := run.info.Usage; u != nil {
+				if err := a.store.SaveRunUsage(rev.Repo, rev.Scope, info.ID, *u); err != nil {
+					log.Printf("run usage: %v", err)
+				}
+			}
+		})
 	}()
 }
 
@@ -115,6 +124,7 @@ func (a *app) generateOverview() {
 			rev.Overview = &ov
 			delete(a.overviews, rev)
 			a.saveReviewOf(rev)
+			a.deeperAhead(rev)
 		case agent.EventError:
 			delete(a.overviews, rev)
 			if ctx.Err() != nil {
@@ -154,7 +164,7 @@ func (a *app) regenerate(parent string) {
 		if parent == "" {
 			a.generateOverview()
 		} else if w := rev.Walk(parent); w != nil {
-			a.runWalk(w)
+			a.runWalk(rev, w)
 		}
 	}
 	if !rev.HasStepWalks(parent) {
@@ -183,16 +193,65 @@ type walkRun struct {
 func (a *app) deeper(parent string, step int, question string) {
 	w := a.rev.AddWalk(parent, step, question)
 	a.page = "walk:" + w.ID
-	a.runWalk(w)
+	a.runWalk(a.rev, w)
 }
+
+// maxAhead is how many walkthroughs the app writes at once ahead of the
+// reviewer.
+const maxAhead = 3
+
+type queuedWalk struct {
+	rev *review.Review
+	w   *review.Walk
+}
+
+// deeperAhead queues a deeper walkthrough of every step of the overview,
+// so that Go deeper opens one that is already written.
+func (a *app) deeperAhead(rev *review.Review) {
+	if !a.cfg.DeeperAhead || rev.Overview == nil || rev.Overview.Walk == nil {
+		return
+	}
+	for i := range rev.Overview.Walk.Steps {
+		if !slices.ContainsFunc(rev.WalksOn("", i), func(w *review.Walk) bool { return w.Question == "" }) {
+			a.ahead = append(a.ahead, queuedWalk{rev, rev.AddWalk("", i, "")})
+		}
+	}
+	a.saveReviewOf(rev)
+	a.startAhead()
+}
+
+func (a *app) startAhead() {
+	for len(a.ahead) > 0 && len(a.walkRuns) < maxAhead {
+		q := a.ahead[0]
+		a.ahead = a.ahead[1:]
+		if q.rev.Walk(q.w.ID) != nil {
+			a.runWalk(q.rev, q.w)
+		}
+	}
+}
+
+func (a *app) queued(id string) bool {
+	return slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.w.ID == id })
+}
+
+func (a *app) unqueue(id string) {
+	a.ahead = slices.DeleteFunc(a.ahead, func(q queuedWalk) bool { return q.w.ID == id })
+}
+
+// walkBusy reports whether a walk is being written or waits for its turn.
+func (a *app) walkBusy(id string) bool { return a.walkRuns[id] != nil || a.queued(id) }
 
 // runWalk asks the agent for a walk's walkthrough. It forks the session
 // of the walkthrough above, so the agent knows what the reviewer read on
 // the way down, and walks next to each other stay apart.
-func (a *app) runWalk(w *review.Walk) {
-	rev := a.rev
+func (a *app) runWalk(rev *review.Review, w *review.Walk) {
+	a.unqueue(w.ID)
 	if run := a.walkRuns[w.ID]; run != nil {
 		run.cancel()
+	}
+	diffstat := ""
+	if rev == a.rev {
+		diffstat = a.diffstat
 	}
 	cfg, _ := a.cfg.Effective(rev.Settings)
 	parentSession, parentAgent := "", agent.Provider("")
@@ -204,16 +263,16 @@ func (a *app) runWalk(w *review.Walk) {
 	d := review.DeeperRequest{
 		Question: w.Question,
 		Known:    parentSession != "" && parentAgent == cfg.Provider,
-		NewRev:   a.scope.NewRev(),
+		NewRev:   rev.Scope.NewRev(),
 	}
 	if s, ok := rev.StepOf(w); ok {
 		d.Step = &s
 	}
-	req := agent.Request{Dir: a.repo.Root, SystemPrompt: review.SystemPrompt}
+	req := agent.Request{Dir: rev.Repo, SystemPrompt: review.SystemPrompt}
 	if d.Known {
 		req.ResumeID, req.Fork = parentSession, true
 	} else {
-		d.Context = review.ContextPrompt(a.scope.Describe(), a.diffstat)
+		d.Context = review.ContextPrompt(rev.Scope.Describe(), diffstat)
 		path := rev.WalkPath(w.ID)
 		for _, p := range path[:len(path)-1] {
 			d.Path = append(d.Path, rev.WalkTitle(p))
@@ -227,7 +286,11 @@ func (a *app) runWalk(w *review.Walk) {
 	run := &walkRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.walkRuns[w.ID] = run
 	a.saveReviewOf(rev)
-	info := newRunInfo(w.ID, rev.WalkTitle(w), w.Question, cfg)
+	title := "Deeper: " + rev.WalkTitle(w)
+	if w.Question != "" {
+		title = "Question: " + w.Question
+	}
+	info := newRunInfo(w.ID, title, "", cfg)
 	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
 		if a.walkRuns[w.ID] != run {
 			return
@@ -250,6 +313,7 @@ func (a *app) runWalk(w *review.Walk) {
 			w.Generated = time.Now()
 			delete(a.walkRuns, w.ID)
 			a.saveReviewOf(rev)
+			a.startAhead()
 		case agent.EventError:
 			delete(a.walkRuns, w.ID)
 			w.Err = ev.Err.Error()
@@ -257,11 +321,13 @@ func (a *app) runWalk(w *review.Walk) {
 				w.Err = "Stopped"
 			}
 			a.saveReviewOf(rev)
+			a.startAhead()
 		}
 	})
 }
 
 func (a *app) stopWalk(id string) {
+	a.unqueue(id)
 	if run := a.walkRuns[id]; run != nil {
 		run.cancel()
 	}

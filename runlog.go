@@ -55,12 +55,28 @@ func (r *logRun) status() string {
 	return ""
 }
 
+// addUsage counts what the items of a run report as spent.
+func (r *logRun) addUsage(items []logItem) {
+	for _, it := range items {
+		if it.Usage == nil {
+			continue
+		}
+		if r.info.Usage == nil {
+			r.info.Usage = &agent.Usage{}
+		}
+		r.info.Usage.Add(*it.Usage)
+	}
+}
+
 func (r *logRun) label() string {
 	parts := []string{r.info.Title, providerName(r.info.Agent)}
 	if r.info.Model != "" {
 		parts = append(parts, r.info.Model)
 	}
 	parts = append(parts, r.info.Started.Format("Jan 2 15:04:05"))
+	if u := r.info.Usage; u != nil {
+		parts = append(parts, agent.Count(u.Total())+" tokens")
+	}
 	if s := r.status(); s != "" {
 		parts = append(parts, s)
 	}
@@ -110,6 +126,9 @@ func (a *app) loadRun(rev *review.Review, r *logRun) {
 		}
 		a.update(func() {
 			r.items, r.loaded, r.loading = items, true, false
+			if r.info.Usage == nil {
+				r.addUsage(items)
+			}
 			if err != nil {
 				r.err = err.Error()
 			}

@@ -65,6 +65,9 @@ func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			if deeper != nil {
 				ui.Button(c, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { a.page = "walk:" + deeper.ID })
+				if a.walkBusy(deeper.ID) {
+					ui.Spinner(c).Size(12, 12)
+				}
 			} else {
 				ui.PrimaryButton(c, "Go deeper").Tooltip("A walkthrough of this step, one level closer to the code").OnClick(func() { a.deeper(parent, i, "") })
 			}
@@ -112,7 +115,7 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 		ui.Text(c, "›").TextColor(t.Accent)
 		ui.Text(c, a.rev.WalkTitle(w)).SingleLine().Shrink(1).Grow(1)
 		switch {
-		case a.walkRuns[w.ID] != nil:
+		case a.walkBusy(w.ID):
 			ui.Spinner(c).Size(12, 12)
 		case w.Err != "":
 			ui.Text(c, "failed").FontSize(11).TextColor(t.Danger)
@@ -344,7 +347,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 			})
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.rev.WalkTitle(w)).FontSize(22).Bold().Grow(1).Shrink(1)
-				if run != nil {
+				if run != nil || a.queued(w.ID) {
 					ui.Button(c, "Stop").OnClick(func() { a.stopWalk(w.ID) })
 				} else {
 					ui.Button(c, "Regenerate").OnClick(func() { a.regenerate(w.ID) })
@@ -360,6 +363,12 @@ func (a *app) walkPage(c *ui.Context, id string) {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
+				})
+			case a.queued(w.ID):
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(c).Size(14, 14)
+					ui.Text(c, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(t.TextMuted)
+					ui.Button(c, "Start now").OnClick(func() { a.runWalk(a.rev, w) })
 				})
 			case w.Content != nil:
 				a.walkthrough(c, w.ID, w.Content)

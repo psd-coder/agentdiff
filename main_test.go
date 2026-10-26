@@ -355,7 +355,10 @@ func fakeClaude(t *testing.T, id, answer string) string {
 	t.Helper()
 	dir := t.TempDir()
 	init := `{"type":"system","subtype":"init","session_id":"` + id + `"}`
-	result, err := json.Marshal(map[string]any{"type": "result", "subtype": "success", "result": answer, "session_id": id})
+	result, err := json.Marshal(map[string]any{
+		"type": "result", "subtype": "success", "result": answer, "session_id": id, "total_cost_usd": 0.25,
+		"modelUsage": map[string]any{"m": map[string]int{"inputTokens": 10, "outputTokens": 1000, "cacheReadInputTokens": 20000, "cacheCreationInputTokens": 5000}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,4 +443,52 @@ func TestWalkthrough(t *testing.T) {
 	if r, ok := a.diffs["cache/cache.go"].state.SelectedLines(); !ok || r.Start != 5 || r.End != 5 {
 		t.Errorf("selection = %+v, %v", r, ok)
 	}
+}
+
+func TestDeeperAhead(t *testing.T) {
+	a := newTestApp(t)
+	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}, {"title": "B", "text": "b"}, {"title": "C", "text": "c"}, {"title": "D", "text": "d"}], "groups": []}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	a.queue = make(chan func(), 256)
+	a.generateOverview()
+	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	if len(a.rev.Walks) != 4 || len(a.walkRuns) != maxAhead || !a.queued(a.rev.Walks[3].ID) {
+		t.Fatalf("%d walks, %d running", len(a.rev.Walks), len(a.walkRuns))
+	}
+	for i, w := range a.rev.Walks {
+		if w.Step != i || w.Question != "" {
+			t.Errorf("walk %d = %+v", i, w)
+		}
+	}
+	pump(t, a, "the deeper walkthroughs", func() bool {
+		for _, r := range a.runsOf(a.rev) {
+			if r.running {
+				return false
+			}
+		}
+		return len(a.walkRuns) == 0 && len(a.ahead) == 0
+	})
+	for _, w := range a.rev.Walks {
+		if w.Content == nil || w.SessionID != "s1" {
+			t.Errorf("walk = %+v", w)
+		}
+	}
+
+	runs := a.store.Runs(a.repo.Root, a.scope)
+	if len(runs) != 5 {
+		t.Fatalf("%d runs", len(runs))
+	}
+	want := agent.Usage{Input: 10, Output: 1000, CacheRead: 20000, CacheWrite: 5000, CostUSD: 0.25}
+	for _, r := range runs {
+		if r.Usage == nil || *r.Usage != want {
+			t.Errorf("usage of %s = %+v", r.Title, r.Usage)
+		}
+	}
+	tt := ui.NewTester(a.view, 1400, 900)
+	a.showLog("")
+	tt.Frame()
+	if !tt.HasText("130k tokens") {
+		t.Errorf("log lacks the total; texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "deeper-ahead")
 }

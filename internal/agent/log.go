@@ -121,6 +121,50 @@ type LogItem struct {
 	Title  string
 	Detail string
 	Failed bool
+	// Usage is set on the item that reports what a run spent.
+	Usage *Usage
+}
+
+// Usage is the tokens a run spent. Input counts the tokens read without
+// the cache. CostUSD is what the CLI reports at API prices, 0 for Codex.
+type Usage struct {
+	Input      int     `json:"input"`
+	Output     int     `json:"output"`
+	CacheRead  int     `json:"cacheRead"`
+	CacheWrite int     `json:"cacheWrite"`
+	CostUSD    float64 `json:"costUsd,omitempty"`
+}
+
+func (u Usage) Total() int { return u.Input + u.Output + u.CacheRead + u.CacheWrite }
+
+func (u *Usage) Add(o Usage) {
+	u.Input += o.Input
+	u.Output += o.Output
+	u.CacheRead += o.CacheRead
+	u.CacheWrite += o.CacheWrite
+	u.CostUSD += o.CostUSD
+}
+
+func (u Usage) String() string {
+	s := fmt.Sprintf("%s tokens: %s in, %s cache read, %s cache write, %s out",
+		Count(u.Total()), Count(u.Input), Count(u.CacheRead), Count(u.CacheWrite), Count(u.Output))
+	if u.CostUSD > 0 {
+		s += fmt.Sprintf(", $%.4f at API prices", u.CostUSD)
+	}
+	return s
+}
+
+// Count writes a token count short: 950, 12.3k, 1.2M.
+func Count(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 10_000:
+		return fmt.Sprintf("%dk", n/1000)
+	case n >= 1000:
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	}
+	return fmt.Sprint(n)
 }
 
 func Summarize(p Provider, e LogEntry) []LogItem {
@@ -190,6 +234,12 @@ type claudeLogLine struct {
 		CacheRead  int `json:"cache_read_input_tokens"`
 		CacheWrite int `json:"cache_creation_input_tokens"`
 	} `json:"usage"`
+	ModelUsage map[string]struct {
+		Input      int `json:"inputTokens"`
+		Output     int `json:"outputTokens"`
+		CacheRead  int `json:"cacheReadInputTokens"`
+		CacheWrite int `json:"cacheCreationInputTokens"`
+	} `json:"modelUsage"`
 }
 
 func claudeItems(raw []byte) []LogItem {
@@ -233,7 +283,8 @@ func claudeItems(raw []byte) []LogItem {
 		return items
 	case "result":
 		failed := l.IsError || strings.HasPrefix(l.Subtype, "error")
-		item := LogItem{Title: "Result: " + firstNonEmpty(l.Subtype, "done"), Detail: claudeStats(l), Failed: failed}
+		u := claudeUsage(l)
+		item := LogItem{Title: "Result: " + firstNonEmpty(l.Subtype, "done"), Detail: claudeStats(l, u), Failed: failed, Usage: &u}
 		if failed && l.Result != "" {
 			item.Detail = l.Result + "\n" + item.Detail
 		}
@@ -262,16 +313,22 @@ func claudeSystem(l claudeLogLine) []LogItem {
 	return []LogItem{{Title: "System: " + l.Subtype}}
 }
 
-func claudeStats(l claudeLogLine) string {
-	parts := []string{
-		fmt.Sprintf("%d turns", l.Turns),
-		fmt.Sprintf("%.1f s", float64(l.DurationMS)/1000),
-		fmt.Sprintf("$%.4f", l.Cost),
+func claudeStats(l claudeLogLine, u Usage) string {
+	return fmt.Sprintf("%d turns, %.1f s\n%s", l.Turns, float64(l.DurationMS)/1000, u)
+}
+
+// claudeUsage sums the usage of every model the run used. The top-level
+// usage only holds the last request when a session was resumed, so it is
+// the fallback for an older CLI without modelUsage.
+func claudeUsage(l claudeLogLine) Usage {
+	u := Usage{CostUSD: l.Cost}
+	for _, m := range l.ModelUsage {
+		u.Add(Usage{Input: m.Input, Output: m.Output, CacheRead: m.CacheRead, CacheWrite: m.CacheWrite})
 	}
-	if u := l.Usage; u != nil {
-		parts = append(parts, fmt.Sprintf("tokens: %d in, %d out, %d cache read, %d cache write", u.Input, u.Output, u.CacheRead, u.CacheWrite))
+	if len(l.ModelUsage) == 0 && l.Usage != nil {
+		u.Add(Usage{Input: l.Usage.Input, Output: l.Usage.Output, CacheRead: l.Usage.CacheRead, CacheWrite: l.Usage.CacheWrite})
 	}
-	return strings.Join(parts, ", ")
+	return u
 }
 
 func toolResultText(raw json.RawMessage) string {
@@ -347,8 +404,10 @@ func codexItems(raw []byte) []LogItem {
 		return []LogItem{{Title: "Turn failed", Detail: msg, Failed: true}}
 	case "turn.completed":
 		item := LogItem{Title: "Turn completed"}
-		if u := l.Usage; u != nil {
-			item.Detail = fmt.Sprintf("tokens: %d in, %d cached, %d out, %d reasoning", u.Input, u.Cached, u.Output, u.Reasoning)
+		if c := l.Usage; c != nil {
+			u := Usage{Input: c.Input - c.Cached, CacheRead: c.Cached, Output: c.Output}
+			item.Usage = &u
+			item.Detail = fmt.Sprintf("%s, of them %s reasoning", u, Count(c.Reasoning))
 		}
 		return []LogItem{item}
 	}

@@ -144,6 +144,16 @@ func TestRunsRoundTrip(t *testing.T) {
 	if err != nil || len(entries) != 2 || entries[0].Text != `{"type":"system"}` || entries[1].Text != "line two" {
 		t.Fatalf("entries = %+v, %v", entries, err)
 	}
+	if runs[0].Usage != nil {
+		t.Errorf("usage before the run ended = %+v", runs[0].Usage)
+	}
+	u := agent.Usage{Input: 1, Output: 2, CacheRead: 3, CostUSD: 0.5}
+	if err := s.SaveRunUsage("/repo", scope, newer.ID, u); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Runs("/repo", scope); got[0].Usage == nil || *got[0].Usage != u || len(got) != 2 {
+		t.Errorf("runs with usage = %+v", got)
+	}
 	if got := s.Runs("/repo", gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc"}); len(got) != 0 {
 		t.Errorf("other scope runs = %+v", got)
 	}

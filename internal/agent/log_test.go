@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -141,8 +142,12 @@ func TestSummarizeClaude(t *testing.T) {
 	if d := byTitle["Tool result"].Detail; !strings.Contains(d, "Scaffold MyGo native app") {
 		t.Errorf("tool result = %q", d)
 	}
-	if d := byTitle["Result: success"].Detail; !strings.HasPrefix(d, "2 turns, 6.8 s, $0.0074, tokens: 4 in, 119 out") {
-		t.Errorf("result = %q", d)
+	res := byTitle["Result: success"]
+	if want := (Usage{Input: 4, Output: 119, CacheRead: 34947, CacheWrite: 35116, CostUSD: 0.0074325699999999995}); res.Usage == nil || *res.Usage != want {
+		t.Errorf("usage = %+v", res.Usage)
+	}
+	if want := "2 turns, 6.8 s\n70k tokens: 4 in, 34k cache read, 35k cache write, 119 out, $0.0074 at API prices"; res.Detail != want {
+		t.Errorf("result = %q", res.Detail)
 	}
 	if d := byTitle["Session started"].Detail; !strings.HasPrefix(d, "model claude-haiku-5-5, permission mode ") {
 		t.Errorf("session = %q", d)
@@ -158,8 +163,11 @@ func TestSummarizeCodex(t *testing.T) {
 	if items[2].Detail != "rtk git log -1 --oneline" {
 		t.Errorf("tool call = %q", items[2].Detail)
 	}
-	if items[5].Detail != "tokens: 61155 in, 34048 cached, 128 out, 16 reasoning" {
-		t.Errorf("usage = %q", items[5].Detail)
+	if want := (Usage{Input: 27107, CacheRead: 34048, Output: 128}); items[5].Usage == nil || *items[5].Usage != want {
+		t.Errorf("usage = %+v", items[5].Usage)
+	}
+	if items[5].Detail != "61k tokens: 27k in, 34k cache read, 0 cache write, 128 out, of them 16 reasoning" {
+		t.Errorf("usage detail = %q", items[5].Detail)
 	}
 }
 
@@ -183,7 +191,7 @@ func TestSummarizeEdgeCases(t *testing.T) {
 		{
 			"failed result", Claude,
 			LogEntry{Kind: LogStdout, Text: `{"type":"result","subtype":"error_max_turns","is_error":true,"result":"too long","num_turns":9}`},
-			[]LogItem{{Title: "Result: error_max_turns", Detail: "too long\n9 turns, 0.0 s, $0.0000", Failed: true}},
+			[]LogItem{{Title: "Result: error_max_turns", Detail: "too long\n9 turns, 0.0 s\n0 tokens: 0 in, 0 cache read, 0 cache write, 0 out", Failed: true, Usage: &Usage{}}},
 		},
 		{
 			"failed command", Codex,
@@ -198,9 +206,25 @@ func TestSummarizeEdgeCases(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Summarize(tt.p, tt.entry); !slices.Equal(got, tt.want) {
+			if got := Summarize(tt.p, tt.entry); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestClaudeUsageFromFork(t *testing.T) {
+	items := fixtureItems(t, Claude, "claude_fork.jsonl")
+	last := items[len(items)-1]
+	if want := (Usage{Input: 4, Output: 23, CacheRead: 31953, CacheWrite: 35399, CostUSD: 0.0074112299999999996}); last.Usage == nil || *last.Usage != want {
+		t.Errorf("usage = %+v", last.Usage)
+	}
+}
+
+func TestCount(t *testing.T) {
+	for n, want := range map[int]string{950: "950", 1234: "1.2k", 12345: "12k", 1_234_567: "1.2M"} {
+		if got := Count(n); got != want {
+			t.Errorf("Count(%d) = %q, want %q", n, got, want)
+		}
 	}
 }

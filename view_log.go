@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"github.com/psdcoder/agentdiff/internal/agent"
 	"github.com/psdcoder/agentdiff/internal/store"
 )
 
@@ -41,6 +42,9 @@ func (a *app) logPanel(c *ui.Context) {
 		ui.Row(c).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "Agent log").Bold()
 			ui.Text(c, a.logTargetLabel()).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1).Grow(1)
+			if total, ok := a.logUsage(); ok {
+				ui.Text(c, agent.Count(total.Total())+" tokens").FontSize(12).TextColor(t.TextMuted).Tooltip(total.String())
+			}
 			if a.logTarget != "" {
 				ui.Button(c, "Show all").OnClick(func() { a.logTarget = "" })
 			}
@@ -64,6 +68,19 @@ func (a *app) logPanel(c *ui.Context) {
 	})
 }
 
+// logUsage is what the runs in the log panel spent, as far as known.
+func (a *app) logUsage() (agent.Usage, bool) {
+	var total agent.Usage
+	known := false
+	for _, r := range a.runsOf(a.rev) {
+		if r.info.Usage != nil && (a.logTarget == "" || r.info.Target == a.logTarget) {
+			total.Add(*r.info.Usage)
+			known = true
+		}
+	}
+	return total, known
+}
+
 func (a *app) runView(c *ui.Context, r *logRun) {
 	t := c.Theme()
 	rev := a.rev
@@ -74,6 +91,9 @@ func (a *app) runView(c *ui.Context, r *logRun) {
 		ui.Column(c).Gap(8).Padding(4, 0, 8, 0).Children(func() {
 			if r.info.Note != "" {
 				ui.Text(c, r.info.Note).FontSize(12).TextColor(t.TextMuted).MaxLines(2)
+			}
+			if u := r.info.Usage; u != nil {
+				ui.Text(c, u.String()).FontSize(12).TextColor(t.TextMuted)
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Button(c, "Copy").Disabled(!r.loaded).OnClick(func() {

@@ -33,6 +33,9 @@ type RunInfo struct {
 	Agent   agent.Provider `json:"agent"`
 	Model   string         `json:"model,omitempty"`
 	Started time.Time      `json:"started"`
+	// Usage is what the run spent, known once it ended. It lives in a
+	// file next to the log, so listing runs does not read whole logs.
+	Usage *agent.Usage `json:"-"`
 }
 
 func NewRunID(t time.Time) string {
@@ -46,6 +49,12 @@ func (s Store) runDir(repo string, scope gitx.Scope) string {
 // RunPath is the file that holds the log of a run.
 func (s Store) RunPath(repo string, scope gitx.Scope, id string) string {
 	return filepath.Join(s.runDir(repo, scope), id+".jsonl")
+}
+
+func usagePath(log string) string { return strings.TrimSuffix(log, ".jsonl") + ".usage.json" }
+
+func (s Store) SaveRunUsage(repo string, scope gitx.Scope, id string, u agent.Usage) error {
+	return writeJSON(usagePath(s.RunPath(repo, scope, id)), u)
 }
 
 // RunWriter appends the log entries of one run to its file: the run's
@@ -88,7 +97,9 @@ func (w *RunWriter) Close() error { return w.f.Close() }
 func (s Store) pruneRuns(dir string) {
 	names := runFiles(dir)
 	for len(names) >= MaxRuns {
-		os.Remove(filepath.Join(dir, names[0]))
+		path := filepath.Join(dir, names[0])
+		os.Remove(path)
+		os.Remove(usagePath(path))
 		names = names[1:]
 	}
 }
@@ -115,10 +126,16 @@ func (s Store) Runs(repo string, scope gitx.Scope) []RunInfo {
 	slices.Reverse(names)
 	var runs []RunInfo
 	for _, name := range names {
-		info, err := readRunInfo(filepath.Join(dir, name))
-		if err == nil {
-			runs = append(runs, info)
+		path := filepath.Join(dir, name)
+		info, err := readRunInfo(path)
+		if err != nil {
+			continue
 		}
+		var u agent.Usage
+		if readJSON(usagePath(path), &u) == nil {
+			info.Usage = &u
+		}
+		runs = append(runs, info)
 	}
 	return runs
 }

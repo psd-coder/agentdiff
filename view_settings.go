@@ -46,6 +46,7 @@ type settingsForm struct {
 	global   agentForm
 	override bool
 	local    agentForm
+	ahead    bool
 	status   map[agent.Provider]string
 }
 
@@ -57,6 +58,7 @@ func (a *app) openSettings() {
 		override: a.rev.Settings.Agent != nil || a.rev.Settings.Questions != nil,
 		local:    newAgentForm(cfg, questions),
 		status:   map[agent.Provider]string{},
+		ahead:    a.cfg.DeeperAhead,
 	}
 	a.settings = f
 	if a.win == nil {
@@ -77,7 +79,7 @@ func (a *app) openSettings() {
 
 func (a *app) saveSettings() {
 	f := a.settings
-	a.cfg.Agent, a.cfg.Questions = f.global.config(), f.global.questions
+	a.cfg.Agent, a.cfg.Questions, a.cfg.DeeperAhead = f.global.config(), f.global.questions, f.ahead
 	a.saveConfig()
 	if f.override {
 		cfg, q := f.local.config(), f.local.questions
@@ -102,6 +104,8 @@ func (a *app) settingsModal(c *ui.Context) {
 			if f.tab == 0 {
 				ui.Text(c, "Used by every review that does not override them.").FontSize(12).TextColor(t.TextMuted)
 				a.agentFields(c, &f.global, f.status)
+				ui.Switch(c, &f.ahead).Label("Write the deeper walkthrough of every step with the overview")
+				ui.Text(c, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(t.TextMuted)
 			} else {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Switch(c, &f.override).Label("Override for this review")

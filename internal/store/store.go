@@ -22,11 +22,14 @@ type Config struct {
 	Agent     agent.Config `json:"agent"`
 	Questions string       `json:"questions"`
 	Unified   bool         `json:"unified,omitempty"`
-	Recent    []string     `json:"recent,omitempty"`
+	// DeeperAhead writes the deeper walkthrough of every overview step
+	// right after the overview.
+	DeeperAhead bool     `json:"deeperAhead"`
+	Recent      []string `json:"recent,omitempty"`
 }
 
 func DefaultConfig() Config {
-	return Config{Agent: agent.Config{Provider: agent.Claude}, Questions: review.DefaultQuestions}
+	return Config{Agent: agent.Config{Provider: agent.Claude}, Questions: review.DefaultQuestions, DeeperAhead: true}
 }
 
 func (c *Config) AddRecent(repo string) {

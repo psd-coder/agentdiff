@@ -74,6 +74,7 @@ type app struct {
 	overviews map[*review.Review]*overviewRun
 	threadRun map[string]context.CancelFunc
 	walkRuns  map[string]*walkRun
+	ahead     []queuedWalk
 
 	sidebarW    float32
 	scopePct    float32
