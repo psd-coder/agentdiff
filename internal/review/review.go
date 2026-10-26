@@ -84,8 +84,11 @@ type Group struct {
 	Files   []string `json:"files"`
 }
 
+// Overview is the agent's explanation of the whole change set: a
+// walkthrough, or Markdown when the agent did not write one.
 type Overview struct {
-	Markdown  string         `json:"markdown"`
+	Walk      *Walkthrough   `json:"walk,omitempty"`
+	Markdown  string         `json:"markdown,omitempty"`
 	Groups    []Group        `json:"groups,omitempty"`
 	SessionID string         `json:"sessionId,omitempty"`
 	Agent     agent.Provider `json:"agent"`
@@ -93,6 +96,9 @@ type Overview struct {
 	Generated time.Time      `json:"generated"`
 	Err       string         `json:"err,omitempty"`
 }
+
+// Done reports whether the overview has an explanation to show.
+func (o *Overview) Done() bool { return o != nil && (o.Walk != nil || o.Markdown != "") }
 
 // Settings are what a review overrides of the global configuration; nil
 // fields follow it.
@@ -107,6 +113,7 @@ type Review struct {
 	Settings Settings        `json:"settings"`
 	Overview *Overview       `json:"overview,omitempty"`
 	Threads  []*Thread       `json:"threads"`
+	Walks    []*Walk         `json:"walks,omitempty"`
 	Viewed   map[string]bool `json:"viewed,omitempty"`
 	Updated  time.Time       `json:"updated"`
 }

@@ -93,7 +93,7 @@ func (a *app) generateOverview() {
 	run := &overviewRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.overviews[rev] = run
 	files := a.fileNames()
-	prompt := review.OverviewPrompt(a.scope.Describe(), a.diffstat, files, questions)
+	prompt := review.OverviewPrompt(a.scope.Describe(), a.diffstat, a.scope.NewRev(), files, questions)
 	session := ""
 	req := agent.Request{Dir: a.repo.Root, Prompt: prompt, SystemPrompt: review.SystemPrompt}
 	info := newRunInfo(store.TargetOverview, "Overview", "", cfg)
@@ -110,15 +110,9 @@ func (a *app) generateOverview() {
 		case agent.EventActivity:
 			run.activity = ev.Text
 		case agent.EventDone:
-			text := ev.Text
-			if strings.TrimSpace(text) == "" {
-				text = run.text
-			}
-			body, groups := review.ParseOverview(text, files)
-			rev.Overview = &review.Overview{
-				Markdown: body, Groups: groups, SessionID: session,
-				Agent: cfg.Provider, Model: cfg.Model, Generated: time.Now(),
-			}
+			ov := review.ReadOverview(answer(ev.Text, run.text), files)
+			ov.SessionID, ov.Agent, ov.Model, ov.Generated = session, cfg.Provider, cfg.Model, time.Now()
+			rev.Overview = &ov
 			delete(a.overviews, rev)
 			a.saveReviewOf(rev)
 		case agent.EventError:
@@ -127,8 +121,8 @@ func (a *app) generateOverview() {
 				return
 			}
 			ov := &review.Overview{Agent: cfg.Provider, Model: cfg.Model, Generated: time.Now(), Err: ev.Err.Error()}
-			if rev.Overview != nil && rev.Overview.Markdown != "" {
-				ov.Markdown, ov.Groups, ov.SessionID = rev.Overview.Markdown, rev.Overview.Groups, rev.Overview.SessionID
+			if old := rev.Overview; old.Done() {
+				ov.Walk, ov.Markdown, ov.Groups, ov.SessionID = old.Walk, old.Markdown, old.Groups, old.SessionID
 			}
 			rev.Overview = ov
 			a.saveReviewOf(rev)
@@ -136,11 +130,132 @@ func (a *app) generateOverview() {
 	})
 }
 
+// answer is the final text of a run: the result the CLI reports, or the
+// text it streamed when the result is empty.
+func answer(result, streamed string) string {
+	if strings.TrimSpace(result) != "" {
+		return result
+	}
+	return streamed
+}
+
 func (a *app) stopOverview() {
 	if run := a.overviews[a.rev]; run != nil {
 		run.cancel()
 		delete(a.overviews, a.rev)
 	}
+}
+
+// walkRun is a walkthrough being written for a walk.
+type walkRun struct {
+	text     string
+	activity string
+	cancel   context.CancelFunc
+}
+
+// deeper starts a walkthrough one level below parent: into one of its
+// steps, or about the question for step -1.
+func (a *app) deeper(parent string, step int, question string) {
+	w := a.rev.AddWalk(parent, step, question)
+	a.page = "walk:" + w.ID
+	a.runWalk(w)
+}
+
+// runWalk asks the agent for a walk's walkthrough. It forks the session
+// of the walkthrough above, so the agent knows what the reviewer read on
+// the way down, and walks next to each other stay apart.
+func (a *app) runWalk(w *review.Walk) {
+	rev := a.rev
+	if run := a.walkRuns[w.ID]; run != nil {
+		run.cancel()
+	}
+	cfg, _ := a.cfg.Effective(rev.Settings)
+	parentSession, parentAgent := "", agent.Provider("")
+	if p := rev.Walk(w.Parent); p != nil {
+		parentSession, parentAgent = p.SessionID, p.Agent
+	} else if ov := rev.Overview; w.Parent == "" && ov != nil {
+		parentSession, parentAgent = ov.SessionID, ov.Agent
+	}
+	d := review.DeeperRequest{
+		Question: w.Question,
+		Known:    parentSession != "" && parentAgent == cfg.Provider,
+		NewRev:   a.scope.NewRev(),
+	}
+	if s, ok := rev.StepOf(w); ok {
+		d.Step = &s
+	}
+	req := agent.Request{Dir: a.repo.Root, SystemPrompt: review.SystemPrompt}
+	if d.Known {
+		req.ResumeID, req.Fork = parentSession, true
+	} else {
+		d.Context = review.ContextPrompt(a.scope.Describe(), a.diffstat)
+		path := rev.WalkPath(w.ID)
+		for _, p := range path[:len(path)-1] {
+			d.Path = append(d.Path, rev.WalkTitle(p))
+		}
+	}
+	req.Prompt = review.DeeperPrompt(d)
+
+	w.Content, w.Markdown, w.Err, w.SessionID = nil, "", "", ""
+	w.Agent, w.Model = cfg.Provider, cfg.Model
+	ctx, cancel := context.WithCancel(context.Background())
+	run := &walkRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
+	a.walkRuns[w.ID] = run
+	a.saveReviewOf(rev)
+	info := newRunInfo(w.ID, rev.WalkTitle(w), w.Question, cfg)
+	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
+		if a.walkRuns[w.ID] != run {
+			return
+		}
+		switch ev.Kind {
+		case agent.EventSession:
+			w.SessionID = ev.SessionID
+		case agent.EventText:
+			run.text += ev.Text
+			run.activity = "Writing the walkthrough…"
+		case agent.EventActivity:
+			run.activity = ev.Text
+		case agent.EventDone:
+			text := answer(ev.Text, run.text)
+			if wt, ok := review.ParseWalkthrough(text); ok {
+				w.Content = wt
+			} else {
+				w.Markdown = text
+			}
+			w.Generated = time.Now()
+			delete(a.walkRuns, w.ID)
+			a.saveReviewOf(rev)
+		case agent.EventError:
+			delete(a.walkRuns, w.ID)
+			w.Err = ev.Err.Error()
+			if ctx.Err() != nil {
+				w.Err = "Stopped"
+			}
+			a.saveReviewOf(rev)
+		}
+	})
+}
+
+func (a *app) stopWalk(id string) {
+	if run := a.walkRuns[id]; run != nil {
+		run.cancel()
+	}
+}
+
+// deleteWalk deletes a walk and the walks under it, and goes to its
+// parent.
+func (a *app) deleteWalk(w *review.Walk) {
+	a.rev.DeleteWalk(w.ID)
+	for id, run := range a.walkRuns {
+		if a.rev.Walk(id) == nil {
+			run.cancel()
+		}
+	}
+	a.page = "overview"
+	if w.Parent != "" {
+		a.page = "walk:" + w.Parent
+	}
+	a.saveReview()
 }
 
 // comment adds the reviewer's words to a thread without asking anyone.

@@ -60,6 +60,9 @@ func (s Store) LoadConfig() Config {
 	if cfg.Agent.Provider == "" {
 		cfg.Agent.Provider = agent.Claude
 	}
+	if cfg.Questions == review.LegacyQuestions {
+		cfg.Questions = review.DefaultQuestions
+	}
 	return cfg
 }
 
@@ -80,6 +83,9 @@ func (s Store) LoadReview(repo string, scope gitx.Scope) *review.Review {
 	}
 	if r.Viewed == nil {
 		r.Viewed = map[string]bool{}
+	}
+	if q := r.Settings.Questions; q != nil && *q == review.LegacyQuestions {
+		r.Settings.Questions = nil
 	}
 	r.Repo, r.Scope = repo, scope
 	return r

@@ -1,6 +1,7 @@
 package gitx
 
 import (
+	"cmp"
 	"fmt"
 	"hash/fnv"
 	"strings"
@@ -100,6 +101,20 @@ func (s Scope) Describe() string {
 		return fmt.Sprintf("the changes between `%s` and `%s`: `git diff %s %s` (commits listed by `git log %s..%s`)", s.From, s.To, s.From, s.To, s.From, s.To)
 	}
 	return "an unknown change set"
+}
+
+// NewRev is the revision that holds the new side of the changes, empty
+// for the working tree.
+func (s Scope) NewRev() string {
+	switch s.Kind {
+	case ScopeBranch:
+		return cmp.Or(s.Head, "HEAD")
+	case ScopeCommit:
+		return s.Commit
+	case ScopeRange:
+		return s.To
+	}
+	return ""
 }
 
 func shortRef(ref string) string {

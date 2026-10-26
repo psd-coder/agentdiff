@@ -149,10 +149,10 @@ func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider
 	field("Extra arguments", func() {
 		ui.TextInput(c, &f.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
 	})
-	field("Review questions", func() {
-		ui.TextArea(c, &f.questions).Lines(6, 14).Label("Review questions")
+	field("Checklist questions", func() {
+		ui.TextArea(c, &f.questions).Lines(6, 14).Label("Checklist questions")
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "The agent answers these in the overview. The app adds the scope, the diffstat and the file grouping request.").FontSize(11).TextColor(t.TextMuted).Grow(1)
+			ui.Text(c, "The overview answers these under its walkthrough, in a sentence or two each. The app adds the scope, the diffstat and the walkthrough format.").FontSize(11).TextColor(t.TextMuted).Grow(1)
 			ui.Button(c, "Reset").OnClick(func() { f.questions = review.DefaultQuestions })
 		})
 	})

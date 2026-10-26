@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"image/png"
 	"os"
 	"os/exec"
@@ -345,5 +346,98 @@ func TestCompareBranches(t *testing.T) {
 	tt.Frame()
 	if !tt.HasText("agent vs main") || !tt.HasText("Commits on agent") {
 		t.Errorf("texts = %q", tt.Texts())
+	}
+}
+
+// fakeClaude is a claude CLI that answers every prompt with answer, in
+// session id.
+func fakeClaude(t *testing.T, id, answer string) string {
+	t.Helper()
+	dir := t.TempDir()
+	init := `{"type":"system","subtype":"init","session_id":"` + id + `"}`
+	result, err := json.Marshal(map[string]any{"type": "result", "subtype": "success", "result": answer, "session_id": id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "out.jsonl", init+"\n"+string(result)+"\n")
+	write(t, dir, "claude", "#!/bin/sh\ncat > "+filepath.Join(dir, "prompt.txt")+"\ncat "+filepath.Join(dir, "out.jsonl")+"\n")
+	if err := os.Chmod(filepath.Join(dir, "claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(dir, "claude")
+}
+
+// pump runs the app's queued updates on the test goroutine until ok.
+func pump(t *testing.T, a *app, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for !ok() {
+		select {
+		case fn := <-a.queue:
+			fn()
+		case <-deadline:
+			t.Fatalf("timed out waiting for %s", what)
+		}
+	}
+}
+
+func TestWalkthrough(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, SessionID: "root", Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "Cache keys are lower-cased now.",
+		Steps: []review.Step{
+			{Title: "Lower-case keys", Text: "`Get` lower-cases its key.", Refs: []review.Ref{
+				{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7, Why: "the new call"},
+				{File: "README.md", Side: review.SideNew, Start: 1, End: 1, Why: "unchanged file"},
+				{File: "cache/cache.go", Side: review.SideNew, Start: 90, End: 91},
+			}},
+			{Title: "New handler", Text: "A stub."},
+		},
+		Checklist: []review.CheckItem{{Question: "What data changes?", Answer: "None."}},
+	}}
+	deeper := "```json\n" + `{"summary": "Inside Get.", "steps": [{"title": "ToLower call", "text": "Uses strings.", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "child", deeper)}
+
+	tt := ui.NewTester(a.view, 1300, 1000)
+	tt.Advance(time.Second)
+	for _, want := range []string{"Cache keys are lower-cased now.", "1. Lower-case keys", "cache/cache.go:5-7 (+)", "\treturn strings.ToLower(key)", "# Demo", "The file has 7 lines", "Checklist", "What data changes?"} {
+		if !tt.HasText(strings.ReplaceAll(want, "\t", "    ")) {
+			t.Errorf("view lacks %q", want)
+		}
+	}
+	snapshot(t, tt, "walkthrough")
+
+	a.queue = make(chan func(), 64)
+	if err := tt.Click("Go deeper"); err != nil {
+		t.Fatal(err)
+	}
+	w := a.rev.Walks[0]
+	if w.Parent != "" || w.Step != 0 || a.page != "walk:"+w.ID {
+		t.Fatalf("walk = %+v, page %q", w, a.page)
+	}
+	pump(t, a, "the deeper walkthrough", func() bool { return a.walkRuns[w.ID] == nil })
+	if w.Err != "" || w.SessionID != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
+		t.Fatalf("walk = %+v", w)
+	}
+	prompt, err := os.ReadFile(filepath.Join(filepath.Dir(a.cfg.Agent.Binary), "prompt.txt"))
+	if err != nil || !strings.Contains(string(prompt), "### Lower-case keys") {
+		t.Errorf("prompt = %q, %v", prompt, err)
+	}
+	tt.Frame()
+	for _, want := range []string{"Overview", "Inside Get.", "1. ToLower call", "cache/cache.go:6 (+)"} {
+		if !tt.HasText(want) {
+			t.Errorf("deeper page lacks %q", want)
+		}
+	}
+	snapshot(t, tt, "walk")
+
+	if err := tt.Click("cache/cache.go:6 (+)"); err != nil {
+		t.Fatal(err)
+	}
+	if a.page != "file:cache/cache.go" {
+		t.Errorf("page = %q", a.page)
+	}
+	if r, ok := a.diffs["cache/cache.go"].state.SelectedLines(); !ok || r.Start != 5 || r.End != 5 {
+		t.Errorf("selection = %+v, %v", r, ok)
 	}
 }

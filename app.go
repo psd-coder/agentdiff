@@ -36,6 +36,9 @@ type overviewRun struct {
 
 type app struct {
 	win   *mygo.Window
+	// queue takes the updates of a window-less app when a test wants to
+	// run them on its own goroutine.
+	queue chan func()
 	store store.Store
 	cfg   store.Config
 
@@ -70,6 +73,7 @@ type app struct {
 	drafts    map[string]string
 	overviews map[*review.Review]*overviewRun
 	threadRun map[string]context.CancelFunc
+	walkRuns  map[string]*walkRun
 
 	sidebarW    float32
 	scopePct    float32
@@ -80,6 +84,10 @@ type app struct {
 	exportDone  bool
 	savedPath   string
 	askDraft    string
+	stepAsk     string
+	stepDraft   string
+	extra       map[string]*extraFile
+	reveal      *reveal
 
 	settings    *settingsForm
 	rangeForm   *rangeForm
@@ -97,6 +105,8 @@ func newApp(s store.Store) *app {
 		drafts:      map[string]string{},
 		overviews:   map[*review.Review]*overviewRun{},
 		threadRun:   map[string]context.CancelFunc{},
+		walkRuns:    map[string]*walkRun{},
+		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},
 		sidebarW:    280,
 		scopePct:    34,
@@ -107,13 +117,16 @@ func newApp(s store.Store) *app {
 }
 
 // update runs fn on the main thread. Tests have no window and run it at
-// once.
+// once, or put it on queue.
 func (a *app) update(fn func()) {
-	if a.win == nil {
+	switch {
+	case a.win != nil:
+		a.win.Update(fn)
+	case a.queue != nil:
+		a.queue <- fn
+	default:
 		fn()
-		return
 	}
-	a.win.Update(fn)
 }
 
 func (a *app) async(fn func()) {
@@ -222,6 +235,7 @@ func (a *app) reload() {
 	a.loading, a.loadErr = true, ""
 	a.files, a.diffstat = nil, ""
 	a.diffs = map[string]*fileDiff{}
+	a.extra = map[string]*extraFile{}
 	a.async(func() {
 		ctx := context.Background()
 		files, err := r.Changes(ctx, s)
@@ -306,6 +320,9 @@ func (a *app) startOver() {
 	a.stopOverview()
 	for _, t := range a.rev.Threads {
 		a.stopThread(t)
+	}
+	for _, w := range a.rev.Walks {
+		a.stopWalk(w.ID)
 	}
 	if err := a.store.DeleteReview(a.repo.Root, a.scope); err != nil {
 		log.Printf("delete review: %v", err)

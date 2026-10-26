@@ -24,6 +24,10 @@ func (a *app) filePage(c *ui.Context, file string) {
 		a.fileThreads(c, file)
 		a.diffBody(c, d, false)
 	})
+	if r := a.reveal; r != nil && r.file == file && d.state != nil {
+		a.reveal = nil
+		d.state.GoToHunk(r.hunk)
+	}
 }
 
 func (a *app) groupPage(c *ui.Context, i int) {

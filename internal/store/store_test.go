@@ -185,3 +185,25 @@ func TestRunsPrunedAndDeleted(t *testing.T) {
 		t.Errorf("runs after delete = %d", len(got))
 	}
 }
+
+func TestLegacyQuestionsReplaced(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	cfg := DefaultConfig()
+	cfg.Questions = review.LegacyQuestions
+	if err := s.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.LoadConfig().Questions; got != review.DefaultQuestions {
+		t.Errorf("questions = %q", got)
+	}
+	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	r := s.LoadReview("/repo", scope)
+	legacy := review.LegacyQuestions
+	r.Settings.Questions = &legacy
+	if err := s.SaveReview(r); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.LoadReview("/repo", scope).Settings.Questions; got != nil {
+		t.Errorf("review questions = %q", *got)
+	}
+}

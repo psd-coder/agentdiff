@@ -157,6 +157,7 @@ func (a *app) reviewNav(c *ui.Context) {
 			if a.overviewRunning() != nil {
 				ov.Children(func() { ui.Spinner(c).Size(12, 12) })
 			}
+			a.walkItems(c, "", 1)
 			threads := len(a.rev.Threads)
 			ui.SidebarItem(c, "threads", nil, "Comments").Children(func() {
 				if threads > 0 {
@@ -185,6 +186,23 @@ func (a *app) reviewNav(c *ui.Context) {
 	}).Fill().Label("Review").Changed()
 	if changed {
 		a.page = page
+	}
+}
+
+// walkItems lists the walks under parent in the sidebar, each indented
+// under the one it goes deeper into.
+func (a *app) walkItems(c *ui.Context, parent string, depth int) {
+	for _, w := range a.rev.Walks {
+		if w.Parent != parent {
+			continue
+		}
+		item := ui.SidebarItem(c, "walk:"+w.ID, nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))
+		if a.walkRuns[w.ID] != nil {
+			item.Children(func() { ui.Spinner(c).Size(12, 12) })
+		}
+		if depth < 8 {
+			a.walkItems(c, w.ID, depth+1)
+		}
 	}
 }
 
@@ -240,6 +258,8 @@ func (a *app) main(c *ui.Context) {
 			a.feedbackPage(c)
 		case strings.HasPrefix(a.page, "file:"):
 			a.filePage(c, strings.TrimPrefix(a.page, "file:"))
+		case strings.HasPrefix(a.page, "walk:"):
+			a.walkPage(c, strings.TrimPrefix(a.page, "walk:"))
 		case strings.HasPrefix(a.page, "group:"):
 			var i int
 			fmt.Sscanf(a.page, "group:%d", &i)

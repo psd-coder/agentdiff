@@ -25,7 +25,7 @@ func (a *app) overviewPage(c *ui.Context) {
 				switch {
 				case run != nil:
 					ui.Button(c, "Stop").OnClick(a.stopOverview)
-				case ov != nil && ov.Markdown != "":
+				case ov.Done():
 					ui.Button(c, "Regenerate").Disabled(len(a.files) == 0).OnClick(a.generateOverview)
 				}
 				if run != nil || ov != nil {
@@ -50,8 +50,12 @@ func (a *app) overviewPage(c *ui.Context) {
 				a.emptyState(c, "No changes", "There is nothing to review in "+strings.ToLower(a.scope.Label())+". Pick another scope on the left.")
 			case run != nil:
 				a.streamingOverview(c, run)
-			case ov == nil || ov.Markdown == "":
+			case !ov.Done():
 				a.overviewIntro(c, providerName(cfg.Provider))
+			case ov.Walk != nil:
+				ui.Text(c, writtenBy(ov.Agent, ov.Model, ov.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(t.TextMuted)
+				a.walkthrough(c, "", ov.Walk)
+				a.checklist(c, ov.Walk.Checklist)
 			default:
 				a.overviewSections(c, ov)
 			}
@@ -63,7 +67,8 @@ func (a *app) overviewPage(c *ui.Context) {
 			}
 			if len(a.files) > 0 && !a.loading {
 				a.groupCards(c)
-				a.askBox(c)
+				a.askWalk(c, "")
+				a.generalThreads(c)
 			}
 		})
 	})
@@ -96,8 +101,8 @@ func (a *app) summaryLine(c *ui.Context) {
 func (a *app) overviewIntro(c *ui.Context, agentName string) {
 	t := c.Theme()
 	ui.Column(c).Gap(12).Padding(20).Radius(10).Background(t.Surface).Border(1, t.Border).Children(func() {
-		ui.Text(c, "Get an explanation of these changes").FontSize(16).Bold()
-		ui.Text(c, agentName+" reads the changes in read-only mode and answers your review questions: what changed on a high level, data, UI, architecture and API, and the parts that are not pretty, with the reasons. It also groups the files so that you can review them in a sensible order.").TextColor(t.TextMuted)
+		ui.Text(c, "Get a walkthrough of these changes").FontSize(16).Bold()
+		ui.Text(c, agentName+" reads the changes in read-only mode and walks you through them in a few short steps, each with the code that shows it. Go deeper into any step, or ask about it, and you get a walkthrough one level closer to the code. It also answers your checklist and groups the files in the order to review them.").TextColor(t.TextMuted)
 		ui.Text(c, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the questions in Settings.").FontSize(12).TextColor(t.TextMuted)
 		ui.Row(c).Gap(8).Children(func() {
 			ui.PrimaryButton(c, "Explain changes with "+agentName).OnClick(a.generateOverview)
@@ -116,7 +121,7 @@ func (a *app) streamingOverview(c *ui.Context, run *overviewRun) {
 		}
 		ui.Text(c, activity).FontSize(12).TextColor(t.TextMuted).SingleLine()
 	})
-	if run.text != "" {
+	if run.text != "" && !strings.HasPrefix(strings.TrimSpace(run.text), "{") && !strings.HasPrefix(strings.TrimSpace(run.text), "```") {
 		ui.Column(c).Children(func() { markdown.Stream(c, run.text, &a.md) })
 	}
 }
@@ -201,36 +206,9 @@ func (a *app) groupCards(c *ui.Context) {
 	}
 }
 
-func (a *app) askBox(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Gap(8).Margin(8, 0, 0, 0).Children(func() {
-		ui.Text(c, "Ask about the changes").FontSize(18).Bold()
-		ui.Text(c, "Each question starts its own thread, with what the agent learned while it wrote the overview.").FontSize(12).TextColor(t.TextMuted)
-		ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
-			ui.TextArea(c, &a.askDraft).Lines(2, 6).Placeholder("Why did the agent change the cache key?").Grow(1).
-				OnTextKey(func(k ui.TextKey) bool {
-					if k.Key == ui.KeyEnter && k.Mods == ui.Cmd {
-						a.askGeneral(k.Text())
-						k.SetText("")
-						return true
-					}
-					return false
-				})
-			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(a.askDraft) == "").Tooltip("Cmd+Enter").OnClick(func() {
-				a.askGeneral(a.askDraft)
-				a.askDraft = ""
-			})
-		})
-	})
-	general := 0
-	for _, th := range a.rev.Threads {
-		if th.Anchor.Kind == review.AnchorGeneral {
-			general++
-		}
-	}
-	if general == 0 {
-		return
-	}
+// generalThreads lists the questions about the whole change set from
+// before the walkthrough answered them.
+func (a *app) generalThreads(c *ui.Context) {
 	ui.Column(c).Gap(6).Children(func() {
 		for _, th := range a.rev.Threads {
 			if th.Anchor.Kind == review.AnchorGeneral && len(th.Messages) > 0 {
@@ -238,15 +216,6 @@ func (a *app) askBox(c *ui.Context) {
 			}
 		}
 	})
-}
-
-func (a *app) askGeneral(text string) {
-	if strings.TrimSpace(text) == "" {
-		return
-	}
-	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-	a.openThread(th.ID)
-	a.ask(th, text)
 }
 
 func excerpt(s string, n int) string {

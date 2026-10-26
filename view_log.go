@@ -28,6 +28,9 @@ func (a *app) logTargetLabel() string {
 	if th := a.rev.Thread(a.logTarget); th != nil {
 		return th.Anchor.Label()
 	}
+	if w := a.rev.Walk(a.logTarget); w != nil {
+		return a.rev.WalkTitle(w)
+	}
 	return "Thread"
 }
 

@@ -1,16 +1,18 @@
 # agentdiff
 
-A native macOS app for reviewing the code your coding agent wrote. You read the agent's explanation first and the diff grouped by intent after it. Then you hand a feedback file back to the agent.
+A native macOS app for reviewing the code your coding agent wrote. You read a short walkthrough of the changes first and go deeper wherever you need to. Then you read the diff grouped by intent and hand a feedback file back to the agent.
 
-- **Explanation by your own agent**: Claude Code or Codex reads the changes through its CLI on your subscription. It answers six review questions that you can edit.
+- **Walkthrough by your own agent**: Claude Code or Codex reads the changes through its CLI on your subscription. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
+- **Go deeper into any step**: Go deeper, or a question about a step, gives a new walkthrough one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down.
+- **Checklist**: the walkthrough also answers your checklist in a sentence or two per question: data changes, UI changes, API changes, and the changes that are not beautiful and why.
 - **Files grouped by intent**: the agent puts every changed file into a group, in the order you should read them. Without an explanation, files are grouped by directory.
-- **Any scope**: uncommitted changes (untracked files included), your branch against its base, a single commit from the history list, or a custom `from..to` range.
+- **Any scope**: uncommitted changes (untracked files included), any branch against any base without a checkout, a single commit from the history list, or a custom `from..to` range. The branch picker also opens other worktrees of the repository.
 - **Comments anywhere**: click `+` in the gutter, select line numbers, comment on a whole file or on one part of the explanation.
 - **Separate discussion threads**: the first question of a thread forks the agent session that wrote the explanation, so it starts with that context. Later questions go on in the thread's own session, and threads never mix.
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
-- **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, token counts, and how the run ended. The log panel opens on the right, for all runs of the review or for the overview or one thread.
+- **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, token counts, and how the run ended. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
 - **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused.
-- **Settings for all reviews and per review**: agent, model, binary path, extra CLI arguments, review questions.
+- **Settings for all reviews and per review**: agent, model, binary path, extra CLI arguments, checklist questions.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
 
 ## Getting started
@@ -38,18 +40,17 @@ During development, `go run . /path/to/repo` starts the app on a repository. Wit
 
 ## Core concepts
 
-An agent changes 40 files in ten minutes. A pull request lists them in path order, which scatters related changes across the list. You lose track of why each one exists. `agentdiff` asks the agent to explain the change set first, with these default questions:
+An agent changes 40 files in ten minutes. A pull request lists them in path order, which scatters related changes across the list. You lose track of why each one exists. `agentdiff` asks the agent for a walkthrough first: the idea of the change in a few steps, each with the lines that show it. You go deeper only into the steps you doubt, and every level down is closer to the code. Then you read the files group by group and leave comments where you disagree.
 
-1. Explain on high level.
-2. Explain data changes.
-3. Explain UI changes and how to see them.
-4. Explain architecture and API changes.
-5. Explain non-beautiful changes.
-6. Tell about assumptions and rules which force non-beautiful changes.
+The walkthrough also answers a checklist, by default these questions:
 
-Then you read the files group by group and leave comments where you disagree.
+1. What data changes: schemas, storage, formats?
+2. What UI changes, and how do I see them?
+3. What architecture and API changes?
+4. Which changes are not beautiful?
+5. Which assumptions and rules force the non-beautiful changes?
 
-In `agentdiff`, a question to the agent and a note for the agent are both a thread. A thread is anchored to a line range, a file or a part of the explanation. A comment goes into the feedback. With Ask agent, the review agent also answers in the thread. Every thread is a conversation of its own, so three independent questions do not end up in one long chat.
+A question about a step or about the whole walkthrough gets a walkthrough of its own. A note for the coding agent is a thread, anchored to a line range, a file or a step. A thread's comments go into the feedback. With Ask agent, the review agent also answers in the thread. Every walkthrough and every thread is a conversation of its own, so three independent questions do not end up in one long chat.
 
 It fits when you:
 
@@ -59,11 +60,12 @@ It fits when you:
 
 ## Reviewing a change
 
-1. Pick a scope in the top part of the sidebar. Uncommitted is the default.
-2. On the Overview page, click Explain changes with Claude Code (or Codex). The answer streams in, and the sidebar regroups the files when it is done. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output, and a failed question shows the error in its thread.
-3. Open a group with Review group to read all its files one after the other, or open one file. Mark a file Viewed when you are done with it.
-4. Comment: `+` in the gutter for one line, drag over the line numbers and use Comment on lines for a range, or Comment on file. The thread opens on the right. Comment saves your note. Ask agent (Cmd+Enter) also sends it to the review agent.
-5. Open Feedback in the toolbar. Copy feedback copies the Markdown. Save to file... saves it, by default into the repository's git directory, and copies a prompt such as `Read the code review feedback in /repo/.git/agentdiff-feedback.md and address each item.` Paste either one into your coding agent.
+1. Pick a scope in the top part of the sidebar. Uncommitted is the default. Compare branches, or a click on the branch name in the toolbar, picks a branch and its base.
+2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
+3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step, or Ask about this step, opens a deeper walkthrough on its own page. The breadcrumbs and the sidebar lead back up.
+4. Open a group with Review group to read all its files one after the other, or open one file. Mark a file Viewed when you are done with it.
+5. Comment: `+` in the gutter for one line, drag over the line numbers and use Comment on lines for a range, or Comment on file. The thread opens on the right. Comment saves your note. Ask agent (Cmd+Enter) also sends it to the review agent.
+6. Open Feedback in the toolbar. Copy feedback copies the Markdown. Save to file... saves it, by default into the repository's git directory, and copies a prompt such as `Read the code review feedback in /repo/.git/agentdiff-feedback.md and address each item.` Paste either one into your coding agent.
 
 Feedback for two comments:
 
@@ -84,7 +86,7 @@ Keep keys case-sensitive, callers rely on it.
 Return a typed error here.
 ````
 
-To see what an agent did, click Agent log in the toolbar, Log on the Overview page, or Log in a thread. Each run lists its steps in order: Command (a shell command you can paste into a terminal), Prompt, Session started (model and permission mode), Tool call and Tool result, Assistant, Result with turns, time and tokens, and the exit status. Copy puts the readable log on the clipboard. Show file opens the raw log in Finder.
+To see what an agent did, click Agent log in the toolbar, or Log on the Overview page, on a deeper walkthrough or in a thread. Each run lists its steps in order: Command (a shell command you can paste into a terminal), Prompt, Session started (model and permission mode), Tool call and Tool result, Assistant, Result with turns, time and tokens, and the exit status. Copy puts the readable log on the clipboard. Show file opens the raw log in Finder.
 
 Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedback page has the checkboxes Include agent replies and Include resolved threads.
 
@@ -98,9 +100,9 @@ Settings has two tabs. All reviews writes the global configuration. This review 
 | Model | CLI default | Passed as `--model` (Claude) or `-m` (Codex) |
 | Binary | found on the login shell's `PATH` | Full path to the CLI, `~/` allowed |
 | Extra arguments | none | Added to the CLI call, split at spaces |
-| Review questions | the six questions | The part of the explanation prompt you control |
+| Checklist questions | the five questions above | What the overview answers under its walkthrough |
 
-The app wraps your questions in the scope, the diffstat, the list of changed files and the grouping request, because it parses the answer. A thread's session belongs to one agent. After you switch agents, the next question in an old thread goes to a new session of the new agent, with the thread's anchor and its earlier messages.
+The app wraps your questions in the scope, the diffstat, the list of changed files, the walkthrough format and the grouping request, because it parses the answer. Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. A thread's session belongs to one agent. After you switch agents, the next question in an old thread goes to a new session of the new agent, with the thread's anchor and its earlier messages.
 
 The app saves everything under `~/Library/Application Support/AgentDiff/`.
 

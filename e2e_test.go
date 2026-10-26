@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,22 +45,65 @@ func TestEndToEnd(t *testing.T) {
 	for i, f := range files {
 		names[i] = f.Path
 	}
-	prompt := review.OverviewPrompt(scope.Describe(), stat, names, review.DefaultQuestions)
+	prompt := review.OverviewPrompt(scope.Describe(), stat, scope.NewRev(), names, review.DefaultQuestions)
 	final, session := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: prompt, SystemPrompt: review.SystemPrompt})
-	body, groups := review.ParseOverview(final, names)
-	t.Logf("overview:\n%s", body)
-	for _, g := range groups {
+	ov := review.ReadOverview(final, names)
+	if ov.Walk == nil {
+		t.Fatalf("no walkthrough in:\n%s", final)
+	}
+	logWalk(t, ov.Walk)
+	for _, g := range ov.Groups {
 		t.Logf("group %q (%s): %v", g.Title, g.Summary, g.Files)
 	}
-	if len(review.Sections(body)) < 3 || len(groups) == 0 {
-		t.Errorf("overview has %d sections and %d groups", len(review.Sections(body)), len(groups))
+	if len(ov.Walk.Steps) < 2 || len(ov.Walk.Checklist) == 0 || len(ov.Groups) == 0 {
+		t.Errorf("walkthrough has %d steps, %d checklist answers, %d groups", len(ov.Walk.Steps), len(ov.Walk.Checklist), len(ov.Groups))
 	}
-	th := &review.Thread{Anchor: review.Anchor{Kind: review.AnchorFile, File: names[0]}}
-	th.Messages = []review.Message{{Role: review.RoleUser, Text: "In one sentence: what is the riskiest part of this file's change?"}}
-	answer, forked := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: review.QuestionPrompt(th, th.Messages[0].Text, false), ResumeID: session, Fork: true})
-	t.Logf("answer: %s", answer)
+	checkRefs(t, ctx, repo, scope, ov.Walk)
+
+	step := ov.Walk.Steps[0]
+	deeper := review.DeeperPrompt(review.DeeperRequest{Step: &step, Known: true, NewRev: scope.NewRev()})
+	answer, forked := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: deeper, SystemPrompt: review.SystemPrompt, ResumeID: session, Fork: true})
 	if forked == "" || forked == session {
 		t.Errorf("fork session = %q, overview session = %q", forked, session)
+	}
+	w, ok := review.ParseWalkthrough(answer)
+	if !ok {
+		t.Fatalf("no deeper walkthrough in:\n%s", answer)
+	}
+	logWalk(t, w)
+	checkRefs(t, ctx, repo, scope, w)
+}
+
+func logWalk(t *testing.T, w *review.Walkthrough) {
+	t.Logf("summary: %s", w.Summary)
+	for i, s := range w.Steps {
+		t.Logf("%d. %s: %s", i+1, s.Title, s.Text)
+		for _, r := range s.Refs {
+			t.Logf("   %s %s", r.Label(), r.Why)
+		}
+	}
+	for _, c := range w.Checklist {
+		t.Logf("? %s %s", c.Question, c.Answer)
+	}
+}
+
+// checkRefs reports references to lines that do not exist on their side.
+func checkRefs(t *testing.T, ctx context.Context, repo *gitx.Repo, scope gitx.Scope, w *review.Walkthrough) {
+	t.Helper()
+	for _, s := range w.Steps {
+		for _, r := range s.Refs {
+			oldText, newText, err := repo.Contents(ctx, scope, gitx.FileChange{Path: r.File, Status: gitx.StatusModified})
+			if err != nil {
+				_, newText, err = repo.Contents(ctx, scope, gitx.FileChange{Path: r.File, Status: gitx.StatusAdded})
+			}
+			text := newText
+			if r.Side == review.SideOld {
+				text = oldText
+			}
+			if n := strings.Count(text, "\n"); err != nil || r.End > n {
+				t.Errorf("%s points past the file (%d lines, %v)", r.Label(), n, err)
+			}
+		}
 	}
 }
 
