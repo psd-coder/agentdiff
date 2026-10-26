@@ -213,12 +213,16 @@ func TestOverviewStale(t *testing.T) {
 		{[]string{"a", "b", "c"}, true},
 	}
 	for _, tt := range tests {
-		if got := o.Stale(tt.files); got != tt.want {
+		if got := o.Stale("", tt.files); got != tt.want {
 			t.Errorf("Stale(%v) = %v, want %v", tt.files, got, tt.want)
 		}
 	}
 	var none *Overview
-	if none.Stale([]string{"a"}) || (&Overview{}).Stale([]string{"a"}) {
+	if none.Stale("", []string{"a"}) || (&Overview{}).Stale("", []string{"a"}) {
 		t.Error("overview without groups is stale")
+	}
+	o.PatchID = "p1"
+	if o.Stale("p1", []string{"c"}) || !o.Stale("p2", []string{"a", "b"}) || !o.Stale("", nil) {
+		t.Error("an overview with a patch ID does not compare it")
 	}
 }

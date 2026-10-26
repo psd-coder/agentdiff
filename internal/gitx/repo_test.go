@@ -255,3 +255,30 @@ func mustEval(t *testing.T, p string) string {
 	}
 	return got
 }
+
+func TestPatchIDFollowsCommit(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.write("a.txt", "one\ntwo\n")
+	tr.commit("init")
+	r := tr.open()
+	ctx := context.Background()
+	uncommitted := Scope{Kind: ScopeUncommitted}
+	if id, err := r.PatchID(ctx, uncommitted); err != nil || id != "" {
+		t.Fatalf("clean tree: id %q, err %v", id, err)
+	}
+	tr.write("a.txt", "one\nTWO\nthree\n")
+	tr.write("dir/new.txt", "new\n")
+	before, err := r.PatchID(ctx, uncommitted)
+	if err != nil || before == "" {
+		t.Fatalf("uncommitted: id %q, err %v", before, err)
+	}
+	sha := tr.commit("change")
+	after, err := r.PatchID(ctx, Scope{Kind: ScopeCommit, Commit: sha})
+	if err != nil || after != before {
+		t.Errorf("commit id %q, uncommitted id %q, err %v", after, before, err)
+	}
+	ids, err := r.CommitPatchIDs(ctx, "", "", 10)
+	if err != nil || ids[before] != sha {
+		t.Errorf("commit ids = %v, err %v", ids, err)
+	}
+}

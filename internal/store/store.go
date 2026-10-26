@@ -108,6 +108,80 @@ func (s Store) DeleteReview(repo string, scope gitx.Scope) error {
 	return errors.Join(err, os.RemoveAll(s.runDir(repo, scope)))
 }
 
+// FindReview returns the scope of the newest saved review of repo, other
+// than of scope, whose overview was written for the changes with patchID.
+func (s Store) FindReview(repo string, scope gitx.Scope, patchID string) (gitx.Scope, bool) {
+	paths, _ := filepath.Glob(filepath.Join(filepath.Dir(s.reviewPath(repo, scope)), "*.json"))
+	var found gitx.Scope
+	var newest time.Time
+	for _, path := range paths {
+		var r struct {
+			Scope    gitx.Scope `json:"scope"`
+			Updated  time.Time  `json:"updated"`
+			Overview *struct {
+				PatchID string `json:"patchId"`
+			} `json:"overview"`
+		}
+		if readJSON(path, &r) != nil || r.Overview == nil || r.Overview.PatchID != patchID || r.Scope.Key() == scope.Key() {
+			continue
+		}
+		if found.Kind == "" || r.Updated.After(newest) {
+			found, newest = r.Scope, r.Updated
+		}
+	}
+	return found, found.Kind != ""
+}
+
+// MoveReview moves a review and the logs of its runs to another scope.
+// It replaces what the other scope had.
+func (s Store) MoveReview(repo string, from, to gitx.Scope) error {
+	if err := s.DeleteReview(repo, to); err != nil {
+		return err
+	}
+	if err := os.Rename(s.reviewPath(repo, from), s.reviewPath(repo, to)); err != nil {
+		return err
+	}
+	if err := os.Rename(s.runDir(repo, from), s.runDir(repo, to)); err != nil && !IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// CopyReview copies a review and the logs of its runs to another scope.
+// It replaces what the other scope had.
+func (s Store) CopyReview(repo string, from, to gitx.Scope) error {
+	if err := s.DeleteReview(repo, to); err != nil {
+		return err
+	}
+	if err := copyFile(s.reviewPath(repo, from), s.reviewPath(repo, to)); err != nil {
+		return err
+	}
+	runs, err := os.ReadDir(s.runDir(repo, from))
+	if err != nil {
+		if IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := os.MkdirAll(s.runDir(repo, to), 0o755); err != nil {
+		return err
+	}
+	for _, e := range runs {
+		if err := copyFile(filepath.Join(s.runDir(repo, from), e.Name()), filepath.Join(s.runDir(repo, to), e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyFile(from, to string) error {
+	b, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(to, b, 0o600)
+}
+
 func readJSON(path string, v any) error {
 	b, err := os.ReadFile(path)
 	if err != nil {

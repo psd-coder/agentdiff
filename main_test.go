@@ -229,13 +229,64 @@ func lineRange(start, end int) editor.DiffLineRange {
 	return editor.DiffLineRange{Side: editor.DiffNew, Start: start, End: end}
 }
 
+const staleText = "This review was written for other changes than the ones here now, so its code snippets can show the wrong lines. Regenerate the overview, or start over."
+
+// TestReviewFollowsCommit writes an overview of uncommitted changes and
+// commits them: the review then belongs to the commit.
+func TestReviewFollowsCommit(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	a.cfg.DeeperAhead = false
+	a.queue = make(chan func(), 64)
+	a.generateOverview()
+	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	rev := a.rev
+	if rev.Overview.PatchID == "" || rev.Overview.PatchID != a.patch {
+		t.Fatalf("overview patch %q, scope patch %q", rev.Overview.PatchID, a.patch)
+	}
+
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "Agent work")
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha := strings.TrimSpace(string(out))
+	a.refresh()
+	pump(t, a, "the reload", func() bool { return !a.loading })
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if a.movedTo != sha || !tt.HasText(staleText) || !tt.HasText("Open commit") {
+		t.Fatalf("moved to %q, want %q; texts %q", a.movedTo, sha, tt.Texts())
+	}
+
+	if err := tt.Click("Open commit"); err != nil {
+		t.Fatal(err)
+	}
+	pump(t, a, "the commit", func() bool { return !a.loading })
+	if a.scope.Commit != sha || a.rev.Overview == nil || a.rev.Overview.PatchID != rev.Overview.PatchID || a.stale() {
+		t.Fatalf("scope %+v, review %+v, stale %v", a.scope, a.rev.Overview, a.stale())
+	}
+	tt.Frame()
+	if !tt.HasText("Moved here from uncommitted changes, which had the same changes.") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	pump(t, a, "the uncommitted changes", func() bool { return !a.loading })
+	if !a.rev.Empty() {
+		t.Errorf("the uncommitted scope kept the review: %+v", a.rev)
+	}
+}
+
 func TestStaleOverviewAndStartOver(t *testing.T) {
 	a := newTestApp(t)
 	a.rev.Overview = &review.Overview{Markdown: "## A\nx", Groups: []review.Group{{Title: "Old", Files: []string{"gone.go"}}}, Agent: agent.Claude}
 	a.comment(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "old note")
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if !tt.HasText("The changed files differ from the ones this overview was written for. Regenerate it, or start over.") {
+	if !tt.HasText(staleText) {
 		t.Error("stale warning missing")
 	}
 	a.startOver()

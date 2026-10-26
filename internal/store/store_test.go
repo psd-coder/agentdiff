@@ -235,3 +235,41 @@ func TestLegacyQuestionsReplaced(t *testing.T) {
 		t.Errorf("review questions = %q", *got)
 	}
 }
+
+func TestFindMoveCopyReview(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	uncommitted := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc"}
+	amended := gitx.Scope{Kind: gitx.ScopeCommit, Commit: "def"}
+	r := review.New("/repo", uncommitted)
+	r.Overview = &review.Overview{Markdown: "x", PatchID: "p1"}
+	if err := s.SaveReview(r); err != nil {
+		t.Fatal(err)
+	}
+	w, err := s.CreateRun("/repo", uncommitted, RunInfo{ID: "run1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	if _, ok := s.FindReview("/repo", commit, "p2"); ok {
+		t.Error("found a review for other changes")
+	}
+	if _, ok := s.FindReview("/repo", uncommitted, "p1"); ok {
+		t.Error("found the review of the scope itself")
+	}
+	if src, ok := s.FindReview("/repo", commit, "p1"); !ok || src != uncommitted {
+		t.Fatalf("found %+v, %v", src, ok)
+	}
+	if err := s.MoveReview("/repo", uncommitted, commit); err != nil {
+		t.Fatal(err)
+	}
+	if s.LoadReview("/repo", uncommitted).Overview != nil || s.LoadReview("/repo", commit).Overview == nil {
+		t.Error("the review did not move")
+	}
+	if err := s.CopyReview("/repo", commit, amended); err != nil {
+		t.Fatal(err)
+	}
+	if s.LoadReview("/repo", commit).Overview == nil || len(s.Runs("/repo", amended)) != 1 {
+		t.Error("the copy lost the review or its runs")
+	}
+}

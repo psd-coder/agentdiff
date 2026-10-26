@@ -95,7 +95,14 @@ type Overview struct {
 	Model     string         `json:"model,omitempty"`
 	Generated time.Time      `json:"generated"`
 	Err       string         `json:"err,omitempty"`
+	// PatchID identifies the changes the overview was written for, see
+	// gitx.Repo.PatchID.
+	PatchID string `json:"patchId,omitempty"`
 }
+
+// Empty reports whether the review has nothing written: no overview,
+// walkthroughs or threads.
+func (r *Review) Empty() bool { return r.Overview == nil && len(r.Walks) == 0 && len(r.Threads) == 0 }
 
 // Done reports whether the overview has an explanation to show.
 func (o *Overview) Done() bool { return o != nil && (o.Walk != nil || o.Markdown != "") }
@@ -172,10 +179,17 @@ func newID() string {
 	return hex.EncodeToString(b)
 }
 
-// Stale reports whether the overview was written for other files than
-// the ones changed now, as when the working tree moved on.
-func (o *Overview) Stale(files []string) bool {
-	if o == nil || len(o.Groups) == 0 {
+// Stale reports whether the overview was written for other changes than
+// the ones with patchID. An overview from before patch IDs compares the
+// files of its groups instead.
+func (o *Overview) Stale(patchID string, files []string) bool {
+	if o == nil {
+		return false
+	}
+	if o.PatchID != "" {
+		return o.PatchID != patchID
+	}
+	if len(o.Groups) == 0 {
 		return false
 	}
 	grouped := map[string]bool{}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -62,6 +63,16 @@ type app struct {
 	loadErr  string
 	diffs    map[string]*fileDiff
 	gen      int
+	// patch identifies the changes of the scope once patchKnown, see
+	// gitx.Repo.PatchID.
+	patch      string
+	patchKnown bool
+	// movedTo is the commit that now holds the changes a stale overview
+	// of the uncommitted changes was written for.
+	movedTo string
+	// adoptedFrom is the scope the review was moved or copied from when
+	// the scope opened.
+	adoptedFrom *gitx.Scope
 
 	reviews   map[string]*review.Review
 	runs      map[*review.Review][]*logRun
@@ -290,6 +301,7 @@ func (a *app) setScope(s gitx.Scope) {
 	a.resetNav()
 	a.thread = ""
 	a.exportDone, a.savedPath = false, ""
+	a.adoptedFrom = nil
 	a.reload()
 }
 
@@ -299,14 +311,37 @@ func (a *app) reload() {
 	gen, r, s := a.gen, a.repo, a.scope
 	a.loading, a.loadErr = true, ""
 	a.files, a.diffstat = nil, ""
+	a.patch, a.patchKnown, a.movedTo = "", false, ""
 	a.diffs = map[string]*fileDiff{}
 	a.extra = map[string]*extraFile{}
+	written, empty := "", a.rev.Empty()
+	if ov := a.rev.Overview; ov != nil {
+		written = ov.PatchID
+	}
 	a.async(func() {
 		ctx := context.Background()
 		files, err := r.Changes(ctx, s)
 		stat := ""
 		if err == nil {
 			stat, err = r.DiffStat(ctx, s)
+		}
+		patch, perr := r.PatchID(ctx, s)
+		if perr != nil {
+			log.Printf("patch id: %v", perr)
+		}
+		movedTo := ""
+		if s.Kind == gitx.ScopeUncommitted && perr == nil && written != "" && written != patch {
+			ids, err := r.CommitPatchIDs(ctx, "", "", commitsShown)
+			if err != nil {
+				log.Printf("commit patch ids: %v", err)
+			}
+			movedTo = ids[written]
+		}
+		var from *gitx.Scope
+		if empty && perr == nil && patch != "" {
+			if src, ok := a.store.FindReview(r.Root, s, patch); ok {
+				from = &src
+			}
 		}
 		a.update(func() {
 			if gen != a.gen {
@@ -318,6 +353,10 @@ func (a *app) reload() {
 				return
 			}
 			a.files, a.diffstat = files, stat
+			a.patch, a.patchKnown, a.movedTo = patch, perr == nil, movedTo
+			if from != nil {
+				a.adopt(*from)
+			}
 			for _, f := range files {
 				a.diffs[f.Path] = &fileDiff{change: f, loading: true}
 			}
@@ -338,6 +377,68 @@ func (a *app) reload() {
 			})
 		}
 	})
+}
+
+// adopt takes over the saved review of src, which was written for the
+// same changes as the current scope has. A review of uncommitted changes
+// moves, because those changes are gone from the working tree; any other
+// one is copied.
+func (a *app) adopt(src gitx.Scope) {
+	if !a.rev.Empty() {
+		return
+	}
+	srcKey := reviewKey(a.repo.Root, src)
+	from := a.reviews[srcKey]
+	if from != nil && a.reviewBusy(from) {
+		return
+	}
+	move := src.Kind == gitx.ScopeUncommitted
+	var err error
+	if move {
+		err = a.store.MoveReview(a.repo.Root, src, a.scope)
+	} else {
+		err = a.store.CopyReview(a.repo.Root, src, a.scope)
+	}
+	if err != nil {
+		log.Printf("adopt review: %v", err)
+		return
+	}
+	if move && from != nil {
+		delete(a.reviews, srcKey)
+		delete(a.runs, from)
+	}
+	delete(a.runs, a.rev)
+	a.rev = a.store.LoadReview(a.repo.Root, a.scope)
+	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
+	a.adoptedFrom = &src
+}
+
+// reviewBusy reports whether an agent run writes into rev.
+func (a *app) reviewBusy(rev *review.Review) bool {
+	if a.overviews[rev] != nil || slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev }) {
+		return true
+	}
+	for _, w := range rev.Walks {
+		if a.walkRuns[w.ID] != nil {
+			return true
+		}
+	}
+	for _, t := range rev.Threads {
+		if a.threadRun[t.ID] != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// stale reports whether the overview was written for other changes than
+// the scope has now.
+func (a *app) stale() bool {
+	ov := a.rev.Overview
+	if !ov.Done() || a.loading || (ov.PatchID != "" && !a.patchKnown) || a.overviewRunning() != nil {
+		return false
+	}
+	return ov.Stale(a.patch, a.fileNames())
 }
 
 func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error) {

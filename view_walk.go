@@ -336,6 +336,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 			if s, ok := a.rev.StepOf(w); ok && w.Question != "" {
 				ui.Text(c, "About the step: "+s.Title).FontSize(12).TextColor(t.TextMuted)
 			}
+			a.staleBanner(c)
 			switch {
 			case run != nil && len(w.More) == 0:
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {

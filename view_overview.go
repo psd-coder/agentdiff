@@ -8,9 +8,30 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 
+	"github.com/psdcoder/agentdiff/internal/gitx"
 	"github.com/psdcoder/agentdiff/internal/review"
 	"github.com/psdcoder/agentdiff/internal/store"
 )
+
+// staleBanner warns when the review was written for other changes, and
+// names the commit that holds those changes now.
+func (a *app) staleBanner(c *ui.Context) {
+	if !a.stale() {
+		return
+	}
+	t := c.Theme()
+	ui.Column(c).Gap(10).Padding(10, 14).Radius(8).Background(t.Warning.Alpha(0.15)).Border(1, t.Warning).Children(func() {
+		ui.Text(c, "This review was written for other changes than the ones here now, so its code snippets can show the wrong lines. Regenerate the overview, or start over.")
+		if sha := a.movedTo; sha != "" {
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Those changes are now commit "+shortSHA(sha)+". The review moves there when you open it.").Grow(1).Shrink(1)
+				ui.PrimaryButton(c, "Open commit").OnClick(func() { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha}) })
+			})
+		}
+	})
+}
+
+func shortSHA(sha string) string { return sha[:min(len(sha), 7)] }
 
 func (a *app) overviewPage(c *ui.Context) {
 	t := c.Theme()
@@ -36,10 +57,14 @@ func (a *app) overviewPage(c *ui.Context) {
 				}
 			})
 			a.summaryLine(c)
-			if run == nil && !a.loading && ov.Stale(a.fileNames()) {
-				ui.Text(c, "The changed files differ from the ones this overview was written for. Regenerate it, or start over.").
-					Padding(10, 14).Radius(8).Background(t.Warning.Alpha(0.15)).Border(1, t.Warning)
+			if from := a.adoptedFrom; from != nil {
+				verb := "Copied"
+				if from.Kind == gitx.ScopeUncommitted {
+					verb = "Moved"
+				}
+				ui.Text(c, verb+" here from "+strings.ToLower(from.Label())+", which had the same changes.").FontSize(12).TextColor(t.TextMuted)
 			}
+			a.staleBanner(c)
 			switch {
 			case a.loading:
 				ui.Row(c).Gap(8).Children(func() {
