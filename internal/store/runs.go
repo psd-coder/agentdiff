@@ -32,6 +32,7 @@ type RunInfo struct {
 	Note    string         `json:"note,omitempty"`
 	Agent   agent.Provider `json:"agent"`
 	Model   string         `json:"model,omitempty"`
+	Effort  string         `json:"effort,omitempty"`
 	Started time.Time      `json:"started"`
 	// Usage is what the run spent, known once it ended. It lives in a
 	// file next to the log, so listing runs does not read whole logs.

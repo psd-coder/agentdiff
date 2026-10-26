@@ -28,6 +28,24 @@ func TestConfigRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAutoEffortDefault(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	if err := os.WriteFile(filepath.Join(s.Dir, "config.json"), []byte(`{"agent": {"provider": "claude"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := s.LoadConfig()
+	if cfg.Agent.AutoEffort != "low" {
+		t.Fatalf("an older config got auto effort %q", cfg.Agent.AutoEffort)
+	}
+	cfg.Agent.AutoEffort = ""
+	if err := s.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.LoadConfig().Agent.AutoEffort; got != "" {
+		t.Errorf("a cleared auto effort came back as %q", got)
+	}
+}
+
 func TestLoadConfigCorrupt(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	if err := os.WriteFile(filepath.Join(s.Dir, "config.json"), []byte("{oops"), 0o644); err != nil {

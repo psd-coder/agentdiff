@@ -346,7 +346,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(t.TextMuted)
-					ui.Button(c, "Start now").OnClick(func() { a.runWalk(a.rev, w) })
+					ui.Button(c, "Start now").OnClick(func() { a.runWalk(a.rev, w, true) })
 				})
 			case w.Content != nil:
 				a.walkthrough(c, w.ID, w.Content)

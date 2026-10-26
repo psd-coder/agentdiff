@@ -13,7 +13,7 @@ A native macOS app for reviewing the code your coding agent wrote. You read a sh
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
 - **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, and how the run ended. Each run shows its context size, the tokens in its last request, as Claude Code does. Codex does not report the context size, so a Codex run shows the tokens it processed. Every request reads the whole conversation again, so this number is much larger. The run details list the processed tokens (input, cache read, cache write, output) and the cost at API prices that Claude reports. The panel shows the processed total of its runs. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
 - **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused.
-- **Settings for all reviews and per review**: agent, model, binary path, extra CLI arguments, checklist questions.
+- **Settings for all reviews and per review**: agent, model, effort, a model and effort for automatic runs, binary path, extra CLI arguments, checklist questions.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
 
 ## Getting started
@@ -115,9 +115,14 @@ Settings has two tabs. All reviews writes the global configuration. This review 
 | --- | --- | --- |
 | Agent | Claude Code | Which CLI writes the explanation and answers threads |
 | Model | CLI default | Passed as `--model` (Claude) or `-m` (Codex) |
+| Effort | CLI default | Passed as `--effort` (Claude) or `-c model_reasoning_effort=` (Codex) |
+| Model for automatic runs | same as Model | Used by the overview and the deeper walkthroughs written ahead |
+| Effort for automatic runs | `low` | Used by the overview and the deeper walkthroughs written ahead |
 | Binary | found on the login shell's `PATH` | Full path to the CLI, `~/` allowed |
 | Extra arguments | none | Added to the CLI call, split at spaces |
 | Checklist questions | the five questions above | What the overview answers under its walkthrough |
+
+Automatic runs are the runs the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions, follow-ups, threads and a click on Go deeper use Model and Effort. Each run in the agent log shows the effort it ran at.
 
 The app wraps your questions in the scope, the diffstat, the list of changed files, the walkthrough format and the grouping request, because it parses the answer. Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. A thread's session belongs to one agent. After you switch agents, the next question in an old thread goes to a new session of the new agent, with the thread's anchor and its earlier messages.
 

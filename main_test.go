@@ -517,7 +517,7 @@ func TestWalkthrough(t *testing.T) {
 func TestDeeperAhead(t *testing.T) {
 	a := newTestApp(t)
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}, {"title": "B", "text": "b"}, {"title": "C", "text": "c"}, {"title": "D", "text": "d"}], "groups": []}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer), Effort: "high", AutoEffort: "low"}
 	a.queue = make(chan func(), 256)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
@@ -558,6 +558,9 @@ func TestDeeperAhead(t *testing.T) {
 		if r.Usage == nil || *r.Usage != w {
 			t.Errorf("usage of %s = %+v", r.Title, r.Usage)
 		}
+		if r.Effort != "low" {
+			t.Errorf("%s ran at %q effort, want the effort for automatic runs", r.Title, r.Effort)
+		}
 	}
 	tt := ui.NewTester(a.view, 1400, 900)
 	a.showLog("")
@@ -569,6 +572,12 @@ func TestDeeperAhead(t *testing.T) {
 		t.Errorf("log lacks the context of a run; texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "deeper-ahead")
+
+	a.askQuestion("", -1, "Why?")
+	pump(t, a, "the question", func() bool { return len(a.walkRuns) == 0 })
+	if r := a.runsOf(a.rev)[0]; r.info.Effort != "high" {
+		t.Errorf("a question ran at %q effort, want the main one", r.info.Effort)
+	}
 }
 
 func TestBackFromSnippet(t *testing.T) {

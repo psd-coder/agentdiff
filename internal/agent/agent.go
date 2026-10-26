@@ -2,11 +2,13 @@ package agent
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,11 +22,33 @@ const (
 	Codex  Provider = "codex"
 )
 
+// Config is how to run an agent. AutoModel and AutoEffort replace Model
+// and Effort for the runs the app starts on its own; empty keeps them.
+// AutoEffort has no omitempty, so an empty one stays empty instead of
+// getting the default again.
 type Config struct {
-	Provider  Provider `json:"provider"`
-	Model     string   `json:"model,omitempty"`
-	Binary    string   `json:"binary,omitempty"`
-	ExtraArgs []string `json:"extraArgs,omitempty"`
+	Provider   Provider `json:"provider"`
+	Model      string   `json:"model,omitempty"`
+	Effort     string   `json:"effort,omitempty"`
+	AutoModel  string   `json:"autoModel,omitempty"`
+	AutoEffort string   `json:"autoEffort"`
+	Binary     string   `json:"binary,omitempty"`
+	ExtraArgs  []string `json:"extraArgs,omitempty"`
+}
+
+// Auto is the config for the runs the app starts on its own: the
+// overview and the walkthroughs it writes ahead.
+func (c Config) Auto() Config {
+	c.Model, c.Effort = cmp.Or(c.AutoModel, c.Model), cmp.Or(c.AutoEffort, c.Effort)
+	return c
+}
+
+// Efforts lists the effort levels the CLI of a provider takes.
+func Efforts(p Provider) []string {
+	if p == Codex {
+		return []string{"minimal", "low", "medium", "high", "xhigh"}
+	}
+	return []string{"low", "medium", "high", "xhigh", "max"}
 }
 
 type Request struct {
@@ -262,6 +286,9 @@ func claudeArgs(cfg Config, req Request) []string {
 	if cfg.Model != "" {
 		args = append(args, "--model", cfg.Model)
 	}
+	if cfg.Effort != "" {
+		args = append(args, "--effort", cfg.Effort)
+	}
 	if req.SystemPrompt != "" {
 		args = append(args, "--append-system-prompt", req.SystemPrompt)
 	}
@@ -281,6 +308,9 @@ func codexArgs(cfg Config, req Request) []string {
 	}
 	if cfg.Model != "" {
 		args = append(args, "-m", cfg.Model)
+	}
+	if cfg.Effort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(cfg.Effort))
 	}
 	args = append(args, cfg.ExtraArgs...)
 	switch {

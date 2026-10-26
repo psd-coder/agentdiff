@@ -117,6 +117,7 @@ func (a *app) generateOverview() {
 		run.cancel()
 	}
 	cfg, questions := a.cfg.Effective(rev.Settings)
+	cfg = cfg.Auto()
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &overviewRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.overviews[rev] = run
@@ -183,7 +184,7 @@ func (a *app) regenerate(parent string) {
 		if parent == "" {
 			a.generateOverview()
 		} else if w := rev.Walk(parent); w != nil {
-			a.runWalk(rev, w)
+			a.runWalk(rev, w, false)
 		}
 	}
 	if !rev.HasStepWalks(parent) {
@@ -212,7 +213,7 @@ type walkRun struct {
 func (a *app) deeper(parent string, step int, question string) {
 	w := a.rev.AddWalk(parent, step, question)
 	a.goTo("walk:" + w.ID)
-	a.runWalk(a.rev, w)
+	a.runWalk(a.rev, w, false)
 }
 
 // askQuestion starts a question's conversation about a step of parent, or about
@@ -224,7 +225,7 @@ func (a *app) askQuestion(parent string, step int, question string) {
 	}
 	w := a.rev.AddWalk(parent, step, question)
 	a.openQuestion(w.ID)
-	a.runWalk(a.rev, w)
+	a.runWalk(a.rev, w, false)
 }
 
 // maxAhead is how many walkthroughs the app writes at once ahead of the
@@ -256,7 +257,7 @@ func (a *app) startAhead() {
 		q := a.ahead[0]
 		a.ahead = a.ahead[1:]
 		if q.rev.Walk(q.w.ID) != nil {
-			a.runWalk(q.rev, q.w)
+			a.runWalk(q.rev, q.w, true)
 		}
 	}
 }
@@ -274,8 +275,9 @@ func (a *app) walkBusy(id string) bool { return a.walkRuns[id] != nil || a.queue
 
 // runWalk asks the agent for a walk's walkthrough. It forks the session
 // of the walkthrough above, so the agent knows what the reviewer read on
-// the way down, and walks next to each other stay apart.
-func (a *app) runWalk(rev *review.Review, w *review.Walk) {
+// the way down, and walks next to each other stay apart. An auto walk is
+// one the app writes ahead of the reviewer.
+func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 	a.unqueue(w.ID)
 	if run := a.walkRuns[w.ID]; run != nil {
 		run.cancel()
@@ -285,6 +287,9 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk) {
 		diffstat = a.diffstat
 	}
 	cfg, _ := a.cfg.Effective(rev.Settings)
+	if auto {
+		cfg = cfg.Auto()
+	}
 	parentSession, parentAgent := "", agent.Provider("")
 	if p := rev.Walk(w.Parent); p != nil {
 		parentSession, parentAgent = p.SessionID, p.Agent

@@ -56,6 +56,7 @@ func TestArgs(t *testing.T) {
 			Request{SystemPrompt: "be brief"},
 			with(claudeBase, "--model", "haiku", "--append-system-prompt", "be brief"),
 		},
+		{"claude effort", Config{Provider: Claude, Effort: "low"}, Request{}, with(claudeBase, "--effort", "low")},
 		{"claude resume", Config{Provider: Claude}, Request{ResumeID: "s1"}, with(claudeBase, "--resume", "s1")},
 		{
 			"claude fork",
@@ -78,6 +79,7 @@ func TestArgs(t *testing.T) {
 			Request{Dir: "/r", SystemPrompt: "ignored in args"},
 			with(codexBase, "-C", "/r", "-m", "gpt-5", "-"),
 		},
+		{"codex effort", Config{Provider: Codex, Effort: "low"}, Request{}, with(codexBase, "-c", `model_reasoning_effort="low"`, "-")},
 		{"codex resume", Config{Provider: Codex}, Request{Dir: "/r", ResumeID: "t1"}, with(codexBase, "-C", "/r", "resume", "t1", "-")},
 		{
 			"codex fork",
@@ -100,6 +102,17 @@ func TestArgs(t *testing.T) {
 				t.Errorf("Args = %q\nwant   %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAutoConfig(t *testing.T) {
+	cfg := Config{Provider: Claude, Model: "opus", Effort: "high", AutoEffort: "low"}
+	if got := cfg.Auto(); got.Model != "opus" || got.Effort != "low" {
+		t.Errorf("auto with an effort only = %+v", got)
+	}
+	cfg.AutoModel, cfg.AutoEffort = "sonnet", ""
+	if got := cfg.Auto(); got.Model != "sonnet" || got.Effort != "high" {
+		t.Errorf("auto with a model only = %+v", got)
 	}
 }
 

@@ -29,7 +29,7 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return Config{Agent: agent.Config{Provider: agent.Claude}, Questions: review.DefaultQuestions, DeeperAhead: true}
+	return Config{Agent: agent.Config{Provider: agent.Claude, AutoEffort: "low"}, Questions: review.DefaultQuestions, DeeperAhead: true}
 }
 
 func (c *Config) AddRecent(repo string) {

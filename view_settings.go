@@ -1,8 +1,10 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -15,16 +17,28 @@ import (
 
 var providers = []agent.Provider{agent.Claude, agent.Codex}
 
+const (
+	defaultEffort = "CLI default"
+	sameEffort    = "Same as above"
+)
+
 type agentForm struct {
-	provider  int
-	model     string
-	binary    string
-	extraArgs string
-	questions string
+	provider   int
+	model      string
+	effort     string
+	autoModel  string
+	autoEffort string
+	binary     string
+	extraArgs  string
+	questions  string
 }
 
 func newAgentForm(cfg agent.Config, questions string) agentForm {
-	f := agentForm{model: cfg.Model, binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), questions: questions}
+	f := agentForm{
+		model: cfg.Model, effort: cmp.Or(cfg.Effort, defaultEffort),
+		autoModel: cfg.AutoModel, autoEffort: cmp.Or(cfg.AutoEffort, sameEffort),
+		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), questions: questions,
+	}
 	if cfg.Provider == agent.Codex {
 		f.provider = 1
 	}
@@ -32,12 +46,25 @@ func newAgentForm(cfg agent.Config, questions string) agentForm {
 }
 
 func (f agentForm) config() agent.Config {
+	p := providers[f.provider]
 	return agent.Config{
-		Provider:  providers[f.provider],
-		Model:     strings.TrimSpace(f.model),
-		Binary:    strings.TrimSpace(f.binary),
-		ExtraArgs: strings.Fields(f.extraArgs),
+		Provider:   p,
+		Model:      strings.TrimSpace(f.model),
+		Effort:     effortOf(p, f.effort),
+		AutoModel:  strings.TrimSpace(f.autoModel),
+		AutoEffort: effortOf(p, f.autoEffort),
+		Binary:     strings.TrimSpace(f.binary),
+		ExtraArgs:  strings.Fields(f.extraArgs),
 	}
+}
+
+// effortOf is the effort picked in the form, empty when it is the
+// default choice or a level the provider's CLI does not take.
+func effortOf(p agent.Provider, picked string) string {
+	if slices.Contains(agent.Efforts(p), picked) {
+		return picked
+	}
+	return ""
 }
 
 type settingsForm struct {
@@ -138,17 +165,34 @@ func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider
 		ui.Segmented(c, &f.provider, "Claude Code", "Codex").Label("Agent")
 		ui.Text(c, status[providers[f.provider]]).FontSize(11).TextColor(t.TextMuted).SingleLine()
 	})
-	ui.Row(c).Gap(12).Children(func() {
-		ui.Column(c).Grow(1).Basis(0).Children(func() {
-			field("Model", func() {
-				ui.TextInput(c, &f.model).Placeholder("CLI default").Label("Model")
-			})
+	efforts := agent.Efforts(providers[f.provider])
+	pair := func(left, right func()) {
+		ui.Row(c).Gap(12).Children(func() {
+			ui.Column(c).Grow(1).Basis(0).Children(left)
+			ui.Column(c).Grow(1).Basis(0).Children(right)
 		})
-		ui.Column(c).Grow(1).Basis(0).Children(func() {
-			field("Binary", func() {
-				ui.TextInput(c, &f.binary).Placeholder("Found on your shell's PATH").Label("Binary")
-			})
+	}
+	pair(func() {
+		field("Model", func() {
+			ui.TextInput(c, &f.model).Placeholder("CLI default").Label("Model")
 		})
+	}, func() {
+		field("Effort", func() {
+			ui.Select(c, &f.effort, append([]string{defaultEffort}, efforts...)).Label("Effort")
+		})
+	})
+	pair(func() {
+		field("Model for automatic runs", func() {
+			ui.TextInput(c, &f.autoModel).Placeholder("Same as above").Label("Model for automatic runs")
+		})
+	}, func() {
+		field("Effort for automatic runs", func() {
+			ui.Select(c, &f.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs")
+		})
+	})
+	ui.Text(c, "Automatic runs are the ones the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions and Go deeper use the model and effort above.").FontSize(11).TextColor(t.TextMuted)
+	field("Binary", func() {
+		ui.TextInput(c, &f.binary).Placeholder("Found on your shell's PATH").Label("Binary")
 	})
 	field("Extra arguments", func() {
 		ui.TextInput(c, &f.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")

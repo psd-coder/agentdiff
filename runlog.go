@@ -73,6 +73,9 @@ func (r *logRun) label() string {
 	if r.info.Model != "" {
 		parts = append(parts, r.info.Model)
 	}
+	if r.info.Effort != "" {
+		parts = append(parts, r.info.Effort+" effort")
+	}
 	parts = append(parts, r.info.Started.Format("Jan 2 15:04:05"))
 	if u := r.info.Usage; u != nil {
 		parts = append(parts, u.Short())
@@ -160,6 +163,6 @@ func newRunInfo(target, title, note string, cfg agent.Config) store.RunInfo {
 	now := time.Now()
 	return store.RunInfo{
 		ID: store.NewRunID(now), Target: target, Title: title, Note: note,
-		Agent: cfg.Provider, Model: cfg.Model, Started: now,
+		Agent: cfg.Provider, Model: cfg.Model, Effort: cfg.Effort, Started: now,
 	}
 }
