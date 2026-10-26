@@ -3,14 +3,14 @@
 A native macOS app for reviewing the code your coding agent wrote. You read a short walkthrough of the changes first and go deeper wherever you need to. Then you read the diff grouped by intent and hand a feedback file back to the agent.
 
 - **Walkthrough by your own agent**: Claude Code or Codex reads the changes through its CLI on your subscription. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
-- **Go deeper into any step**: Go deeper, or a question about a step, gives a new walkthrough one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down.
+- **Go deeper into any step**: Go deeper, or a question about a step, gives a new walkthrough one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down. When the overview is done, the app writes the deeper walkthrough of every step, 3 at a time, so Go deeper usually opens at once. Settings can turn this off.
 - **Checklist**: the walkthrough also answers your checklist in a sentence or two per question: data changes, UI changes, API changes, and the changes that are not beautiful and why.
 - **Files grouped by intent**: the agent puts every changed file into a group, in the order you should read them. Without an explanation, files are grouped by directory.
 - **Any scope**: uncommitted changes (untracked files included), any branch against any base without a checkout, a single commit from the history list, or a custom `from..to` range. The branch picker also opens other worktrees of the repository.
 - **Comments anywhere**: click `+` in the gutter, select line numbers, comment on a whole file or on one part of the explanation.
 - **Separate discussion threads**: the first question of a thread forks the agent session that wrote the explanation, so it starts with that context. Later questions go on in the thread's own session, and threads never mix.
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
-- **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, token counts, and how the run ended. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
+- **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, and how the run ended. Each run shows the tokens it spent (input, cache read, cache write, output) and the cost at API prices that Claude reports, and the panel shows the total. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
 - **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused.
 - **Settings for all reviews and per review**: agent, model, binary path, extra CLI arguments, checklist questions.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
@@ -62,7 +62,7 @@ It fits when you:
 
 1. Pick a scope in the top part of the sidebar. Uncommitted is the default. Compare branches, or a click on the branch name in the toolbar, picks a branch and its base.
 2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
-3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step, or Ask about this step, opens a deeper walkthrough on its own page. The breadcrumbs and the sidebar lead back up.
+3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step, or Ask about this step, opens a deeper walkthrough on its own page. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back above the page (Cmd+[) returns to where you were, at the same scroll place.
 4. Open a group with Review group to read all its files one after the other, or open one file. Mark a file Viewed when you are done with it.
 5. Comment: `+` in the gutter for one line, drag over the line numbers and use Comment on lines for a range, or Comment on file. The thread opens on the right. Comment saves your note. Ask agent (Cmd+Enter) also sends it to the review agent.
 6. Open Feedback in the toolbar. Copy feedback copies the Markdown. Save to file... saves it, by default into the repository's git directory, and copies a prompt such as `Read the code review feedback in /repo/.git/agentdiff-feedback.md and address each item.` Paste either one into your coding agent.
@@ -110,7 +110,7 @@ The app saves everything under `~/Library/Application Support/AgentDiff/`.
 | --- | --- |
 | `config.json` | global settings, recent repositories, split or unified diff |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, viewed files and overrides of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
-| `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
+| `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. `<run>.usage.json` next to it holds the tokens the run spent. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 
 A review outlives the changes it was written for, which matters most for the uncommitted scope. When the changed files no longer match the explanation's groups, the overview shows a warning. Start over deletes the review of the current scope and its run logs, after you confirm.
 
