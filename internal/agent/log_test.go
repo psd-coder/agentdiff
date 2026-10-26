@@ -143,14 +143,49 @@ func TestSummarizeClaude(t *testing.T) {
 		t.Errorf("tool result = %q", d)
 	}
 	res := byTitle["Result: success"]
-	if want := (Usage{Input: 4, Output: 119, CacheRead: 34947, CacheWrite: 35116, CostUSD: 0.0074325699999999995}); res.Usage == nil || *res.Usage != want {
+	if want := (Usage{Input: 4, Output: 119, CacheRead: 34947, CacheWrite: 35116, Session: "6a699d1b-afa7-40a4-b527-0cf3cd8745ca", SessionCost: 0.0074325699999999995}); res.Usage == nil || *res.Usage != want {
 		t.Errorf("usage = %+v", res.Usage)
 	}
-	if want := "2 turns, 6.8 s\n70k tokens: 4 in, 34k cache read, 35k cache write, 119 out, $0.0074 at API prices"; res.Detail != want {
+	if want := "2 turns, 6.8 s\n70k tokens processed: 4 in, 34k cache read, 35k cache write, 119 out, $0.0074 at API prices for the whole session"; res.Detail != want {
 		t.Errorf("result = %q", res.Detail)
 	}
 	if d := byTitle["Session started"].Detail; !strings.HasPrefix(d, "model claude-haiku-5-5, permission mode ") {
 		t.Errorf("session = %q", d)
+	}
+	var run Usage
+	for _, it := range items {
+		if it.Usage != nil {
+			run.Add(*it.Usage)
+		}
+	}
+	if run.Context != 2+34947+169+8 || run.Total() != 70186 {
+		t.Errorf("run usage = %+v", run)
+	}
+	if got := run.Short(); got != "35k tokens" {
+		t.Errorf("short = %q", got)
+	}
+}
+
+func TestClaudeSubagentContext(t *testing.T) {
+	line := `{"type":"assistant","parent_tool_use_id":"toolu_1","message":{"content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":5,"output_tokens":1}}}`
+	items := Summarize(Claude, LogEntry{Kind: LogStdout, Text: line})
+	if len(items) != 1 || items[0].Usage != nil {
+		t.Errorf("items = %+v", items)
+	}
+}
+
+func TestUsageShort(t *testing.T) {
+	u := Usage{Input: 1000, CacheRead: 20000}
+	if got := u.Short(); got != "21k tokens processed" {
+		t.Errorf("without context = %q", got)
+	}
+	u.Add(Usage{Context: 9000})
+	u.Add(Usage{Output: 500})
+	if got := u.Short(); got != "9.0k tokens" {
+		t.Errorf("with context = %q", got)
+	}
+	if want := "9.0k tokens in context, 21k tokens processed: 1.0k in, 20k cache read, 0 cache write, 500 out"; u.String() != want {
+		t.Errorf("string = %q", u.String())
 	}
 }
 
@@ -166,7 +201,7 @@ func TestSummarizeCodex(t *testing.T) {
 	if want := (Usage{Input: 27107, CacheRead: 34048, Output: 128}); items[5].Usage == nil || *items[5].Usage != want {
 		t.Errorf("usage = %+v", items[5].Usage)
 	}
-	if items[5].Detail != "61k tokens: 27k in, 34k cache read, 0 cache write, 128 out, of them 16 reasoning" {
+	if items[5].Detail != "61k tokens processed: 27k in, 34k cache read, 0 cache write, 128 out, of them 16 reasoning" {
 		t.Errorf("usage detail = %q", items[5].Detail)
 	}
 }
@@ -191,7 +226,7 @@ func TestSummarizeEdgeCases(t *testing.T) {
 		{
 			"failed result", Claude,
 			LogEntry{Kind: LogStdout, Text: `{"type":"result","subtype":"error_max_turns","is_error":true,"result":"too long","num_turns":9}`},
-			[]LogItem{{Title: "Result: error_max_turns", Detail: "too long\n9 turns, 0.0 s\n0 tokens: 0 in, 0 cache read, 0 cache write, 0 out", Failed: true, Usage: &Usage{}}},
+			[]LogItem{{Title: "Result: error_max_turns", Detail: "too long\n9 turns, 0.0 s\n0 tokens processed: 0 in, 0 cache read, 0 cache write, 0 out", Failed: true, Usage: &Usage{}}},
 		},
 		{
 			"failed command", Codex,
@@ -213,10 +248,12 @@ func TestSummarizeEdgeCases(t *testing.T) {
 	}
 }
 
+// A forked run reports the tokens of the whole session in modelUsage, the
+// parent's included. Its own tokens are in usage.
 func TestClaudeUsageFromFork(t *testing.T) {
 	items := fixtureItems(t, Claude, "claude_fork.jsonl")
 	last := items[len(items)-1]
-	if want := (Usage{Input: 4, Output: 23, CacheRead: 31953, CacheWrite: 35399, CostUSD: 0.0074112299999999996}); last.Usage == nil || *last.Usage != want {
+	if want := (Usage{Input: 2, Output: 18, CacheRead: 31953, CacheWrite: 1744, Session: "4d856974-081d-4842-b5be-2c804b37991b", SessionCost: 0.0074112299999999996}); last.Usage == nil || *last.Usage != want {
 		t.Errorf("usage = %+v", last.Usage)
 	}
 }

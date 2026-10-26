@@ -75,7 +75,7 @@ func (r *logRun) label() string {
 	}
 	parts = append(parts, r.info.Started.Format("Jan 2 15:04:05"))
 	if u := r.info.Usage; u != nil {
-		parts = append(parts, agent.Count(u.Total())+" tokens")
+		parts = append(parts, u.Short())
 	}
 	if s := r.status(); s != "" {
 		parts = append(parts, s)

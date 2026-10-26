@@ -127,12 +127,21 @@ type LogItem struct {
 
 // Usage is the tokens a run spent. Input counts the tokens read without
 // the cache. CostUSD is what the CLI reports at API prices, 0 for Codex.
+// The other counts add up every request of the run, and each request reads
+// the whole conversation again. Context is the size of the last request,
+// the number Claude Code shows; 0 when the CLI does not report it.
+// Session is the Claude session the run ended in. SessionCost is what
+// Claude reports for that session, so it includes the runs this one
+// resumed.
 type Usage struct {
-	Input      int     `json:"input"`
-	Output     int     `json:"output"`
-	CacheRead  int     `json:"cacheRead"`
-	CacheWrite int     `json:"cacheWrite"`
-	CostUSD    float64 `json:"costUsd,omitempty"`
+	Input       int     `json:"input"`
+	Output      int     `json:"output"`
+	CacheRead   int     `json:"cacheRead"`
+	CacheWrite  int     `json:"cacheWrite"`
+	CostUSD     float64 `json:"costUsd,omitempty"`
+	Context     int     `json:"context,omitempty"`
+	Session     string  `json:"session,omitempty"`
+	SessionCost float64 `json:"sessionCost,omitempty"`
 }
 
 func (u Usage) Total() int { return u.Input + u.Output + u.CacheRead + u.CacheWrite }
@@ -143,15 +152,36 @@ func (u *Usage) Add(o Usage) {
 	u.CacheRead += o.CacheRead
 	u.CacheWrite += o.CacheWrite
 	u.CostUSD += o.CostUSD
+	if o.Context > 0 {
+		u.Context = o.Context
+	}
+	if o.Session != "" {
+		u.Session, u.SessionCost = o.Session, o.SessionCost
+	}
 }
 
 func (u Usage) String() string {
-	s := fmt.Sprintf("%s tokens: %s in, %s cache read, %s cache write, %s out",
+	s := fmt.Sprintf("%s tokens processed: %s in, %s cache read, %s cache write, %s out",
 		Count(u.Total()), Count(u.Input), Count(u.CacheRead), Count(u.CacheWrite), Count(u.Output))
-	if u.CostUSD > 0 {
+	switch {
+	case u.CostUSD > 0:
 		s += fmt.Sprintf(", $%.4f at API prices", u.CostUSD)
+	case u.SessionCost > 0:
+		s += fmt.Sprintf(", $%.4f at API prices for the whole session", u.SessionCost)
+	}
+	if u.Context > 0 {
+		s = fmt.Sprintf("%s tokens in context, %s", Count(u.Context), s)
 	}
 	return s
+}
+
+// Short is the context size, or the processed total when the CLI does
+// not report the context.
+func (u Usage) Short() string {
+	if u.Context > 0 {
+		return Count(u.Context) + " tokens"
+	}
+	return Count(u.Total()) + " tokens processed"
 }
 
 // Count writes a token count short: 950, 12.3k, 1.2M.
@@ -196,19 +226,21 @@ func Summarize(p Provider, e LogEntry) []LogItem {
 }
 
 type claudeLogLine struct {
-	Type    string   `json:"type"`
-	Subtype string   `json:"subtype"`
-	Model   string   `json:"model"`
-	CWD     string   `json:"cwd"`
-	Mode    string   `json:"permissionMode"`
-	Tools   []string `json:"tools"`
-	Hook    string   `json:"hook_name"`
-	Outcome string   `json:"outcome"`
-	Stdout  string   `json:"stdout"`
-	Stderr  string   `json:"stderr"`
-	Output  string   `json:"output"`
-	Content string   `json:"content"`
-	Message *struct {
+	Type      string   `json:"type"`
+	Subtype   string   `json:"subtype"`
+	SessionID string   `json:"session_id"`
+	Model     string   `json:"model"`
+	CWD       string   `json:"cwd"`
+	Mode      string   `json:"permissionMode"`
+	Tools     []string `json:"tools"`
+	Hook      string   `json:"hook_name"`
+	Outcome   string   `json:"outcome"`
+	Stdout    string   `json:"stdout"`
+	Stderr    string   `json:"stderr"`
+	Output    string   `json:"output"`
+	Content   string   `json:"content"`
+	Parent    *string  `json:"parent_tool_use_id"`
+	Message   *struct {
 		Content []struct {
 			Type     string          `json:"type"`
 			Text     string          `json:"text"`
@@ -218,28 +250,31 @@ type claudeLogLine struct {
 			Content  json.RawMessage `json:"content"`
 			IsError  bool            `json:"is_error"`
 		} `json:"content"`
+		Usage *claudeTokens `json:"usage"`
 	} `json:"message"`
 	RateLimit *struct {
 		Status string `json:"status"`
 		Type   string `json:"rateLimitType"`
 	} `json:"rate_limit_info"`
-	Result     string  `json:"result"`
-	IsError    bool    `json:"is_error"`
-	DurationMS int64   `json:"duration_ms"`
-	Turns      int     `json:"num_turns"`
-	Cost       float64 `json:"total_cost_usd"`
-	Usage      *struct {
-		Input      int `json:"input_tokens"`
-		Output     int `json:"output_tokens"`
-		CacheRead  int `json:"cache_read_input_tokens"`
-		CacheWrite int `json:"cache_creation_input_tokens"`
-	} `json:"usage"`
+	Result     string        `json:"result"`
+	IsError    bool          `json:"is_error"`
+	DurationMS int64         `json:"duration_ms"`
+	Turns      int           `json:"num_turns"`
+	Cost       float64       `json:"total_cost_usd"`
+	Usage      *claudeTokens `json:"usage"`
 	ModelUsage map[string]struct {
 		Input      int `json:"inputTokens"`
 		Output     int `json:"outputTokens"`
 		CacheRead  int `json:"cacheReadInputTokens"`
 		CacheWrite int `json:"cacheCreationInputTokens"`
 	} `json:"modelUsage"`
+}
+
+type claudeTokens struct {
+	Input      int `json:"input_tokens"`
+	Output     int `json:"output_tokens"`
+	CacheRead  int `json:"cache_read_input_tokens"`
+	CacheWrite int `json:"cache_creation_input_tokens"`
 }
 
 func claudeItems(raw []byte) []LogItem {
@@ -280,6 +315,9 @@ func claudeItems(raw []byte) []LogItem {
 				items = append(items, LogItem{Title: title, Detail: toolResultText(b.Content), Failed: b.IsError})
 			}
 		}
+		if m := l.Message.Usage; m != nil && l.Type == "assistant" && l.Parent == nil && len(items) > 0 {
+			items[0].Usage = &Usage{Context: m.Input + m.CacheRead + m.CacheWrite + m.Output}
+		}
 		return items
 	case "result":
 		failed := l.IsError || strings.HasPrefix(l.Subtype, "error")
@@ -317,16 +355,18 @@ func claudeStats(l claudeLogLine, u Usage) string {
 	return fmt.Sprintf("%d turns, %.1f s\n%s", l.Turns, float64(l.DurationMS)/1000, u)
 }
 
-// claudeUsage sums the usage of every model the run used. The top-level
-// usage only holds the last request when a session was resumed, so it is
-// the fallback for an older CLI without modelUsage.
+// claudeUsage reads the tokens of the run from the top-level usage.
+// modelUsage and the cost count the whole session, also the runs this one
+// resumed, so modelUsage is only the fallback and the cost is the
+// session's. The app subtracts the cost of the resumed run.
 func claudeUsage(l claudeLogLine) Usage {
-	u := Usage{CostUSD: l.Cost}
+	u := Usage{Session: l.SessionID, SessionCost: l.Cost}
+	if t := l.Usage; t != nil {
+		u.Add(Usage{Input: t.Input, Output: t.Output, CacheRead: t.CacheRead, CacheWrite: t.CacheWrite})
+		return u
+	}
 	for _, m := range l.ModelUsage {
 		u.Add(Usage{Input: m.Input, Output: m.Output, CacheRead: m.CacheRead, CacheWrite: m.CacheWrite})
-	}
-	if len(l.ModelUsage) == 0 && l.Usage != nil {
-		u.Add(Usage{Input: l.Usage.Input, Output: l.Usage.Output, CacheRead: l.Usage.CacheRead, CacheWrite: l.Usage.CacheWrite})
 	}
 	return u
 }

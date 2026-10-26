@@ -43,7 +43,7 @@ func (a *app) logPanel(c *ui.Context) {
 			ui.Text(c, "Agent log").Bold()
 			ui.Text(c, a.logTargetLabel()).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1).Grow(1)
 			if total, ok := a.logUsage(); ok {
-				ui.Text(c, agent.Count(total.Total())+" tokens").FontSize(12).TextColor(t.TextMuted).Tooltip(total.String())
+				ui.Text(c, agent.Count(total.Total())+" tokens processed").FontSize(12).TextColor(t.TextMuted).Tooltip(total.String())
 			}
 			if a.logTarget != "" {
 				ui.Button(c, "Show all").OnClick(func() { a.logTarget = "" })
@@ -68,7 +68,9 @@ func (a *app) logPanel(c *ui.Context) {
 	})
 }
 
-// logUsage is what the runs in the log panel spent, as far as known.
+// logUsage is what the runs in the log panel spent, as far as known. The
+// context sizes and sessions of separate runs do not add up, so the total
+// has none.
 func (a *app) logUsage() (agent.Usage, bool) {
 	var total agent.Usage
 	known := false
@@ -78,6 +80,7 @@ func (a *app) logUsage() (agent.Usage, bool) {
 			known = true
 		}
 	}
+	total.Context, total.Session, total.SessionCost = 0, "", 0
 	return total, known
 }
 

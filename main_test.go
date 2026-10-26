@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/png"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -361,6 +362,21 @@ func TestCompareBranches(t *testing.T) {
 	}
 }
 
+func TestRunCost(t *testing.T) {
+	a := newTestApp(t)
+	parent := &logRun{info: store.RunInfo{ID: "p", Usage: &agent.Usage{Session: "p", SessionCost: 0.5, CostUSD: 0.5}}}
+	a.runs[a.rev] = []*logRun{parent}
+	for _, tc := range []struct {
+		resumed string
+		want    float64
+	}{{"", 0.6}, {"p", 0.1}, {"gone", 0}} {
+		run := &logRun{info: store.RunInfo{Usage: &agent.Usage{Session: "c", SessionCost: 0.6}}}
+		if got := a.runCost(a.rev, run, tc.resumed); math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("resumed %q: cost %v, want %v", tc.resumed, got, tc.want)
+		}
+	}
+}
+
 func TestReviewFollowsBranch(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
@@ -406,14 +422,16 @@ func fakeClaude(t *testing.T, id, answer string) string {
 	t.Helper()
 	dir := t.TempDir()
 	init := `{"type":"system","subtype":"init","session_id":"` + id + `"}`
+	step := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}}],"usage":{"input_tokens":5,"cache_read_input_tokens":20000,"cache_creation_input_tokens":3000,"output_tokens":995}}}`
 	result, err := json.Marshal(map[string]any{
 		"type": "result", "subtype": "success", "result": answer, "session_id": id, "total_cost_usd": 0.25,
+		"usage":      map[string]int{"input_tokens": 10, "output_tokens": 1000, "cache_read_input_tokens": 20000, "cache_creation_input_tokens": 5000},
 		"modelUsage": map[string]any{"m": map[string]int{"inputTokens": 10, "outputTokens": 1000, "cacheReadInputTokens": 20000, "cacheCreationInputTokens": 5000}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	write(t, dir, "out.jsonl", init+"\n"+string(result)+"\n")
+	write(t, dir, "out.jsonl", init+"\n"+step+"\n"+string(result)+"\n")
 	write(t, dir, "claude", "#!/bin/sh\ncat > "+filepath.Join(dir, "prompt.txt")+"\ncat "+filepath.Join(dir, "out.jsonl")+"\n")
 	if err := os.Chmod(filepath.Join(dir, "claude"), 0o755); err != nil {
 		t.Fatal(err)
@@ -529,17 +547,26 @@ func TestDeeperAhead(t *testing.T) {
 	if len(runs) != 5 {
 		t.Fatalf("%d runs", len(runs))
 	}
-	want := agent.Usage{Input: 10, Output: 1000, CacheRead: 20000, CacheWrite: 5000, CostUSD: 0.25}
+	// The fake answers every run in session s1 at a session cost of $0.25,
+	// so a deeper run, which resumes s1, adds nothing to the cost.
+	want := agent.Usage{Input: 10, Output: 1000, CacheRead: 20000, CacheWrite: 5000, Context: 24000, Session: "s1", SessionCost: 0.25}
 	for _, r := range runs {
-		if r.Usage == nil || *r.Usage != want {
+		w := want
+		if r.Target == store.TargetOverview {
+			w.CostUSD = 0.25
+		}
+		if r.Usage == nil || *r.Usage != w {
 			t.Errorf("usage of %s = %+v", r.Title, r.Usage)
 		}
 	}
 	tt := ui.NewTester(a.view, 1400, 900)
 	a.showLog("")
 	tt.Frame()
-	if !tt.HasText("130k tokens") {
+	if !tt.HasText("130k tokens processed") {
 		t.Errorf("log lacks the total; texts %q", tt.Texts())
+	}
+	if !tt.HasText("· 24k tokens") {
+		t.Errorf("log lacks the context of a run; texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "deeper-ahead")
 }
