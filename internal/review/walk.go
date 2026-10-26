@@ -46,7 +46,8 @@ type Walkthrough struct {
 
 // Walk is a walkthrough one level deeper than its parent: into one of the
 // parent's steps, or answering a question about the parent as a whole
-// (Step -1). Parent is empty for the overview.
+// (Step -1). Parent is empty for the overview. A walk with a question is
+// a conversation: More holds the follow-up questions and their answers.
 type Walk struct {
 	ID        string         `json:"id"`
 	Parent    string         `json:"parent,omitempty"`
@@ -59,6 +60,34 @@ type Walk struct {
 	Model     string         `json:"model,omitempty"`
 	Generated time.Time      `json:"generated"`
 	Err       string         `json:"err,omitempty"`
+	More      []Turn         `json:"more,omitempty"`
+}
+
+// Turn is a question and the walkthrough that answers it.
+type Turn struct {
+	Question  string       `json:"question"`
+	Content   *Walkthrough `json:"content,omitempty"`
+	Markdown  string       `json:"markdown,omitempty"`
+	Err       string       `json:"err,omitempty"`
+	Generated time.Time    `json:"generated"`
+}
+
+// Turns returns the walk's first question and answer, then the
+// follow-ups.
+func (w *Walk) Turns() []Turn {
+	first := Turn{Question: w.Question, Content: w.Content, Markdown: w.Markdown, Err: w.Err, Generated: w.Generated}
+	return append([]Turn{first}, w.More...)
+}
+
+// SetAnswer puts an answer, or the error that came instead, into the
+// latest turn.
+func (w *Walk) SetAnswer(content *Walkthrough, markdown, err string, at time.Time) {
+	if n := len(w.More); n > 0 {
+		t := &w.More[n-1]
+		t.Content, t.Markdown, t.Err, t.Generated = content, markdown, err, at
+		return
+	}
+	w.Content, w.Markdown, w.Err, w.Generated = content, markdown, err, at
 }
 
 func (r *Review) AddWalk(parent string, step int, question string) *Walk {

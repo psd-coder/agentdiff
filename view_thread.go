@@ -152,7 +152,9 @@ func (a *app) threadsPage(c *ui.Context) {
 	t := c.Theme()
 	ui.Scroll(c).TrackScroll(a.scrollOf("threads")).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
-			ui.Text(c, "Comments").FontSize(22).Bold()
+			ui.Text(c, "Questions").FontSize(22).Bold()
+			a.questionsList(c)
+			ui.Text(c, "Comments").FontSize(22).Bold().Margin(16, 0, 0, 0)
 			n := 0
 			for _, th := range a.rev.Threads {
 				if len(th.Messages) > 0 {

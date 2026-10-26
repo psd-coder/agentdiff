@@ -196,6 +196,18 @@ func (a *app) deeper(parent string, step int, question string) {
 	a.runWalk(a.rev, w)
 }
 
+// askQuestion starts a question's conversation about a step of parent, or about
+// parent as a whole for step -1, in the side panel.
+func (a *app) askQuestion(parent string, step int, question string) {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return
+	}
+	w := a.rev.AddWalk(parent, step, question)
+	a.openQuestion(w.ID)
+	a.runWalk(a.rev, w)
+}
+
 // maxAhead is how many walkthroughs the app writes at once ahead of the
 // reviewer.
 const maxAhead = 3
@@ -280,16 +292,46 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk) {
 	}
 	req.Prompt = review.DeeperPrompt(d)
 
-	w.Content, w.Markdown, w.Err, w.SessionID = nil, "", "", ""
+	w.Content, w.Markdown, w.Err, w.SessionID, w.More = nil, "", "", "", nil
+	title := "Deeper: " + rev.WalkTitle(w)
+	if w.Question != "" {
+		title = "Question: " + w.Question
+	}
+	a.streamWalk(rev, w, cfg, req, title)
+}
+
+// askMore asks a follow-up question in a question's conversation. It goes
+// on in the conversation's own session.
+func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
+	q = strings.TrimSpace(q)
+	if q == "" || a.walkBusy(w.ID) {
+		return
+	}
+	cfg, _ := a.cfg.Effective(rev.Settings)
+	f := review.FollowupRequest{Question: q, Known: w.SessionID != "" && w.Agent == cfg.Provider, NewRev: rev.Scope.NewRev()}
+	req := agent.Request{Dir: rev.Repo, SystemPrompt: review.SystemPrompt}
+	if f.Known {
+		req.ResumeID = w.SessionID
+	} else {
+		diffstat := ""
+		if rev == a.rev {
+			diffstat = a.diffstat
+		}
+		f.Context = review.ContextPrompt(rev.Scope.Describe(), diffstat)
+		f.Earlier = w.Turns()
+	}
+	req.Prompt = review.FollowupPrompt(f)
+	w.More = append(w.More, review.Turn{Question: q, Generated: time.Now()})
+	a.streamWalk(rev, w, cfg, req, "Follow-up: "+q)
+}
+
+// streamWalk runs the agent for the latest turn of a walk.
+func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, req agent.Request, title string) {
 	w.Agent, w.Model = cfg.Provider, cfg.Model
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &walkRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.walkRuns[w.ID] = run
 	a.saveReviewOf(rev)
-	title := "Deeper: " + rev.WalkTitle(w)
-	if w.Question != "" {
-		title = "Question: " + w.Question
-	}
 	info := newRunInfo(w.ID, title, "", cfg)
 	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
 		if a.walkRuns[w.ID] != run {
@@ -306,20 +348,20 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk) {
 		case agent.EventDone:
 			text := answer(ev.Text, run.text)
 			if wt, ok := review.ParseWalkthrough(text); ok {
-				w.Content = wt
+				w.SetAnswer(wt, "", "", time.Now())
 			} else {
-				w.Markdown = text
+				w.SetAnswer(nil, text, "", time.Now())
 			}
-			w.Generated = time.Now()
 			delete(a.walkRuns, w.ID)
 			a.saveReviewOf(rev)
 			a.startAhead()
 		case agent.EventError:
 			delete(a.walkRuns, w.ID)
-			w.Err = ev.Err.Error()
+			msg := ev.Err.Error()
 			if ctx.Err() != nil {
-				w.Err = "Stopped"
+				msg = "Stopped"
 			}
+			w.SetAnswer(nil, "", msg, time.Now())
 			a.saveReviewOf(rev)
 			a.startAhead()
 		}

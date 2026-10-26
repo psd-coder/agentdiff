@@ -119,6 +119,38 @@ func DeeperPrompt(d DeeperRequest) string {
 	return b.String()
 }
 
+// FollowupRequest is a follow-up question in a question's conversation.
+type FollowupRequest struct {
+	Question string
+	// Known is true when the session holds the conversation so far.
+	Known bool
+	// Context and Earlier start a session that does not: the change set,
+	// and the questions and answers before this one.
+	Context string
+	Earlier []Turn
+	NewRev  string
+}
+
+func FollowupPrompt(f FollowupRequest) string {
+	var b strings.Builder
+	if !f.Known {
+		b.WriteString(f.Context)
+		b.WriteString("The reviewer asked about these changes before:\n\n")
+		for _, t := range f.Earlier {
+			fmt.Fprintf(&b, "Q: %s\n", t.Question)
+			if t.Content != nil {
+				fmt.Fprintf(&b, "A: %s\n", t.Content.Summary)
+			}
+			b.WriteString("\n")
+		}
+	}
+	fmt.Fprintf(&b, "The reviewer asks a follow-up question: %s\n\n", f.Question)
+	b.WriteString("Answer with a walkthrough. When the question has a short answer, give it in the summary and use fewer steps, or none.\n\n")
+	b.WriteString(walkRules(f.NewRev))
+	b.WriteString("\nAnswer with exactly one fenced JSON block and nothing else:\n\n```json\n" + walkSchema + "\n```\n")
+	return b.String()
+}
+
 // ReadOverview turns the agent's answer into an overview: a walkthrough
 // when the answer holds one, else the Markdown and its groups block.
 func ReadOverview(answer string, files []string) Overview {

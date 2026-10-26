@@ -521,3 +521,62 @@ func TestBackFromSnippet(t *testing.T) {
 		t.Errorf("overview scrolled to %v, want 400", y)
 	}
 }
+
+func TestQuestionPanel(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, SessionID: "root", Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
+	}}
+	reply := "```json\n" + `{"summary": "Callers pass mixed case.", "steps": [{"title": "Caller", "text": "x", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "q1", reply)}
+	prompt := filepath.Join(filepath.Dir(a.cfg.Agent.Binary), "prompt.txt")
+	tt := ui.NewTester(a.view, 1400, 900)
+	tt.Frame()
+
+	if err := tt.Click("Ask about this step"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("About: Lower-case keys") || a.page != "overview" {
+		t.Fatalf("panel not open; page %q", a.page)
+	}
+	a.queue = make(chan func(), 64)
+	a.paneDraft = "Why lower-case?"
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyEnter)
+	w := a.rev.Walk(a.question)
+	if w == nil || w.Question != "Why lower-case?" || w.Step != 0 || a.page != "overview" {
+		t.Fatalf("question = %+v, page %q", w, a.page)
+	}
+	pump(t, a, "the answer", func() bool { return !a.walkBusy(w.ID) })
+	tt.Frame()
+	for _, want := range []string{"Why lower-case?", "Callers pass mixed case.", "1. Caller", "cache/cache.go:6 (+)"} {
+		if !tt.HasText(want) {
+			t.Errorf("panel lacks %q", want)
+		}
+	}
+
+	a.askMore(a.rev, w, "And the tests?")
+	pump(t, a, "the follow-up", func() bool { return !a.walkBusy(w.ID) })
+	if len(w.More) != 1 || w.More[0].Content == nil || w.SessionID != "q1" {
+		t.Fatalf("follow-up = %+v", w.More)
+	}
+	if b, _ := os.ReadFile(prompt); !strings.Contains(string(b), "follow-up question: And the tests?") || strings.Contains(string(b), "The change set under review") {
+		t.Errorf("follow-up prompt = %q", b)
+	}
+	tt.Frame()
+	snapshot(t, tt, "question")
+
+	a.closeQuestion()
+	a.goTo("threads")
+	tt.Frame()
+	if !tt.HasText("1 follow-ups") && !tt.HasText("Jan") {
+		t.Logf("texts %q", tt.Texts())
+	}
+	if err := tt.Click("Why lower-case?"); err != nil {
+		t.Fatal(err)
+	}
+	if a.question != w.ID {
+		t.Errorf("question = %q", a.question)
+	}
+}

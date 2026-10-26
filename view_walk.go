@@ -41,7 +41,6 @@ func (a *app) walkthrough(c *ui.Context, parent string, w *review.Walkthrough) {
 
 func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 	t := c.Theme()
-	key := fmt.Sprintf("%s/%d", parent, i)
 	ui.Column(c).Gap(10).Padding(16, 20).Radius(10).Background(t.Surface).Border(1, t.Border).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, fmt.Sprintf("%d. %s", i+1, s.Title)).FontSize(16).Bold().Grow(1)
@@ -71,37 +70,12 @@ func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 			} else {
 				ui.PrimaryButton(c, "Go deeper").Tooltip("A walkthrough of this step, one level closer to the code").OnClick(func() { a.deeper(parent, i, "") })
 			}
-			ui.Button(c, "Ask about this step").OnClick(func() { a.stepAsk, a.stepDraft = key, "" })
+			ui.Button(c, "Ask about this step").Tooltip("Ask in the side panel").OnClick(func() { a.askAbout(parent, i) })
 		})
-		if a.stepAsk == key {
-			a.askField(c, "What do you want to know about this step?", func(q string) {
-				a.stepAsk = ""
-				a.deeper(parent, i, q)
-			})
-		}
 		for _, w := range asked {
 			a.walkRow(c, w)
 		}
 	})
-}
-
-// askField is a one-line question with Enter to send and Escape to
-// cancel.
-func (a *app) askField(c *ui.Context, placeholder string, send func(string)) {
-	submit := func() {
-		if q := strings.TrimSpace(a.stepDraft); q != "" {
-			a.stepDraft = ""
-			send(q)
-		}
-	}
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.TextInput(c, &a.stepDraft).Placeholder(placeholder).AutoFocus().Grow(1).OnSubmit(submit)
-		ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(a.stepDraft) == "").OnClick(submit)
-		ui.Button(c, "Cancel").OnClick(func() { a.stepAsk = "" })
-	})
-	if c.Shortcut(0, ui.KeyEscape) {
-		a.stepAsk = ""
-	}
 }
 
 // walkRow links to a walk from the page above it.
@@ -122,7 +96,11 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 		}
 	})
 	if row.Clicked() {
-		a.goTo("walk:" + w.ID)
+		if w.Question != "" {
+			a.openQuestion(w.ID)
+		} else {
+			a.goTo("walk:" + w.ID)
+		}
 	}
 }
 
@@ -359,7 +337,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 				ui.Text(c, "About the step: "+s.Title).FontSize(12).TextColor(t.TextMuted)
 			}
 			switch {
-			case run != nil:
+			case run != nil && len(w.More) == 0:
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
@@ -374,6 +352,19 @@ func (a *app) walkPage(c *ui.Context, id string) {
 				a.walkthrough(c, w.ID, w.Content)
 			case w.Markdown != "":
 				markdown.View(c, w.Markdown, &a.md)
+			}
+			for i, turn := range w.More {
+				ui.Column(c.Key(fmt.Sprintf("more-%d", i))).Gap(10).Padding(16, 20).Radius(10).Border(1, t.Border).Children(func() {
+					ui.Text(c, "Follow-up: "+turn.Question).FontSize(16).Bold()
+					if i == len(w.More)-1 && run != nil {
+						ui.Spinner(c).Size(14, 14)
+						return
+					}
+					a.answerView(c, turn)
+				})
+			}
+			if w.Question != "" && run == nil && !a.queued(w.ID) {
+				ui.Button(c, "Ask a follow-up").Tooltip("Continue this conversation in the side panel").OnClick(func() { a.openQuestion(w.ID) })
 			}
 			if w.Err != "" && run == nil {
 				ui.Column(c).Gap(4).Padding(12).Radius(8).Border(1, t.Danger).Children(func() {
@@ -404,12 +395,12 @@ func (a *app) askWalk(c *ui.Context, parent string) {
 	submit := func() {
 		if q := strings.TrimSpace(a.askDraft); q != "" {
 			a.askDraft = ""
-			a.deeper(parent, -1, q)
+			a.askQuestion(parent, -1, q)
 		}
 	}
 	ui.Column(c).Gap(8).Margin(8, 0, 0, 0).Children(func() {
 		ui.Text(c, "Ask about the changes").FontSize(18).Bold()
-		ui.Text(c, "The answer is a walkthrough of its own. The agent starts from what it learned for this page.").FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.").FontSize(12).TextColor(t.TextMuted)
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.TextInput(c.Key("ask-"+parent), &a.askDraft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
 			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(a.askDraft) == "").OnClick(submit)

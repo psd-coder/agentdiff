@@ -20,15 +20,21 @@ func (a *app) view(c *ui.Context) {
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)
 		ui.Split(c, &a.sidebarW, func() { a.sidebar(c) }, func() {
-			thread := a.thread != "" && a.rev.Thread(a.thread) != nil
+			var panel func()
+			switch {
+			case a.thread != "" && a.rev.Thread(a.thread) != nil:
+				panel = func() { a.threadPanel(c) }
+			case a.questionOpen():
+				panel = func() { a.questionPanel(c) }
+			}
 			var side func()
 			switch {
-			case thread && a.logOpen:
+			case panel != nil && a.logOpen:
 				side = func() {
-					ui.SplitVerticalPercent(c, &a.logPct, func() { a.threadPanel(c) }, func() { a.logPanel(c) }).Fill()
+					ui.SplitVerticalPercent(c, &a.logPct, panel, func() { a.logPanel(c) }).Fill()
 				}
-			case thread:
-				side = func() { a.threadPanel(c) }
+			case panel != nil:
+				side = panel
 			case a.logOpen:
 				side = func() { a.logPanel(c) }
 			default:
@@ -159,7 +165,7 @@ func (a *app) reviewNav(c *ui.Context) {
 			}
 			a.walkItems(c, "", 1)
 			threads := len(a.rev.Threads)
-			ui.SidebarItem(c, "threads", nil, "Comments").Children(func() {
+			ui.SidebarItem(c, "threads", nil, "Questions & comments").Children(func() {
 				if threads > 0 {
 					ui.Badge(c, fmt.Sprint(threads))
 				}
@@ -193,7 +199,7 @@ func (a *app) reviewNav(c *ui.Context) {
 // under the one it goes deeper into.
 func (a *app) walkItems(c *ui.Context, parent string, depth int) {
 	for _, w := range a.rev.Walks {
-		if w.Parent != parent {
+		if w.Parent != parent || w.Question != "" {
 			continue
 		}
 		item := ui.SidebarItem(c, "walk:"+w.ID, nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))

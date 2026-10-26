@@ -3,7 +3,8 @@
 A native macOS app for reviewing the code your coding agent wrote. You read a short walkthrough of the changes first and go deeper wherever you need to. Then you read the diff grouped by intent and hand a feedback file back to the agent.
 
 - **Walkthrough by your own agent**: Claude Code or Codex reads the changes through its CLI on your subscription. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
-- **Go deeper into any step**: Go deeper, or a question about a step, gives a new walkthrough one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down. When the overview is done, the app writes the deeper walkthrough of every step, 3 at a time, so Go deeper usually opens at once. Settings can turn this off.
+- **Go deeper into any step**: Go deeper opens a new walkthrough of the step, one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down. When the overview is done, the app writes the deeper walkthrough of every step, 3 at a time, so Go deeper usually opens at once. Settings can turn this off.
+- **Questions in the side panel**: a question about a step or a page opens a conversation next to the walkthrough, so you keep your place. The answers are short walkthroughs with snippets, follow-up questions go on in the same agent session, and every conversation stays listed under its step and on the Questions & comments page.
 - **Checklist**: the walkthrough also answers your checklist in a sentence or two per question: data changes, UI changes, API changes, and the changes that are not beautiful and why.
 - **Files grouped by intent**: the agent puts every changed file into a group, in the order you should read them. Without an explanation, files are grouped by directory.
 - **Any scope**: uncommitted changes (untracked files included), any branch against any base without a checkout, a single commit from the history list, or a custom `from..to` range. The branch picker also opens other worktrees of the repository.
@@ -50,7 +51,7 @@ The walkthrough also answers a checklist, by default these questions:
 4. Which changes are not beautiful?
 5. Which assumptions and rules force the non-beautiful changes?
 
-A question about a step or about the whole walkthrough gets a walkthrough of its own. A note for the coding agent is a thread, anchored to a line range, a file or a step. A thread's comments go into the feedback. With Ask agent, the review agent also answers in the thread. Every walkthrough and every thread is a conversation of its own, so three independent questions do not end up in one long chat.
+A question about a step or about the whole walkthrough opens a conversation in the side panel, and each answer is a short walkthrough. A note for the coding agent is a thread, anchored to a line range, a file or a step. A thread's comments go into the feedback. With Ask agent, the review agent also answers in the thread. Every walkthrough and every thread is a conversation of its own, so three independent questions do not end up in one long chat.
 
 It fits when you:
 
@@ -62,7 +63,7 @@ It fits when you:
 
 1. Pick a scope in the top part of the sidebar. Uncommitted is the default. Compare branches, or a click on the branch name in the toolbar, picks a branch and its base.
 2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
-3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step, or Ask about this step, opens a deeper walkthrough on its own page. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back above the page (Cmd+[) returns to where you were, at the same scroll place.
+3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step opens a deeper walkthrough on its own page. Ask about this step opens a conversation in the side panel, with the questions asked about that step before. Open as page shows a conversation full width. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back above the page (Cmd+[) returns to where you were, at the same scroll place.
 4. Open a group with Review group to read all its files one after the other, or open one file. Mark a file Viewed when you are done with it.
 5. Comment: `+` in the gutter for one line, drag over the line numbers and use Comment on lines for a range, or Comment on file. The thread opens on the right. Comment saves your note. Ask agent (Cmd+Enter) also sends it to the review agent.
 6. Open Feedback in the toolbar. Copy feedback copies the Markdown. Save to file... saves it, by default into the repository's git directory, and copies a prompt such as `Read the code review feedback in /repo/.git/agentdiff-feedback.md and address each item.` Paste either one into your coding agent.

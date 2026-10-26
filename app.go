@@ -88,8 +88,9 @@ type app struct {
 	exportDone  bool
 	savedPath   string
 	askDraft    string
-	stepAsk     string
-	stepDraft   string
+	question    string
+	asking      *askTarget
+	paneDraft   string
 	extra       map[string]*extraFile
 	reveal      *reveal
 
@@ -399,7 +400,7 @@ func (a *app) scopeLabel() string {
 
 func (a *app) openThread(id string) {
 	a.closeEmptyThread(id)
-	a.thread = id
+	a.thread, a.question, a.asking = id, "", nil
 }
 
 // closeEmptyThread drops a thread the user opened and left without

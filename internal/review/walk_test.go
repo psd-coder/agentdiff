@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/psdcoder/agentdiff/internal/gitx"
 )
@@ -123,5 +124,29 @@ func TestWalkTree(t *testing.T) {
 	r.DeleteWalk(other.ID)
 	if len(r.Walks) != 0 {
 		t.Errorf("walks after delete = %+v", r.Walks)
+	}
+}
+
+func TestTurns(t *testing.T) {
+	w := &Walk{Question: "Why?"}
+	w.SetAnswer(&Walkthrough{Summary: "Because."}, "", "", time.Unix(1, 0))
+	w.More = append(w.More, Turn{Question: "And then?"})
+	w.SetAnswer(nil, "", "failed", time.Unix(2, 0))
+	turns := w.Turns()
+	if len(turns) != 2 || turns[0].Content.Summary != "Because." || turns[1].Err != "failed" || w.Err != "" {
+		t.Errorf("turns = %+v", turns)
+	}
+}
+
+func TestFollowupPrompt(t *testing.T) {
+	known := FollowupPrompt(FollowupRequest{Question: "And then?", Known: true, Context: "CONTEXT"})
+	if strings.Contains(known, "CONTEXT") || !strings.Contains(known, "follow-up question: And then?") || !strings.Contains(known, walkSchema) {
+		t.Errorf("known prompt = %q", known)
+	}
+	fresh := FollowupPrompt(FollowupRequest{Question: "And then?", Context: "CONTEXT\n\n", Earlier: []Turn{{Question: "Why?", Content: &Walkthrough{Summary: "Because."}}}})
+	for _, want := range []string{"CONTEXT", "Q: Why?\nA: Because.", "follow-up question: And then?"} {
+		if !strings.Contains(fresh, want) {
+			t.Errorf("fresh prompt lacks %q", want)
+		}
 	}
 }
