@@ -371,7 +371,11 @@ func codexCompleted(l codexLogLine) []LogItem {
 			title = fmt.Sprintf("Tool result, exit %d", *it.ExitCode)
 			failed = failed || *it.ExitCode != 0
 		}
-		return []LogItem{{Title: title, Detail: it.Output, Failed: failed}}
+		detail := it.Output
+		if cmd := commandText(it.Command); cmd != "" {
+			detail = "$ " + cmd + "\n" + detail
+		}
+		return []LogItem{{Title: title, Detail: detail, Failed: failed}}
 	}
 	return []LogItem{{Title: "Item: " + it.Type, Detail: it.Text}}
 }

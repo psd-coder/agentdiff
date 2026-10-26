@@ -66,6 +66,13 @@ func TestEndToEnd(t *testing.T) {
 func runAgent(t *testing.T, ctx context.Context, cfg agent.Config, req agent.Request) (string, string) {
 	t.Helper()
 	var session, final string
+	var last agent.LogEntry
+	req.Log = func(e agent.LogEntry) { last = e }
+	defer func() {
+		if last.Kind != agent.LogExit || last.Text != "Exited with status 0" {
+			t.Errorf("last log entry = %+v", last)
+		}
+	}()
 	for ev := range agent.Run(ctx, cfg, req) {
 		switch ev.Kind {
 		case agent.EventSession:

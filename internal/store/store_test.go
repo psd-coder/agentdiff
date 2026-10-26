@@ -170,12 +170,12 @@ func TestRunsPrunedAndDeleted(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
 	t0 := time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC)
-	for i := range maxRuns + 2 {
+	for i := range MaxRuns + 2 {
 		at := t0.Add(time.Duration(i) * time.Second)
 		writeRun(t, s, scope, RunInfo{ID: NewRunID(at), Started: at})
 	}
 	runs := s.Runs("/repo", scope)
-	if len(runs) != maxRuns || !runs[len(runs)-1].Started.Equal(t0.Add(2*time.Second)) {
+	if len(runs) != MaxRuns || !runs[len(runs)-1].Started.Equal(t0.Add(2*time.Second)) {
 		t.Fatalf("kept %d runs, oldest %v", len(runs), runs[len(runs)-1].Started)
 	}
 	if err := s.DeleteReview("/repo", scope); err != nil {

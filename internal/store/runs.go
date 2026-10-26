@@ -17,9 +17,9 @@ import (
 	"github.com/psdcoder/agentdiff/internal/gitx"
 )
 
-// maxRuns is how many agent runs a review keeps logs of. Older logs go
+// MaxRuns is how many agent runs a review keeps logs of. Older logs go
 // when a new run starts.
-const maxRuns = 50
+const MaxRuns = 50
 
 const TargetOverview = "overview"
 
@@ -87,7 +87,7 @@ func (w *RunWriter) Close() error { return w.f.Close() }
 // so the names sort oldest first.
 func (s Store) pruneRuns(dir string) {
 	names := runFiles(dir)
-	for len(names) >= maxRuns {
+	for len(names) >= MaxRuns {
 		os.Remove(filepath.Join(dir, names[0]))
 		names = names[1:]
 	}
