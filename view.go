@@ -20,11 +20,22 @@ func (a *app) view(c *ui.Context) {
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)
 		ui.Split(c, &a.sidebarW, func() { a.sidebar(c) }, func() {
-			if a.thread == "" || a.rev.Thread(a.thread) == nil {
+			thread := a.thread != "" && a.rev.Thread(a.thread) != nil
+			var side func()
+			switch {
+			case thread && a.logOpen:
+				side = func() {
+					ui.SplitVerticalPercent(c, &a.logPct, func() { a.threadPanel(c) }, func() { a.logPanel(c) }).Fill()
+				}
+			case thread:
+				side = func() { a.threadPanel(c) }
+			case a.logOpen:
+				side = func() { a.logPanel(c) }
+			default:
 				a.main(c)
 				return
 			}
-			ui.SplitPercent(c, &a.mainPct, func() { a.main(c) }, func() { a.threadPanel(c) }).Fill()
+			ui.SplitPercent(c, &a.mainPct, func() { a.main(c) }, side).Fill()
 		}).Grow(1).FillWidth()
 	}).Background(t.Background)
 	a.settingsModal(c)
@@ -46,6 +57,13 @@ func (a *app) toolbar(c *ui.Context) {
 			label += " · " + cfg.Model
 		}
 		ui.Text(c, label).FontSize(12).TextColor(t.TextMuted).SingleLine()
+		ui.Button(c, "Agent log").Tooltip("Every call to the agent: command, prompt, tool calls, output").OnClick(func() {
+			if a.logOpen && a.logTarget == "" {
+				a.logOpen = false
+				return
+			}
+			a.showLog("")
+		})
 		ui.Button(c, "Refresh").Tooltip("Read the changes again (Cmd+R)").OnClick(a.reload)
 		ui.Button(c, "Settings").OnClick(a.openSettings)
 		ui.Button(c, "Open…").Tooltip("Open another repository").OnClick(a.chooseRepo)

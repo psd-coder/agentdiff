@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/psdcoder/agentdiff/internal/agent"
 	"github.com/psdcoder/agentdiff/internal/gitx"
@@ -107,5 +108,80 @@ func TestDeleteReview(t *testing.T) {
 	}
 	if err := s.DeleteReview("/repo", scope); err != nil {
 		t.Errorf("deleting a missing review: %v", err)
+	}
+}
+
+func writeRun(t *testing.T, s Store, scope gitx.Scope, info RunInfo, texts ...string) {
+	t.Helper()
+	w, err := s.CreateRun("/repo", scope, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range texts {
+		if err := w.Write(agent.LogEntry{Kind: agent.LogStdout, Text: text}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunsRoundTrip(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	t0 := time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC)
+	older := RunInfo{ID: NewRunID(t0), Target: TargetOverview, Title: "Overview", Agent: agent.Claude, Started: t0}
+	newer := RunInfo{ID: NewRunID(t0.Add(time.Minute)), Target: "t1", Title: "a.go", Agent: agent.Codex, Started: t0.Add(time.Minute)}
+	writeRun(t, s, scope, older, `{"type":"system"}`, "line two")
+	writeRun(t, s, scope, newer)
+
+	runs := s.Runs("/repo", scope)
+	if len(runs) != 2 || runs[0].ID != newer.ID || runs[1].Target != TargetOverview || !runs[1].Started.Equal(t0) {
+		t.Fatalf("runs = %+v", runs)
+	}
+	entries, err := s.ReadRun("/repo", scope, older.ID)
+	if err != nil || len(entries) != 2 || entries[0].Text != `{"type":"system"}` || entries[1].Text != "line two" {
+		t.Fatalf("entries = %+v, %v", entries, err)
+	}
+	if got := s.Runs("/repo", gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc"}); len(got) != 0 {
+		t.Errorf("other scope runs = %+v", got)
+	}
+}
+
+func TestReadRunSkipsCutLine(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	info := RunInfo{ID: NewRunID(time.Now()), Started: time.Now()}
+	writeRun(t, s, scope, info, "ok")
+	f, err := os.OpenFile(s.RunPath("/repo", scope, info.ID), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(`{"kind":"stdout","te`)
+	f.Close()
+	entries, err := s.ReadRun("/repo", scope, info.ID)
+	if err != nil || len(entries) != 1 {
+		t.Errorf("entries = %+v, %v", entries, err)
+	}
+}
+
+func TestRunsPrunedAndDeleted(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	t0 := time.Date(2026, 10, 26, 14, 0, 0, 0, time.UTC)
+	for i := range maxRuns + 2 {
+		at := t0.Add(time.Duration(i) * time.Second)
+		writeRun(t, s, scope, RunInfo{ID: NewRunID(at), Started: at})
+	}
+	runs := s.Runs("/repo", scope)
+	if len(runs) != maxRuns || !runs[len(runs)-1].Started.Equal(t0.Add(2*time.Second)) {
+		t.Fatalf("kept %d runs, oldest %v", len(runs), runs[len(runs)-1].Started)
+	}
+	if err := s.DeleteReview("/repo", scope); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Runs("/repo", scope); len(got) != 0 {
+		t.Errorf("runs after delete = %d", len(got))
 	}
 }

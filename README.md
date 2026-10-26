@@ -8,6 +8,7 @@ A native macOS app for reviewing the code your coding agent wrote. You read the 
 - **Comments anywhere**: click `+` in the gutter, select line numbers, comment on a whole file or on one part of the explanation.
 - **Separate discussion threads**: the first question of a thread forks the agent session that wrote the explanation, so it starts with that context. Later questions go on in the thread's own session, and threads never mix.
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
+- **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, token counts, and how the run ended. The log panel opens on the right, for all runs of the review or for the overview or one thread.
 - **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused.
 - **Settings for all reviews and per review**: agent, model, binary path, extra CLI arguments, review questions.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
@@ -83,6 +84,8 @@ Keep keys case-sensitive, callers rely on it.
 Return a typed error here.
 ````
 
+To see what an agent did, click Agent log in the toolbar, Log on the Overview page, or Log in a thread. Each run lists its steps in order: Command (a shell command you can paste into a terminal), Prompt, Session started (model and permission mode), Tool call and Tool result, Assistant, Result with turns, time and tokens, and the exit status. Copy puts the readable log on the clipboard. Show file opens the raw log in Finder.
+
 Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedback page has the checkboxes Include agent replies and Include resolved threads.
 
 ## Configuration
@@ -105,8 +108,9 @@ The app saves everything under `~/Library/Application Support/AgentDiff/`.
 | --- | --- |
 | `config.json` | global settings, recent repositories, split or unified diff |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, viewed files and overrides of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
+| `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 
-A review outlives the changes it was written for, which matters most for the uncommitted scope. When the changed files no longer match the explanation's groups, the overview shows a warning. Start over deletes the review of the current scope, after you confirm.
+A review outlives the changes it was written for, which matters most for the uncommitted scope. When the changed files no longer match the explanation's groups, the overview shows a warning. Start over deletes the review of the current scope and its run logs, after you confirm.
 
 ## Commands
 

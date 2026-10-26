@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui/markdown"
 
 	"github.com/psdcoder/agentdiff/internal/review"
+	"github.com/psdcoder/agentdiff/internal/store"
 )
 
 func (a *app) overviewPage(c *ui.Context) {
@@ -26,6 +27,9 @@ func (a *app) overviewPage(c *ui.Context) {
 					ui.Button(c, "Stop").OnClick(a.stopOverview)
 				case ov != nil && ov.Markdown != "":
 					ui.Button(c, "Regenerate").Disabled(len(a.files) == 0).OnClick(a.generateOverview)
+				}
+				if run != nil || ov != nil {
+					ui.Button(c, "Log").Tooltip("What the agent did to write the overview").OnClick(func() { a.showLog(store.TargetOverview) })
 				}
 				if ov != nil || len(a.rev.Threads) > 0 {
 					ui.Button(c, "Start over").Tooltip("Delete the overview and comments of this scope").OnClick(a.confirmStartOver)

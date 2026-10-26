@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"github.com/psdcoder/agentdiff/internal/agent"
+	"github.com/psdcoder/agentdiff/internal/gitx"
 	"github.com/psdcoder/agentdiff/internal/review"
 	"github.com/psdcoder/agentdiff/internal/store"
 )
@@ -240,5 +241,74 @@ func TestStaleOverviewAndStartOver(t *testing.T) {
 	}
 	if got := a.store.LoadReview(a.repo.Root, a.scope); len(got.Threads) != 0 {
 		t.Error("saved review survived start over")
+	}
+}
+
+// TestAgentLog runs a fake Claude that replays a recorded session, then
+// reads the run's log in a new app, as after a restart.
+func TestAgentLog(t *testing.T) {
+	a := newTestApp(t)
+	fixture, err := filepath.Abs("internal/agent/testdata/claude_tool.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "claude")
+	write(t, filepath.Dir(bin), "claude", "#!/bin/sh\ncat > /dev/null\ncat "+fixture+"\n")
+	if err := os.Chmod(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: bin}
+	a.generateOverview()
+	waitForExit(t, a.store, a.repo.Root, a.scope)
+
+	b := newApp(a.store)
+	b.openRepo(a.repo.Root)
+	tt := ui.NewTester(b.view, 1400, 900)
+	if err := tt.Click("Agent log"); err != nil {
+		t.Fatal(err)
+	}
+	var label string
+	for _, s := range tt.Texts() {
+		if strings.HasPrefix(s, "Overview · Claude Code · ") {
+			label = s
+		}
+	}
+	if label == "" {
+		t.Fatalf("no overview run in %q", tt.Texts())
+	}
+	if err := tt.Click(label); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	for _, want := range []string{"Command", "Prompt", "Session started", "Tool call", "Tool result", "Result: success", "Exited with status 0"} {
+		if !tt.HasText(want) {
+			t.Errorf("log lacks %q", want)
+		}
+	}
+	snapshot(t, tt, "log")
+}
+
+func waitForExit(t *testing.T, s store.Store, repo string, scope gitx.Scope) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if runs := s.Runs(repo, scope); len(runs) == 1 {
+			entries, _ := s.ReadRun(repo, scope, runs[0].ID)
+			if n := len(entries); n > 0 && entries[n-1].Kind == agent.LogExit {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the run did not finish")
+}
+
+func TestScopeSwitchKeepsReview(t *testing.T) {
+	a := newTestApp(t)
+	rev := a.rev
+	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if a.rev != rev {
+		t.Error("switching back loaded a second copy of the review")
 	}
 }

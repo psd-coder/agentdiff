@@ -55,6 +55,12 @@ type app struct {
 	diffs    map[string]*fileDiff
 	gen      int
 
+	reviews   map[string]*review.Review
+	runs      map[*review.Review][]*logRun
+	logOpen   bool
+	logTarget string
+	logPct    float32
+
 	page      string
 	thread    string
 	drafts    map[string]string
@@ -80,6 +86,9 @@ func newApp(s store.Store) *app {
 		store:       s,
 		cfg:         s.LoadConfig(),
 		diffs:       map[string]*fileDiff{},
+		reviews:     map[string]*review.Review{},
+		runs:        map[*review.Review][]*logRun{},
+		logPct:      50,
 		drafts:      map[string]string{},
 		overviews:   map[*review.Review]*overviewRun{},
 		threadRun:   map[string]context.CancelFunc{},
@@ -165,9 +174,23 @@ func (a *app) loadCommits() {
 
 func scopeID(s gitx.Scope) string { return "scope:" + s.Key() }
 
+func reviewKey(repo string, s gitx.Scope) string { return repo + "\x00" + s.Key() }
+
+// reviewOf loads a review once and keeps it, so an agent run that finishes
+// after a scope switch writes into the review the view shows.
+func (a *app) reviewOf(s gitx.Scope) *review.Review {
+	key := reviewKey(a.repo.Root, s)
+	r := a.reviews[key]
+	if r == nil {
+		r = a.store.LoadReview(a.repo.Root, s)
+		a.reviews[key] = r
+	}
+	return r
+}
+
 func (a *app) setScope(s gitx.Scope) {
 	a.scope, a.scopeID = s, scopeID(s)
-	a.rev = a.store.LoadReview(a.repo.Root, s)
+	a.rev = a.reviewOf(s)
 	a.page, a.thread = "overview", ""
 	a.exportDone, a.savedPath = false, ""
 	a.reload()
@@ -268,7 +291,9 @@ func (a *app) startOver() {
 	if err := a.store.DeleteReview(a.repo.Root, a.scope); err != nil {
 		log.Printf("delete review: %v", err)
 	}
+	delete(a.runs, a.rev)
 	a.rev = review.New(a.repo.Root, a.scope)
+	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
 	a.thread, a.page, a.savedPath = "", "overview", ""
 	a.drafts = map[string]string{}
 }

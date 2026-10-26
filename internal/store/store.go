@@ -90,12 +90,13 @@ func (s Store) SaveReview(r *review.Review) error {
 	return writeJSON(s.reviewPath(r.Repo, r.Scope), r)
 }
 
+// DeleteReview deletes a review together with the logs of its agent runs.
 func (s Store) DeleteReview(repo string, scope gitx.Scope) error {
 	err := os.Remove(s.reviewPath(repo, scope))
 	if IsNotExist(err) {
-		return nil
+		err = nil
 	}
-	return err
+	return errors.Join(err, os.RemoveAll(s.runDir(repo, scope)))
 }
 
 func readJSON(path string, v any) error {

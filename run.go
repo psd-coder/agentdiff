@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/psdcoder/agentdiff/internal/agent"
 	"github.com/psdcoder/agentdiff/internal/review"
+	"github.com/psdcoder/agentdiff/internal/store"
 )
 
 // streamFlush is how often streamed text reaches the view: tokens come
@@ -14,20 +17,45 @@ import (
 const streamFlush = 40 * time.Millisecond
 
 // stream runs the agent and hands its events to fn on the main thread,
-// text deltas joined into one event per streamFlush.
-func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, fn func(agent.Event)) {
+// text deltas joined into one event per streamFlush. It records the run in
+// the log of rev, in memory and in the run's file.
+func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, rev *review.Review, info store.RunInfo, fn func(agent.Event)) {
+	run, w := a.startRun(rev, info)
+	var mu sync.Mutex
+	var logged []logItem
+	req.Log = func(e agent.LogEntry) {
+		if w != nil {
+			if err := w.Write(e); err != nil {
+				log.Printf("run log: %v", err)
+				w = nil
+			}
+		}
+		items := logItems(cfg.Provider, e)
+		mu.Lock()
+		logged = append(logged, items...)
+		mu.Unlock()
+	}
 	events := agent.Run(ctx, cfg, req)
 	go func() {
 		var pending strings.Builder
 		last := time.Now()
 		flush := func() {
-			if pending.Len() == 0 {
+			mu.Lock()
+			items := logged
+			logged = nil
+			mu.Unlock()
+			if pending.Len() == 0 && len(items) == 0 {
 				return
 			}
-			ev := agent.Event{Kind: agent.EventText, Text: pending.String()}
+			text := pending.String()
 			pending.Reset()
 			last = time.Now()
-			a.update(func() { fn(ev) })
+			a.update(func() {
+				run.items = append(run.items, items...)
+				if text != "" {
+					fn(agent.Event{Kind: agent.EventText, Text: text})
+				}
+			})
 		}
 		for ev := range events {
 			if ev.Kind == agent.EventText {
@@ -40,6 +68,13 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, f
 			flush()
 			a.update(func() { fn(ev) })
 		}
+		flush()
+		if w != nil {
+			if err := w.Close(); err != nil {
+				log.Printf("run log: %v", err)
+			}
+		}
+		a.update(func() { run.running = false })
 	}()
 }
 
@@ -60,7 +95,9 @@ func (a *app) generateOverview() {
 	files := a.fileNames()
 	prompt := review.OverviewPrompt(a.scope.Describe(), a.diffstat, files, questions)
 	session := ""
-	a.stream(ctx, cfg, agent.Request{Dir: a.repo.Root, Prompt: prompt, SystemPrompt: review.SystemPrompt}, func(ev agent.Event) {
+	req := agent.Request{Dir: a.repo.Root, Prompt: prompt, SystemPrompt: review.SystemPrompt}
+	info := newRunInfo(store.TargetOverview, "Overview", "", cfg)
+	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
 		if a.overviews[rev] != run {
 			return
 		}
@@ -145,7 +182,8 @@ func (a *app) ask(t *review.Thread, text string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.threadRun[t.ID] = cancel
 	a.saveReview()
-	a.stream(ctx, cfg, req, func(ev agent.Event) {
+	info := newRunInfo(t.ID, t.Anchor.Label(), excerpt(text, 160), cfg)
+	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
 		if reply >= len(t.Messages) {
 			return
 		}

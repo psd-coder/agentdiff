@@ -33,6 +33,9 @@ type Request struct {
 	SystemPrompt string
 	ResumeID     string
 	Fork         bool
+	// Log receives the run as it happens: the command, the prompt, every
+	// line of output and the exit. Calls never overlap.
+	Log func(LogEntry)
 }
 
 type EventKind int
@@ -85,27 +88,36 @@ func Run(ctx context.Context, cfg Config, req Request) <-chan Event {
 }
 
 func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
+	log := newLogger(req.Log)
 	env := loginEnv()
 	bin, err := resolveBinary(cfg, env)
 	if err != nil {
+		log.add(LogExit, "Could not start: "+err.Error())
 		ch <- Event{Kind: EventError, Err: err}
 		return
 	}
 
+	args := Args(cfg, req)
+	stdin := stdinText(cfg, req)
+	log.add(LogCommand, commandLine(req.Dir, bin, args))
+	log.add(LogStdin, stdin)
 	stderr := &tailBuffer{max: stderrTailSize}
+	stderrLines := &lineWriter{emit: func(line string) { log.add(LogStderr, line) }}
 	pr, pw := io.Pipe()
-	cmd := exec.CommandContext(ctx, bin, Args(cfg, req)...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = req.Dir
 	cmd.Env = env
-	cmd.Stdin = strings.NewReader(stdinText(cfg, req))
+	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = pw
-	cmd.Stderr = stderr
+	cmd.Stderr = io.MultiWriter(stderr, stderrLines)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return killGroup(cmd) }
 	cmd.WaitDelay = waitDelay
 
 	if err := cmd.Start(); err != nil {
-		ch <- Event{Kind: EventError, Err: firstErr(ctx.Err(), err)}
+		err = firstErr(ctx.Err(), err)
+		log.add(LogExit, "Could not start: "+err.Error())
+		ch <- Event{Kind: EventError, Err: err}
 		return
 	}
 	waitErr := make(chan error, 1)
@@ -116,9 +128,11 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 	}()
 
 	parser := newParser(cfg.Provider, req.Dir)
-	done := forward(ctx, pr, parser, ch)
+	done := forward(ctx, pr, parser, ch, log)
 	_, _ = io.Copy(io.Discard, pr)
 	exitErr := <-waitErr
+	stderrLines.flush()
+	log.add(LogExit, exitText(ctx, exitErr))
 	if done {
 		return
 	}
@@ -129,10 +143,11 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 	ch <- Event{Kind: EventError, Err: failure(cfg.Provider, parser.streamError(), exitErr, stderr.String())}
 }
 
-func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Event) bool {
+func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Event, log *logger) bool {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLineSize)
 	for scanner.Scan() {
+		log.add(LogStdout, scanner.Text())
 		for _, ev := range parser.parse(scanner.Bytes()) {
 			if ev.terminal() {
 				ch <- ev

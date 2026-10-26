@@ -23,6 +23,9 @@ func (a *app) threadPanel(c *ui.Context) {
 			} else if title.Clicked() && th.Anchor.Kind == review.AnchorSection {
 				a.page = "overview"
 			}
+			if th.Agent != "" {
+				ui.Button(c, "Log").Tooltip("What the agent did in this thread").OnClick(func() { a.showLog(th.ID) })
+			}
 			ui.Button(c, "Close").Tooltip("Escape").OnClick(a.closeThread)
 		})
 		if c.Shortcut(0, ui.KeyEscape) {
