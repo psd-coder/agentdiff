@@ -113,8 +113,15 @@ func TestWalkTree(t *testing.T) {
 	if got := r.WalksOn("", 1); len(got) != 1 || got[0] != a {
 		t.Errorf("walks on step 1 = %+v", got)
 	}
-	r.DeleteWalk(a.ID)
+	if !r.HasStepWalks("") || r.HasStepWalks(c.ID) {
+		t.Error("HasStepWalks")
+	}
+	r.DeleteStepWalks("")
 	if len(r.Walks) != 1 || r.Walks[0] != other {
+		t.Errorf("walks after deleting the step walks = %+v", r.Walks)
+	}
+	r.DeleteWalk(other.ID)
+	if len(r.Walks) != 0 {
 		t.Errorf("walks after delete = %+v", r.Walks)
 	}
 }

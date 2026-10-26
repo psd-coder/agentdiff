@@ -100,7 +100,7 @@ func checkRefs(t *testing.T, ctx context.Context, repo *gitx.Repo, scope gitx.Sc
 			if r.Side == review.SideOld {
 				text = oldText
 			}
-			if n := strings.Count(text, "\n"); err != nil || r.End > n {
+			if n := len(strings.Split(strings.TrimSuffix(text, "\n"), "\n")); err != nil || r.End > n {
 				t.Errorf("%s points past the file (%d lines, %v)", r.Label(), n, err)
 			}
 		}

@@ -139,6 +139,31 @@ func answer(result, streamed string) string {
 	return streamed
 }
 
+// regenerate rewrites the walkthrough of parent: the overview for "".
+// The deeper walkthroughs into its steps go with the old steps, so the
+// user confirms that first.
+func (a *app) regenerate(parent string) {
+	rev := a.rev
+	run := func() {
+		for _, w := range rev.Walks {
+			if w.Parent == parent && w.Step >= 0 {
+				a.stopWalk(w.ID)
+			}
+		}
+		rev.DeleteStepWalks(parent)
+		if parent == "" {
+			a.generateOverview()
+		} else if w := rev.Walk(parent); w != nil {
+			a.runWalk(w)
+		}
+	}
+	if !rev.HasStepWalks(parent) {
+		run()
+		return
+	}
+	a.confirm("Regenerate this walkthrough?", "The new walkthrough has new steps, so the deeper walkthroughs into the current steps are deleted. Questions about the page as a whole stay.", "Regenerate", run)
+}
+
 func (a *app) stopOverview() {
 	if run := a.overviews[a.rev]; run != nil {
 		run.cancel()

@@ -26,12 +26,12 @@ func (a *app) overviewPage(c *ui.Context) {
 				case run != nil:
 					ui.Button(c, "Stop").OnClick(a.stopOverview)
 				case ov.Done():
-					ui.Button(c, "Regenerate").Disabled(len(a.files) == 0).OnClick(a.generateOverview)
+					ui.Button(c, "Regenerate").Disabled(len(a.files) == 0).OnClick(func() { a.regenerate("") })
 				}
 				if run != nil || ov != nil {
 					ui.Button(c, "Log").Tooltip("What the agent did to write the overview").OnClick(func() { a.showLog(store.TargetOverview) })
 				}
-				if ov != nil || len(a.rev.Threads) > 0 {
+				if ov != nil || len(a.rev.Threads) > 0 || len(a.rev.Walks) > 0 {
 					ui.Button(c, "Start over").Tooltip("Delete the overview and comments of this scope").OnClick(a.confirmStartOver)
 				}
 			})

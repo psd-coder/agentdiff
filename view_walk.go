@@ -347,7 +347,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 				if run != nil {
 					ui.Button(c, "Stop").OnClick(func() { a.stopWalk(w.ID) })
 				} else {
-					ui.Button(c, "Regenerate").OnClick(func() { a.runWalk(w) })
+					ui.Button(c, "Regenerate").OnClick(func() { a.regenerate(w.ID) })
 				}
 				ui.Button(c, "Log").Tooltip("What the agent did for this walkthrough").OnClick(func() { a.showLog(w.ID) })
 				ui.Button(c, "Delete").Tooltip("Delete this walkthrough and the ones under it").OnClick(func() { a.deleteWalk(w) })

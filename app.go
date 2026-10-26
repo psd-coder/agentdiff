@@ -35,7 +35,7 @@ type overviewRun struct {
 }
 
 type app struct {
-	win   *mygo.Window
+	win *mygo.Window
 	// queue takes the updates of a window-less app when a test wants to
 	// run them on its own goroutine.
 	queue chan func()
@@ -335,15 +335,24 @@ func (a *app) startOver() {
 }
 
 func (a *app) confirmStartOver() {
+	a.confirm("Start this review over?", "The overview, the deeper walkthroughs, all comments and threads, and the viewed marks of this scope are deleted.", "Start Over", a.startOver)
+}
+
+// confirm runs fn after the user agrees in a warning dialog. Without a
+// window, in tests, it runs fn at once.
+func (a *app) confirm(message, detail, button string, fn func()) {
+	if a.win == nil {
+		fn()
+		return
+	}
 	go func() {
 		res, err := mygo.Dialog.Message(mygo.MessageOptions{
 			Parent: a.win, Type: mygo.MessageWarning,
-			Message: "Start this review over?",
-			Detail:  "The overview, all comments and threads, and the viewed marks of this scope are deleted.",
-			Buttons: []string{"Start Over", "Cancel"},
+			Message: message, Detail: detail,
+			Buttons: []string{button, "Cancel"},
 		})
 		if err == nil && res.Button == 0 {
-			a.update(a.startOver)
+			a.update(fn)
 		}
 	}()
 }

@@ -3,6 +3,7 @@ package review
 import (
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -114,6 +115,27 @@ func (r *Review) DeleteWalk(id string) {
 		}
 	}
 	r.Walks = kept
+}
+
+// DeleteStepWalks deletes the walks into the steps of a parent, with the
+// walks under them. They point at steps by index, so they go when the
+// parent gets new steps. Questions about the parent as a whole stay.
+func (r *Review) DeleteStepWalks(parent string) {
+	for _, w := range slices.Clone(r.Walks) {
+		if w.Parent == parent && w.Step >= 0 {
+			r.DeleteWalk(w.ID)
+		}
+	}
+}
+
+// HasStepWalks reports whether a parent has walks into its steps.
+func (r *Review) HasStepWalks(parent string) bool {
+	for _, w := range r.Walks {
+		if w.Parent == parent && w.Step >= 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Steps returns the steps of a parent: the overview's for "".
