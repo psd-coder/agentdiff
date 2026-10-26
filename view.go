@@ -40,14 +40,15 @@ func (a *app) view(c *ui.Context) {
 	}).Background(t.Background)
 	a.settingsModal(c)
 	a.rangeModal(c)
+	a.compareModal(c)
 }
 
 func (a *app) toolbar(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 		ui.Text(c, a.repo.Name()).Bold().SingleLine()
-		if a.branch != "" {
-			ui.Badge(c, a.branch)
+		if head := a.headBranch(); head != "" {
+			ui.Button(c, head).Tooltip("Compare another branch").OnClick(a.openCompare)
 		}
 		ui.Text(c, a.scopeLabel()).TextColor(t.TextMuted).SingleLine().Shrink(1)
 		ui.Spacer(c)
@@ -91,17 +92,18 @@ func (a *app) scopeList(c *ui.Context) {
 	changed := ui.Sidebar(c, &choice, func() {
 		ui.SidebarSection(c, "Changes", nil, func() {
 			ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeUncommitted}), nil, "Uncommitted")
-			if base := a.commitBase(); base != "" {
-				ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeBranch, Base: base}), nil, "Branch vs "+base)
+			if s, ok := a.branchScope(); ok {
+				ui.SidebarItem(c, scopeID(s), nil, s.Label())
 			}
 			if a.scope.Kind == gitx.ScopeRange {
 				ui.SidebarItem(c, a.scopeID, nil, a.scope.Label())
 			}
+			ui.SidebarItem(c, "compare", nil, "Compare branches…")
 			ui.SidebarItem(c, "range", nil, "Custom range…")
 		})
 		title := "Recent commits"
 		if a.commitBase() != "" {
-			title = "Commits on " + a.branch
+			title = "Commits on " + a.headBranch()
 		}
 		ui.SidebarSection(c, title, &commitsOpen, func() {
 			for _, cm := range a.commits {
@@ -116,8 +118,12 @@ func (a *app) scopeList(c *ui.Context) {
 	if !changed || choice == a.scopeID {
 		return
 	}
-	if choice == "range" {
+	switch choice {
+	case "range":
 		a.openRange()
+		return
+	case "compare":
+		a.openCompare()
 		return
 	}
 	if s, ok := a.scopeFromID(choice); ok {
@@ -127,8 +133,8 @@ func (a *app) scopeList(c *ui.Context) {
 
 func (a *app) scopeFromID(id string) (gitx.Scope, bool) {
 	candidates := []gitx.Scope{{Kind: gitx.ScopeUncommitted}}
-	if base := a.commitBase(); base != "" {
-		candidates = append(candidates, gitx.Scope{Kind: gitx.ScopeBranch, Base: base})
+	if s, ok := a.branchScope(); ok {
+		candidates = append(candidates, s)
 	}
 	for _, cm := range a.commits {
 		candidates = append(candidates, gitx.Scope{Kind: gitx.ScopeCommit, Commit: cm.SHA})

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -50,7 +51,7 @@ func TestUnbornRepo(t *testing.T) {
 	if err != nil || branch != "main" {
 		t.Errorf("CurrentBranch() = %q, %v", branch, err)
 	}
-	commits, err := r.Commits(ctx, "", 0)
+	commits, err := r.Commits(ctx, "", "", 0)
 	if err != nil || commits == nil || len(commits) != 0 {
 		t.Errorf("Commits() = %#v, %v, want empty slice", commits, err)
 	}
@@ -144,7 +145,7 @@ func TestCommits(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			commits, err := r.Commits(ctx, tt.base, tt.limit)
+			commits, err := r.Commits(ctx, tt.base, "", tt.limit)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,7 +159,7 @@ func TestCommits(t *testing.T) {
 		})
 	}
 
-	commits, err := r.Commits(ctx, "", 0)
+	commits, err := r.Commits(ctx, "", "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,10 +173,10 @@ func TestCommits(t *testing.T) {
 	if !c.Time.Equal(time.Date(2026, 1, 1, 0, 0, 2, 0, time.UTC)) {
 		t.Errorf("time %v", c.Time)
 	}
-	if _, err := r.Commits(ctx, "no-such-branch", 0); err == nil {
+	if _, err := r.Commits(ctx, "no-such-branch", "", 0); err == nil {
 		t.Error("Commits with unknown base succeeded")
 	}
-	if _, err := r.Commits(ctx, "--all", 0); err == nil {
+	if _, err := r.Commits(ctx, "--all", "", 0); err == nil {
 		t.Error("Commits with option-like base succeeded")
 	}
 }
@@ -188,4 +189,69 @@ func TestGitDir(t *testing.T) {
 	if filepath.Base(got) != ".git" {
 		t.Errorf("GitDir = %q", got)
 	}
+}
+
+func TestOtherBranch(t *testing.T) {
+	ctx := context.Background()
+	tr := newTestRepo(t)
+	tr.write("a.txt", "1\n")
+	tr.commit("first")
+	tr.git("checkout", "-q", "-b", "feature")
+	tr.write("b.txt", "feature\n")
+	third := tr.commit("feature work")
+	tr.git("checkout", "-q", "main")
+	tr.write("a.txt", "dirty\n")
+	r := tr.open()
+
+	commits, err := r.Commits(ctx, "main", "feature", 0)
+	if err != nil || len(commits) != 1 || commits[0].SHA != third {
+		t.Fatalf("Commits(main, feature) = %+v, %v", commits, err)
+	}
+	if _, err := r.Commits(ctx, "", "no-such-branch", 0); err == nil {
+		t.Error("Commits with unknown head succeeded")
+	}
+
+	s := Scope{Kind: ScopeBranch, Base: "main", Head: "feature"}
+	changes, err := r.Changes(ctx, s)
+	if err != nil || len(changes) != 1 || changes[0].Path != "b.txt" {
+		t.Fatalf("Changes = %+v, %v", changes, err)
+	}
+	_, newText, err := r.Contents(ctx, s, changes[0])
+	if err != nil || newText != "feature\n" {
+		t.Errorf("Contents = %q, %v", newText, err)
+	}
+	if s.Key() == (Scope{Kind: ScopeBranch, Base: "main"}).Key() {
+		t.Error("a branch scope with a head shares its key with the current branch's")
+	}
+	if s.Label() != "feature vs main" || !strings.Contains(s.Describe(), "git show feature:<path>") {
+		t.Errorf("label %q, describe %q", s.Label(), s.Describe())
+	}
+}
+
+func TestWorktrees(t *testing.T) {
+	ctx := context.Background()
+	tr := newTestRepo(t)
+	tr.write("a.txt", "1\n")
+	tr.commit("first")
+	other := filepath.Join(t.TempDir(), "wt")
+	tr.git("worktree", "add", "-q", "-b", "agent", other)
+	trees, err := tr.open().Worktrees(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trees) != 2 || trees[0].Branch != "main" || trees[1].Branch != "agent" {
+		t.Fatalf("worktrees = %+v", trees)
+	}
+	if got, _ := filepath.EvalSymlinks(trees[1].Path); got != mustEval(t, other) {
+		t.Errorf("path = %q, want %q", trees[1].Path, other)
+	}
+}
+
+func mustEval(t *testing.T, p string) string {
+	t.Helper()
+	got, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
 }

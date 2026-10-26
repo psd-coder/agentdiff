@@ -2,6 +2,7 @@ package gitx
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -92,7 +93,9 @@ const (
 	commitFields       = 6
 )
 
-func (r *Repo) Commits(ctx context.Context, base string, limit int) ([]Commit, error) {
+// Commits lists the commits of head, newest first: those not on base
+// when base is set. An empty head means HEAD.
+func (r *Repo) Commits(ctx context.Context, base, head string, limit int) ([]Commit, error) {
 	if !r.HasHead(ctx) {
 		return []Commit{}, nil
 	}
@@ -104,13 +107,17 @@ func (r *Repo) Commits(ctx context.Context, base string, limit int) ([]Commit, e
 		"--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%b",
 		"-n", strconv.Itoa(limit),
 	}
+	head = cmp.Or(head, "HEAD")
+	if err := r.verifyRef(ctx, head); err != nil {
+		return nil, err
+	}
 	if base != "" {
 		if err := r.verifyRef(ctx, base); err != nil {
 			return nil, err
 		}
-		args = append(args, base+"..HEAD")
+		args = append(args, base+".."+head)
 	} else {
-		args = append(args, "HEAD")
+		args = append(args, head)
 	}
 	args = append(args, "--")
 	out, err := r.output(ctx, args...)
@@ -174,4 +181,29 @@ func (r *Repo) resolveCommit(ctx context.Context, ref string) (string, error) {
 // diff.
 func (r *Repo) GitDir(ctx context.Context) (string, error) {
 	return r.line(ctx, "rev-parse", "--absolute-git-dir")
+}
+
+type Worktree struct {
+	Path   string
+	Branch string
+}
+
+// Worktrees lists the working trees of the repository, the main one
+// first. Branch is empty for a detached HEAD.
+func (r *Repo) Worktrees(ctx context.Context) ([]Worktree, error) {
+	out, err := r.output(ctx, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	var trees []Worktree
+	for line := range strings.Lines(string(out)) {
+		line = strings.TrimSuffix(line, "\n")
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			trees = append(trees, Worktree{Path: strings.TrimPrefix(line, "worktree ")})
+		case strings.HasPrefix(line, "branch ") && len(trees) > 0:
+			trees[len(trees)-1].Branch = strings.TrimPrefix(line, "branch refs/heads/")
+		}
+	}
+	return trees, nil
 }

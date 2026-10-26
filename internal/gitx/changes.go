@@ -3,6 +3,7 @@ package gitx
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -56,7 +57,7 @@ func (r *Repo) resolve(ctx context.Context, s Scope) (revs, error) {
 		}
 		return revs{from: "HEAD"}, nil
 	case ScopeBranch:
-		return r.resolveBranch(ctx, s.Base)
+		return r.resolveBranch(ctx, s.Base, cmp.Or(s.Head, "HEAD"))
 	case ScopeCommit:
 		return r.resolveCommitScope(ctx, s.Commit)
 	case ScopeRange:
@@ -73,11 +74,11 @@ func (r *Repo) resolve(ctx context.Context, s Scope) (revs, error) {
 	return revs{}, fmt.Errorf("gitx: unknown scope kind %q", s.Kind)
 }
 
-func (r *Repo) resolveBranch(ctx context.Context, base string) (revs, error) {
+func (r *Repo) resolveBranch(ctx context.Context, base, branch string) (revs, error) {
 	if _, err := r.resolveCommit(ctx, base); err != nil {
 		return revs{}, err
 	}
-	head, err := r.resolveCommit(ctx, "HEAD")
+	head, err := r.resolveCommit(ctx, branch)
 	if err != nil {
 		return revs{}, err
 	}
@@ -86,7 +87,7 @@ func (r *Repo) resolveBranch(ctx context.Context, base string) (revs, error) {
 		return revs{}, err
 	}
 	if !ok {
-		return revs{}, fmt.Errorf("gitx: %s and HEAD have no common ancestor", base)
+		return revs{}, fmt.Errorf("gitx: %s and %s have no common ancestor", base, branch)
 	}
 	return revs{from: mb, to: head}, nil
 }

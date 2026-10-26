@@ -312,3 +312,38 @@ func TestScopeSwitchKeepsReview(t *testing.T) {
 		t.Error("switching back loaded a second copy of the review")
 	}
 }
+
+func TestCompareBranches(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	git(t, dir, "stash", "-u", "-q")
+	git(t, dir, "checkout", "-q", "-b", "agent")
+	write(t, dir, "feature.go", "package feature\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "Add feature")
+	git(t, dir, "checkout", "-q", "main")
+	a.openRepo(dir)
+
+	tt := ui.NewTester(a.view, 1300, 800)
+	if err := tt.Click("Compare branches…"); err != nil {
+		t.Fatal(err)
+	}
+	a.compareForm.branch = "agent"
+	tt.Frame()
+	if err := tt.Click("Compare"); err != nil {
+		t.Fatal(err)
+	}
+	if a.scope.Head != "agent" || a.scope.Base != "main" {
+		t.Fatalf("scope = %+v", a.scope)
+	}
+	if len(a.files) != 1 || a.files[0].Path != "feature.go" {
+		t.Errorf("files = %+v", a.files)
+	}
+	if len(a.commits) != 1 || a.commits[0].Subject != "Add feature" {
+		t.Errorf("commits = %+v", a.commits)
+	}
+	tt.Frame()
+	if !tt.HasText("agent vs main") || !tt.HasText("Commits on agent") {
+		t.Errorf("texts = %q", tt.Texts())
+	}
+}

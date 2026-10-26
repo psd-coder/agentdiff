@@ -16,11 +16,13 @@ const (
 )
 
 type Scope struct {
-	Kind   ScopeKind `json:"kind"`
-	Base   string    `json:"base,omitempty"`
-	Commit string    `json:"commit,omitempty"`
-	From   string    `json:"from,omitempty"`
-	To     string    `json:"to,omitempty"`
+	Kind ScopeKind `json:"kind"`
+	Base string    `json:"base,omitempty"`
+	// Head is the branch a branch scope reviews; empty means HEAD.
+	Head   string `json:"head,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	From   string `json:"from,omitempty"`
+	To     string `json:"to,omitempty"`
 }
 
 // Key returns a stable id that is safe as a file name, also on case-insensitive file systems.
@@ -29,6 +31,9 @@ func (s Scope) Key() string {
 	case ScopeUncommitted:
 		return "uncommitted"
 	case ScopeBranch:
+		if s.Head != "" {
+			return "branch-" + keyPart(s.Head) + "-vs-" + keyPart(s.Base)
+		}
 		return "branch-" + keyPart(s.Base)
 	case ScopeCommit:
 		return "commit-" + keyPart(truncate(s.Commit, 12))
@@ -68,6 +73,9 @@ func (s Scope) Label() string {
 	case ScopeUncommitted:
 		return "Uncommitted changes"
 	case ScopeBranch:
+		if s.Head != "" {
+			return s.Head + " vs " + s.Base
+		}
 		return "Branch vs " + s.Base
 	case ScopeCommit:
 		return "Commit " + shortRef(s.Commit)
@@ -82,6 +90,9 @@ func (s Scope) Describe() string {
 	case ScopeUncommitted:
 		return "the uncommitted changes in the working tree: `git diff HEAD` plus untracked files listed by `git ls-files --others --exclude-standard`"
 	case ScopeBranch:
+		if s.Head != "" {
+			return fmt.Sprintf("the changes on branch `%s` since it diverged from `%s`: `git diff %s...%s` (commits listed by `git log %s..%s`). This branch is not checked out, so the files in the working directory belong to another branch: read the reviewed version of a file with `git show %s:<path>`", s.Head, s.Base, s.Base, s.Head, s.Base, s.Head, s.Head)
+		}
 		return fmt.Sprintf("the changes on the current branch since it diverged from `%s`: `git diff %s...HEAD` (commits listed by `git log %s..HEAD`)", s.Base, s.Base, s.Base)
 	case ScopeCommit:
 		return fmt.Sprintf("the changes introduced by commit %s: `git show %s`", s.Commit, s.Commit)

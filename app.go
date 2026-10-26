@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -38,9 +39,12 @@ type app struct {
 	store store.Store
 	cfg   store.Config
 
-	repo     *gitx.Repo
-	repoErr  string
-	branch   string
+	repo    *gitx.Repo
+	repoErr string
+	branch  string
+	// head is the branch picked to compare with base; empty means the
+	// checked-out one.
+	head     string
 	base     string
 	branches []string
 	commits  []gitx.Commit
@@ -77,8 +81,9 @@ type app struct {
 	savedPath   string
 	askDraft    string
 
-	settings  *settingsForm
-	rangeForm *rangeForm
+	settings    *settingsForm
+	rangeForm   *rangeForm
+	compareForm *compareForm
 }
 
 func newApp(s store.Store) *app {
@@ -128,7 +133,7 @@ func (a *app) openRepo(path string) {
 	a.repo, a.repoErr = r, ""
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
-	a.branch, a.base, a.branches, a.commits = "", "", nil, nil
+	a.branch, a.head, a.base, a.branches, a.commits = "", "", "", nil, nil
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff: " + r.Name())
 	}
@@ -148,19 +153,33 @@ func (a *app) openRepo(path string) {
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 }
 
+// headBranch is the branch under review: the picked one, or the one
+// checked out.
+func (a *app) headBranch() string { return cmp.Or(a.head, a.branch) }
+
 // commitBase is the base the commit list is relative to: on a feature
 // branch the commits not on the base yet, else the latest commits.
 func (a *app) commitBase() string {
-	if a.base == "" || a.branch == "" || a.base == a.branch || strings.HasSuffix(a.base, "/"+a.branch) {
+	head := a.headBranch()
+	if a.base == "" || head == "" || a.base == head || strings.HasSuffix(a.base, "/"+head) {
 		return ""
 	}
 	return a.base
 }
 
+// branchScope is the changes of the branch under review since its base.
+func (a *app) branchScope() (gitx.Scope, bool) {
+	base := a.commitBase()
+	if base == "" {
+		return gitx.Scope{}, false
+	}
+	return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Head: a.head}, true
+}
+
 func (a *app) loadCommits() {
-	r, base := a.repo, a.commitBase()
+	r, base, head := a.repo, a.commitBase(), a.head
 	a.async(func() {
-		commits, err := r.Commits(context.Background(), base, commitsShown)
+		commits, err := r.Commits(context.Background(), base, head, commitsShown)
 		if err != nil {
 			log.Printf("commits: %v", err)
 		}

@@ -27,7 +27,7 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	commits, err := repo.Commits(ctx, "", 1)
+	commits, err := repo.Commits(ctx, "", "", 1)
 	if err != nil || len(commits) == 0 {
 		t.Fatalf("commits: %v", err)
 	}
