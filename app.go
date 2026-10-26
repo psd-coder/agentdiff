@@ -193,7 +193,63 @@ func (a *app) branchScope() (gitx.Scope, bool) {
 	if base == "" {
 		return gitx.Scope{}, false
 	}
-	return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Head: a.head}, true
+	return a.branchScopeOf(a.headBranch(), base), true
+}
+
+// branchScopeOf is the changes of a branch since base. The checked-out
+// branch is read from HEAD, any other one by its name.
+func (a *app) branchScopeOf(branch, base string) gitx.Scope {
+	if branch == a.branch {
+		return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Branch: branch}
+	}
+	return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Head: branch}
+}
+
+// syncBranch reads the checked-out branch again, to follow a checkout
+// made outside the app.
+func (a *app) syncBranch() {
+	r := a.repo
+	if r == nil {
+		return
+	}
+	a.async(func() {
+		ctx := context.Background()
+		branch, err := r.CurrentBranch(ctx)
+		if err != nil {
+			log.Printf("current branch: %v", err)
+			return
+		}
+		branches, _ := r.Branches(ctx)
+		a.update(func() {
+			if a.repo == r && branch != a.branch {
+				a.checkedOut(branch, branches)
+			}
+		})
+	})
+}
+
+// checkedOut moves the app to a newly checked-out branch. A branch scope
+// keeps reviewing the same branch, so its review stays.
+func (a *app) checkedOut(branch string, branches []string) {
+	a.branch, a.branches = branch, branches
+	if s := a.scope; s.Kind == gitx.ScopeBranch && (s.Head != "" || s.Branch != "") {
+		name := cmp.Or(s.Head, s.Branch)
+		a.head = name
+		if name == branch {
+			a.head = ""
+		}
+		a.scope = a.branchScopeOf(name, s.Base)
+		a.rev.Scope = a.scope
+	} else if a.head == branch {
+		a.head = ""
+	}
+	a.loadCommits()
+	a.reload()
+}
+
+func (a *app) refresh() {
+	a.reload()
+	a.syncBranch()
 }
 
 func (a *app) loadCommits() {
@@ -230,6 +286,7 @@ func (a *app) reviewOf(s gitx.Scope) *review.Review {
 func (a *app) setScope(s gitx.Scope) {
 	a.scope, a.scopeID = s, scopeID(s)
 	a.rev = a.reviewOf(s)
+	a.rev.Scope = s
 	a.resetNav()
 	a.thread = ""
 	a.exportDone, a.savedPath = false, ""

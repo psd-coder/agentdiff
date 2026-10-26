@@ -38,9 +38,7 @@ func (a *app) compare(branch, base string) {
 		a.head = ""
 	}
 	a.loadCommits()
-	if s, ok := a.branchScope(); ok {
-		a.setScope(s)
-	}
+	a.setScope(a.branchScopeOf(branch, base))
 }
 
 func (a *app) compareModal(c *ui.Context) {

@@ -61,7 +61,7 @@ It fits when you:
 
 ## Reviewing a change
 
-1. Pick a scope in the top part of the sidebar. Uncommitted is the default. Compare branches, or a click on the branch name in the toolbar, picks a branch and its base.
+1. Pick a scope in the top part of the sidebar. Uncommitted is the default. Compare branches, or a click on the branch name in the toolbar, picks a branch and its base. A branch review belongs to the branch: it stays the same after a checkout, and Compare branches opens it too when the branch is not checked out. The app reads the checked-out branch again when its window gets focus and on Refresh. Uncommitted changes have one review per repository, because they stay in the working tree when you check out another branch.
 2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
 3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step opens a deeper walkthrough on its own page. Ask about this step opens a conversation in the side panel, with the questions asked about that step before. Open as page shows a conversation full width. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back above the page (Cmd+[) returns to where you were, at the same scroll place.
 4. Open a group with Review group to read all its files one after the other, or open one file. Mark a file Viewed when you are done with it.

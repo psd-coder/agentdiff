@@ -49,6 +49,7 @@ func main() {
 			StateKey:  "main",
 			Content:   ui.View(a.view),
 		})
+		a.win.OnFocus(func() { a.win.Update(a.syncBranch) })
 		if p, ok := startPath(); ok {
 			a.win.Update(func() { a.openRepo(p) })
 		}

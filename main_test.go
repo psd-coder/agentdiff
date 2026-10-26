@@ -349,6 +349,55 @@ func TestCompareBranches(t *testing.T) {
 	if !tt.HasText("agent vs main") || !tt.HasText("Commits on agent") {
 		t.Errorf("texts = %q", tt.Texts())
 	}
+
+	git(t, dir, "update-ref", "refs/remotes/origin/main", "main")
+	a.compare("main", "origin/main")
+	if a.scope.Branch != "main" || a.scope.Base != "origin/main" {
+		t.Fatalf("scope = %+v", a.scope)
+	}
+	tt.Frame()
+	if !tt.HasText("main vs origin/main") {
+		t.Errorf("the compared scope is not in the sidebar: %q", tt.Texts())
+	}
+}
+
+func TestReviewFollowsBranch(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	git(t, dir, "stash", "-u", "-q")
+	git(t, dir, "checkout", "-q", "-b", "agent")
+	write(t, dir, "feature.go", "package feature\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "Add feature")
+	a.openRepo(dir)
+	a.base = "main"
+	s, ok := a.branchScope()
+	if !ok {
+		t.Fatal("no branch scope")
+	}
+	a.setScope(s)
+	rev := a.rev
+
+	git(t, dir, "checkout", "-q", "main")
+	a.refresh()
+	if a.branch != "main" || a.scope.Head != "agent" || a.rev != rev {
+		t.Fatalf("after checkout of main: branch %q, scope %+v, same review %v", a.branch, a.scope, a.rev == rev)
+	}
+	if len(a.files) != 1 || a.files[0].Path != "feature.go" {
+		t.Errorf("files = %+v", a.files)
+	}
+
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	a.compare("agent", "main")
+	if a.rev != rev {
+		t.Error("Compare opened another review of the same branch")
+	}
+
+	git(t, dir, "checkout", "-q", "agent")
+	a.refresh()
+	if a.scope.Branch != "agent" || a.scope.Head != "" || a.rev != rev || a.rev.Scope != a.scope {
+		t.Fatalf("after checkout of agent: scope %+v, same review %v", a.scope, a.rev == rev)
+	}
 }
 
 // fakeClaude is a claude CLI that answers every prompt with answer, in

@@ -19,8 +19,12 @@ const (
 type Scope struct {
 	Kind ScopeKind `json:"kind"`
 	Base string    `json:"base,omitempty"`
-	// Head is the branch a branch scope reviews; empty means HEAD.
-	Head   string `json:"head,omitempty"`
+	// Head is the branch a branch scope reviews when it is not checked
+	// out; empty means HEAD.
+	Head string `json:"head,omitempty"`
+	// Branch names the checked-out branch a branch scope with an empty
+	// Head reviews, so its review stays with the branch.
+	Branch string `json:"branch,omitempty"`
 	Commit string `json:"commit,omitempty"`
 	From   string `json:"from,omitempty"`
 	To     string `json:"to,omitempty"`
@@ -32,8 +36,8 @@ func (s Scope) Key() string {
 	case ScopeUncommitted:
 		return "uncommitted"
 	case ScopeBranch:
-		if s.Head != "" {
-			return "branch-" + keyPart(s.Head) + "-vs-" + keyPart(s.Base)
+		if b := s.branchName(); b != "" {
+			return "branch-" + keyPart(b) + "-vs-" + keyPart(s.Base)
 		}
 		return "branch-" + keyPart(s.Base)
 	case ScopeCommit:
@@ -74,8 +78,8 @@ func (s Scope) Label() string {
 	case ScopeUncommitted:
 		return "Uncommitted changes"
 	case ScopeBranch:
-		if s.Head != "" {
-			return s.Head + " vs " + s.Base
+		if b := s.branchName(); b != "" {
+			return b + " vs " + s.Base
 		}
 		return "Branch vs " + s.Base
 	case ScopeCommit:
@@ -102,6 +106,8 @@ func (s Scope) Describe() string {
 	}
 	return "an unknown change set"
 }
+
+func (s Scope) branchName() string { return cmp.Or(s.Head, s.Branch) }
 
 // NewRev is the revision that holds the new side of the changes, empty
 // for the working tree.

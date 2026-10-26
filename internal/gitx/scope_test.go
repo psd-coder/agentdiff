@@ -15,6 +15,8 @@ func TestScopeKey(t *testing.T) {
 	}{
 		{"uncommitted", Scope{Kind: ScopeUncommitted}, "uncommitted"},
 		{"plain branch", Scope{Kind: ScopeBranch, Base: "main"}, "branch-main"},
+		{"checked-out branch", Scope{Kind: ScopeBranch, Base: "main", Branch: "dev"}, "branch-dev-vs-main"},
+		{"other branch", Scope{Kind: ScopeBranch, Base: "main", Head: "dev"}, "branch-dev-vs-main"},
 		{"commit uses 12 chars", Scope{Kind: ScopeCommit, Commit: sha}, "commit-0123456789ab"},
 		{"plain range", Scope{Kind: ScopeRange, From: "v1.0", To: "v2.0"}, "range-v1.0-v2.0"},
 	}

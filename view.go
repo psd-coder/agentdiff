@@ -66,7 +66,7 @@ func (a *app) toolbar(c *ui.Context) {
 		}
 		ui.Text(c, label).FontSize(12).TextColor(t.TextMuted).SingleLine()
 		ui.Button(c, "Agent log").Tooltip("Every call to the agent: command, prompt, tool calls, tokens (Cmd+L)").OnClick(a.toggleLog)
-		ui.Button(c, "Refresh").Tooltip("Read the changes again (Cmd+R)").OnClick(a.reload)
+		ui.Button(c, "Refresh").Tooltip("Read the changes again (Cmd+R)").OnClick(a.refresh)
 		ui.Button(c, "Settings").Tooltip("Cmd+,").OnClick(a.openSettings)
 		ui.Button(c, "Open…").Tooltip("Open another repository").OnClick(a.chooseRepo)
 		n := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
@@ -96,7 +96,7 @@ func (a *app) scopeList(c *ui.Context) {
 			if s, ok := a.branchScope(); ok {
 				ui.SidebarItem(c, scopeID(s), nil, s.Label())
 			}
-			if a.scope.Kind == gitx.ScopeRange {
+			if _, listed := a.scopeFromID(a.scopeID); !listed {
 				ui.SidebarItem(c, a.scopeID, nil, a.scope.Label())
 			}
 			ui.SidebarItem(c, "compare", nil, "Compare branches…")
