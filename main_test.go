@@ -1126,7 +1126,7 @@ func TestFlatFiles(t *testing.T) {
 	}}
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if !tt.HasText("Cache keys · 1") || a.fileOrder()[0] != "cache/cache.go" {
+	if !shows(tt, "Cache keys") || a.fileOrder()[0] != "cache/cache.go" {
 		t.Fatalf("grouped: %q", tt.Texts())
 	}
 	if err := tt.Click("Flat"); err != nil {
@@ -1134,7 +1134,7 @@ func TestFlatFiles(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "flat-files")
-	if tt.HasText("Cache keys · 1") || !tt.HasText("api") || !a.store.LoadConfig().FlatFiles {
+	if shows(tt, "Cache keys") || !tt.HasText("api") || !a.store.LoadConfig().FlatFiles {
 		t.Errorf("flat: %q", tt.Texts())
 	}
 	a.stepFile(1)
@@ -1142,6 +1142,9 @@ func TestFlatFiles(t *testing.T) {
 		t.Errorf("first file in flat order: %q", a.page)
 	}
 }
+
+// shows tells whether the last frame shows exactly the text s.
+func shows(tt *ui.Tester, s string) bool { return slices.Contains(tt.Texts(), s) }
 
 // TestSelectLineRange selects lines by their numbers: a click, then a
 // Shift+click.
@@ -1212,13 +1215,13 @@ func TestViewedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("Cache keys · 1") {
+	if !shows(tt, "Cache keys") {
 		t.Errorf("open group hidden: %q", tt.Texts())
 	}
 	a.goTo("overview")
 	tt.Frame()
 	snapshot(t, tt, "hide-viewed")
-	if tt.HasText("Cache keys · 1") || !tt.HasText("API · 1") || !a.store.LoadConfig().HideViewed {
+	if shows(tt, "Cache keys") || !shows(tt, "API") || !a.store.LoadConfig().HideViewed {
 		t.Errorf("hidden: %q", tt.Texts())
 	}
 	if got := a.fileOrder(); !slices.Equal(got, []string{"api/handler.go"}) {
@@ -1232,18 +1235,57 @@ func TestViewedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.rev.Viewed["api/handler.go"] || !tt.HasText("API · 1") {
+	if !a.rev.Viewed["api/handler.go"] || !shows(tt, "API") {
 		t.Errorf("open file: %q", tt.Texts())
 	}
 	a.goTo("overview")
 	tt.Frame()
-	if tt.HasText("API · 1") || !tt.HasText("All files are viewed.") {
+	if shows(tt, "API") || !tt.HasText("All files are viewed.") {
 		t.Errorf("all viewed: %q", tt.Texts())
 	}
 
 	tt.Click("Hide viewed files")
 	tt.Frame()
-	if !tt.HasText("Cache keys · 1") || !tt.HasText("API · 1") {
+	if !shows(tt, "Cache keys") || !shows(tt, "API") {
 		t.Errorf("shown again: %q", tt.Texts())
+	}
+}
+
+// TestGroupItem opens a group from its title in the sidebar and shows
+// and hides its files with the chevron.
+func TestGroupItem(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
+	}}
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	snapshot(t, tt, "group-items")
+	if tt.HasText("All files in group") || !shows(tt, "cache.go") {
+		t.Fatalf("sidebar: %q", tt.Texts())
+	}
+	if err := tt.Click("Cache keys"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.page != "group:0" {
+		t.Fatalf("page = %q", a.page)
+	}
+	if err := tt.Click("Hide files"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.page != "group:0" || shows(tt, "cache.go") || !shows(tt, "handler.go") {
+		t.Errorf("hidden: %q, %q", a.page, tt.Texts())
+	}
+	tt.Key(0, ui.KeyRight)
+	tt.Frame()
+	if !shows(tt, "cache.go") {
+		t.Errorf("Right did not show the files: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyLeft)
+	tt.Frame()
+	if shows(tt, "cache.go") {
+		t.Errorf("Left did not hide the files: %q", tt.Texts())
 	}
 }

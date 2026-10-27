@@ -170,7 +170,7 @@ func (a *app) reviewNav(c *ui.Context) {
 	t := c.Theme()
 	page := a.page
 	groups := a.groups()
-	changed := ui.Sidebar(c, &page, func() {
+	nav := ui.Sidebar(c, &page, func() {
 		sidebarHeading(c, "Review", nil)
 		ov := ui.SidebarItem(c, "overview", overviewIcon, "Overview")
 		if a.overviewRunning() != nil {
@@ -222,12 +222,13 @@ func (a *app) reviewNav(c *ui.Context) {
 			if len(files) == 0 {
 				continue
 			}
-			ui.SidebarSection(c, fmt.Sprintf("%s · %d", g.Title, len(files)), a.groupOpen(g.Title), func() {
-				if len(g.Files) > 1 {
-					ui.SidebarItem(c, fmt.Sprintf("group:%d", gi), layersIcon, "All files in group")
-				}
-				for _, f := range files {
-					a.fileItem(c, f)
+			open := a.groupOpen(g.Title)
+			ui.Column(c.Key(g.Title)).Gap(2).Margin(8, 0, 0, 0).Children(func() {
+				a.groupItem(c, gi, g.Title, len(files), open)
+				if *open {
+					for _, f := range files {
+						a.fileItem(c, f).Level(2)
+					}
 				}
 			})
 		}
@@ -240,8 +241,22 @@ func (a *app) reviewNav(c *ui.Context) {
 				ui.Text(c, "Reading changes…").FontSize(12).TextColor(t.TextMuted)
 			})
 		}
-	}).Fill().Label("Review").Changed()
-	if changed {
+	}).Fill().Label("Review")
+	// Left and Right close and open the group chosen, as in a tree.
+	if gi, ok := strings.CutPrefix(page, "group:"); ok {
+		var i int
+		fmt.Sscanf(gi, "%d", &i)
+		if i < len(groups) {
+			open := a.groupOpen(groups[i].Title)
+			switch {
+			case *open && nav.Shortcut(0, ui.KeyLeft):
+				*open = false
+			case !*open && nav.Shortcut(0, ui.KeyRight):
+				*open = true
+			}
+		}
+	}
+	if nav.Changed() {
 		a.goTo(page)
 	}
 }
@@ -273,7 +288,32 @@ func (a *app) groupOpen(title string) *bool {
 	return open
 }
 
-func (a *app) fileItem(c *ui.Context, file string) {
+// groupItem is the title of a group in the sidebar. Choosing it opens
+// the group page, and its chevron shows and hides the group's files.
+func (a *app) groupItem(c *ui.Context, gi int, title string, files int, open *bool) {
+	t := c.Theme()
+	ui.SidebarItem(c, fmt.Sprintf("group:%d", gi), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
+		ui.Text(c, fmt.Sprint(files)).FontSize(11).TextColor(t.TextMuted)
+		label := "Hide files"
+		if !*open {
+			label = "Show files"
+		}
+		btn := ui.ButtonBase(c).Padding(2).Radius(4).Label(label).Tooltip(label).Children(func() {
+			arrow := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(t.TextMuted)
+			if !*open {
+				arrow.Rotate(-90)
+			}
+		})
+		if btn.Hovered() {
+			btn.Background(t.Text.Alpha(0.1))
+		}
+		if btn.Clicked() {
+			*open = !*open
+		}
+	})
+}
+
+func (a *app) fileItem(c *ui.Context, file string) ui.Element {
 	t := c.Theme()
 	viewed := a.rev.Viewed[file]
 	item := ui.SidebarItem(c, "file:"+file, nil, path.Base(file)).Tooltip(file)
@@ -304,6 +344,7 @@ func (a *app) fileItem(c *ui.Context, file string) {
 			ui.Icon(c, checkIcon).FontSize(12).TextColor(t.Success).Label("Viewed")
 		}
 	})
+	return item
 }
 
 func (a *app) main(c *ui.Context) {
