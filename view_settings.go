@@ -138,7 +138,7 @@ func (a *app) settingsModal(c *ui.Context) {
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
 		ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
 			ui.Text(c, "Settings").FontSize(18).Bold()
-			ui.Tabs(c, &f.tab, "Agent", "Shortcuts")
+			a.takeFocus(ui.Tabs(c, &f.tab, "Agent", "Shortcuts").Label("Settings"), "settings")
 		})
 		ui.Column(c).Gap(14).Shrink(1).MinHeight(0).Children(func() {
 			switch f.tab {

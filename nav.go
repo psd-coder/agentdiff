@@ -73,6 +73,35 @@ func (a *app) resetNav() {
 	a.scrolls = map[string]*ui.ScrollState{}
 }
 
+// takeFocus gives e the keyboard focus while a.refocus names it, until it
+// has it: a dialog that closes in the same frame gives the focus back to
+// where it was before, after e asked for it.
+func (a *app) takeFocus(e ui.Element, name string) {
+	if a.refocus != name {
+		return
+	}
+	if e.Focused() {
+		a.refocus = ""
+		return
+	}
+	e.Focus()
+}
+
+// openPage goes to the page and puts the keyboard focus on it.
+func (a *app) openPage(page string) {
+	a.goTo(page)
+	a.refocus = "page"
+}
+
+// pageScroll is the scroll of a page, which keeps its place. It takes the
+// keyboard focus that Cmd+1 to Cmd+3 move to the page, so that the arrows
+// and Page Up and Page Down scroll it.
+func (a *app) pageScroll(c *ui.Context, page string) ui.Element {
+	s := ui.Scroll(c.Key("page-" + page)).TrackScroll(a.scrollOf(page)).Focusable().FocusRing(false)
+	a.takeFocus(s, "page")
+	return s
+}
+
 // scrollOf is the scroll place of a page, so that a page opened again
 // shows where the reviewer left it.
 func (a *app) scrollOf(page string) *ui.ScrollState {

@@ -97,7 +97,7 @@ func (a *app) shortcutsModal(c *ui.Context) {
 					a.settings.tab = shortcutsTab
 				}
 				ui.Spacer(c)
-				ui.PrimaryButton(c, "Done").Tooltip("Escape").AutoFocus().OnClick(func() { a.shortcutsOpen = false })
+				a.takeFocus(ui.PrimaryButton(c, "Done").Tooltip("Escape").AutoFocus().OnClick(func() { a.shortcutsOpen = false }), "shortcuts")
 			})
 		})
 	})

@@ -1778,3 +1778,62 @@ func TestOverlaysCloseEachOther(t *testing.T) {
 		t.Error("Refresh closed the palette")
 	}
 }
+
+// TestOverlayFocus opens lists and dialogs over the palette: each takes
+// the keyboard focus. Cmd+1 puts it on the page.
+func TestOverlayFocus(t *testing.T) {
+	a := newTestApp(t)
+	git(t, a.repo.Root, "branch", "docs")
+	a.openRepo(a.repo.Root)
+	a.cfg.AddRecent(fixtureRepo(t))
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	menu := func(id string) {
+		for _, it := range a.menu().Items() {
+			for _, sub := range it.Submenu {
+				if sub.ID == id {
+					sub.Click(sub, nil)
+				}
+			}
+		}
+		tt.Frame()
+		tt.Frame()
+	}
+
+	menu("palette")
+	menu("switch-project")
+	hi := a.projectNav.hi
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	if !tt.Focused("Projects") || a.projectNav.hi == hi {
+		t.Errorf("project list: focused %v, highlight %d then %d", tt.Focused("Projects"), hi, a.projectNav.hi)
+	}
+
+	menu("palette")
+	menu("switch-branch")
+	tt.Type("docs")
+	tt.Frame()
+	if a.branchQuery != "docs" {
+		t.Errorf("branch filter %q", a.branchQuery)
+	}
+
+	menu("settings")
+	menu("shortcuts")
+	if !tt.Focused("Done") {
+		t.Error("the shortcuts dialog has no focus")
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+
+	// From the list of files, Cmd+1 moves the focus to the page.
+	menu("focus-files")
+	menu("go-overview")
+	if tt.Focused("Files") || a.page != "overview" {
+		t.Fatalf("files focused %v, page %q", tt.Focused("Files"), a.page)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if a.page != "overview" {
+		t.Errorf("Down moved the sidebar to %q", a.page)
+	}
+}

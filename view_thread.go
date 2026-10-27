@@ -141,7 +141,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 
 func (a *app) threadsPage(c *ui.Context) {
 	t := c.Theme()
-	ui.Scroll(c).TrackScroll(a.scrollOf("threads")).Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, "threads").Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
 			ui.Text(c, "Questions").FontSize(22).Bold()
 			a.questionsList(c)

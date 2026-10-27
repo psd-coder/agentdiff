@@ -180,9 +180,9 @@ func (a *app) commands() []*command {
 			run: func(*ui.Context, string) { a.toggleLog() }},
 		{id: "back", title: "Back", keys: "CmdOrCtrl+[", run: func(*ui.Context, string) { a.goBack() }},
 		{id: "forward", title: "Forward", keys: "CmdOrCtrl+]", run: func(*ui.Context, string) { a.goForward() }},
-		{id: "go-overview", title: "Overview", keys: "CmdOrCtrl+1", run: func(*ui.Context, string) { a.goTo("overview") }},
-		{id: "go-threads", title: "Questions & Comments", keys: "CmdOrCtrl+2", run: func(*ui.Context, string) { a.goTo("threads") }},
-		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { a.goTo("feedback") }},
+		{id: "go-overview", title: "Overview", keys: "CmdOrCtrl+1", run: func(*ui.Context, string) { a.openPage("overview") }},
+		{id: "go-threads", title: "Questions & Comments", keys: "CmdOrCtrl+2", run: func(*ui.Context, string) { a.openPage("threads") }},
+		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { a.openPage("feedback") }},
 		{id: "next-file", title: "Next File", keys: "Alt+CmdOrCtrl+Down", run: func(*ui.Context, string) { a.stepFile(1) }},
 		{id: "previous-file", title: "Previous File", keys: "Alt+CmdOrCtrl+Up", run: func(*ui.Context, string) { a.stepFile(-1) }},
 		{id: "shortcuts", overlay: true, title: "Keyboard Shortcuts", keys: "CmdOrCtrl+/", run: func(*ui.Context, string) { a.shortcutsOpen = true }},
@@ -236,6 +236,10 @@ func (a *app) runHere(c *ui.Context, id string) {
 			a.closeOverlays(id)
 		}
 		cm.run(c, target)
+		if cm.overlay {
+			// The dialog or list it opened takes the keyboard focus.
+			a.refocus = id
+		}
 	}
 }
 

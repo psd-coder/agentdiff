@@ -37,10 +37,7 @@ func (a *app) projectPicker(c *ui.Context) {
 	if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.projectsOpen {
 		a.runOn(c, "switch-project", "")
 	}
-	if a.refocus == "project" {
-		anchor.Focus()
-		a.refocus = ""
-	}
+	a.takeFocus(anchor, "project")
 	ui.Popover(c, anchor, &a.projectsOpen, func() {
 		recent := a.cfg.Recent
 		choose := func(i int) {
@@ -99,6 +96,7 @@ func (a *app) projectList(c *ui.Context, nav *pickList, open string, add bool, c
 			}
 		}
 	}).Focusable().AutoFocus()
+	a.takeFocus(l, "switch-project")
 	for _, k := range []ui.Key{ui.KeyDown, ui.KeyUp, ui.KeyPageDown, ui.KeyPageUp} {
 		if l.Shortcut(0, k) {
 			nav.key(k, n)
@@ -160,10 +158,7 @@ func (a *app) branchPicker(c *ui.Context) {
 		if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.branchesOpen {
 			a.runOn(c, "switch-branch", "")
 		}
-		if a.refocus == "branch" {
-			anchor.Focus()
-			a.refocus = ""
-		}
+		a.takeFocus(anchor, "branch")
 		compare := a.cmd("compare")
 		iconButton(c, compareIcon, compare.tip, a.tooltip(compare)).
 			PaddingX(9).Radius(0, r, r, 0).MarginStart(-1).OnClick(func() { a.runOn(c, "compare", "") })
@@ -223,6 +218,7 @@ func (a *app) branchList(c *ui.Context) {
 			}
 			return false
 		})
+		a.takeFocus(in, "switch-branch")
 		if in.Changed() {
 			nav.open(0)
 		}
@@ -320,7 +316,7 @@ func (a *app) compareModal(c *ui.Context) {
 			if f.mode == compareBranches {
 				ui.Text(c, "Review the commits of a branch since it left its base. The branch does not have to be checked out.").FontSize(12).TextColor(t.TextMuted)
 				ui.Text(c, "Branch").FontSize(12).Bold()
-				ui.Combobox(c, &f.branch, a.branches).Label("Branch").AutoFocus()
+				a.takeFocus(ui.Combobox(c, &f.branch, a.branches).Label("Branch").AutoFocus(), "compare")
 				ui.Text(c, "Base").FontSize(12).Bold()
 				ui.Combobox(c, &f.base, a.branches).Label("Base")
 				if f.branch != "" && f.branch == f.base {
@@ -328,7 +324,7 @@ func (a *app) compareModal(c *ui.Context) {
 				}
 			} else {
 				ui.Text(c, "Review the changes between two commits, branches or tags, as git diff from..to shows them.").FontSize(12).TextColor(t.TextMuted)
-				ui.TextInput(c, &f.from).Placeholder("From, e.g. main or abc1234").Label("From").AutoFocus().OnSubmit(apply)
+				a.takeFocus(ui.TextInput(c, &f.from).Placeholder("From, e.g. main or abc1234").Label("From").AutoFocus().OnSubmit(apply), "compare")
 				ui.TextInput(c, &f.to).Placeholder("To, e.g. HEAD").Label("To").OnSubmit(apply)
 			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {

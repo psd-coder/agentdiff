@@ -75,6 +75,7 @@ func (a *app) paletteModal(c *ui.Context) {
 			}
 			return false
 		})
+		a.takeFocus(in, "palette")
 		if in.Changed() {
 			nav.open(0)
 		}

@@ -39,7 +39,7 @@ func (a *app) groupPage(c *ui.Context, i int) {
 		return
 	}
 	g := groups[i]
-	ui.Scroll(c.Key(fmt.Sprintf("group-%d", i))).TrackScroll(a.scrollOf(fmt.Sprintf("group:%d", i))).Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, fmt.Sprintf("group:%d", i)).Grow(1).FillWidth().Children(func() {
 		ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Start).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Column(c).Gap(6).Grow(1).Shrink(1).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()

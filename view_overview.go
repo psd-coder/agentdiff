@@ -124,7 +124,7 @@ func (a *app) overviewPage(c *ui.Context) {
 	cfg := a.cfg.Agent
 	run := a.overviewRunning()
 	ov := a.rev.Overview
-	ui.Scroll(c).TrackScroll(a.scrollOf("overview")).Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, "overview").Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Overview").FontSize(22).Bold()

@@ -310,7 +310,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 	}
 	run := a.walkRuns[w.ID]
 	path := a.rev.WalkPath(w.ID)
-	ui.Scroll(c.Key("walk-" + w.ID)).TrackScroll(a.scrollOf("walk:" + w.ID)).Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, "walk:"+w.ID).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
 				crumb := func(label, page string) {

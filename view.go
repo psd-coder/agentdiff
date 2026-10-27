@@ -108,10 +108,7 @@ func (a *app) scopeList(c *ui.Context) {
 			}
 		})
 	}).Fill().Label("Changes")
-	if a.refocus == "changes" {
-		list.Focus()
-		a.refocus = ""
-	}
+	a.takeFocus(list, "changes")
 	if !list.Changed() || choice == a.scopeID {
 		return
 	}
@@ -261,10 +258,7 @@ func (a *app) fileNav(c *ui.Context) {
 			})
 		}
 	}).Grow(1).Shrink(1).MinHeight(0).Label("Files")
-	if a.refocus == "files" {
-		nav.Focus()
-		a.refocus = ""
-	}
+	a.takeFocus(nav, "files")
 	// Left and Right close and open the group chosen, as in a tree.
 	if gi, ok := strings.CutPrefix(page, "group:"); ok {
 		var i int
