@@ -111,17 +111,22 @@ func keyLabel(acc string) string {
 	if !ok {
 		return acc
 	}
+	name := accelerator(0, key)
+	if s, ok := keySigns[name]; ok {
+		name = s
+	}
+	return modsLabel(mods) + name
+}
+
+// modsLabel writes modifiers the way the menus of macOS show them: ⌃⌥⇧⌘.
+func modsLabel(mods ui.Modifiers) string {
 	var b strings.Builder
 	for _, m := range modNames {
 		if mods&m.mod != 0 {
 			b.WriteString(m.sign)
 		}
 	}
-	name := accelerator(0, key)
-	if s, ok := keySigns[name]; ok {
-		name = s
-	}
-	return b.String() + name
+	return b.String()
 }
 
 // fixedKeys are keys the app uses in fields and lists, which no command

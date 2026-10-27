@@ -92,7 +92,15 @@ func (a *app) shortcutRow(c *ui.Context, cm *command) {
 		if a.recording == cm.id {
 			rec := ui.Row(c).Padding(4, 10).MinWidth(120).Radius(t.Radius).Border(1, t.Accent).Background(t.Surface).
 				Focusable().Label("Press the new shortcut for " + cm.title + ", or Escape to cancel").HandleInput(a.keyInput).
-				Children(func() { ui.Text(c, "Press keys…").FontSize(12).TextColor(t.TextMuted) })
+				Children(func() {
+					// The modifiers show as they are held, before the key
+					// that ends the recording.
+					if held := modsLabel(c.Modifiers()); held != "" {
+						ui.Text(c, held+"…").Font("monospace").FontSize(12)
+					} else {
+						ui.Text(c, "Press keys…").FontSize(12).TextColor(t.TextMuted)
+					}
+				})
 			switch {
 			case a.recordStart:
 				rec.Focus()

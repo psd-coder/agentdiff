@@ -1582,6 +1582,22 @@ func TestShortcutSettings(t *testing.T) {
 		t.Errorf("taken: %v, %q", a.cfg.Keys, a.keysNote)
 	}
 
+	// The modifiers held show before the key comes.
+	a.keysFilter = "refresh"
+	tt.Frame()
+	tt.Click("None")
+	tt.Frame()
+	tt.Frame()
+	tt.HoldModifiers(ui.Cmd | ui.Shift)
+	tt.Frame()
+	if !tt.HasText("⇧⌘…") {
+		t.Errorf("held keys: %q", tt.Texts())
+	}
+	tt.HoldModifiers(0)
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+
 	// Escape cancels a recording and keeps the dialog.
 	a.keysFilter = "refresh"
 	tt.Frame()
