@@ -143,7 +143,7 @@ func (a *app) settingsModal(c *ui.Context) {
 		ui.Column(c).Width(640).Shrink(1).MinHeight(0).Children(func() {
 			ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
 				ui.Text(c, "Settings").FontSize(18).Bold()
-				ui.Tabs(c, &f.tab, "All reviews", "This review")
+				ui.Tabs(c, &f.tab, "All reviews", "This review", "Shortcuts")
 			})
 			// Both tabs take the room of the taller one, so the dialog
 			// keeps its size as the tab changes.
@@ -167,10 +167,13 @@ func (a *app) settingsModal(c *ui.Context) {
 							a.agentFields(c, &f.local, f.status)
 						})
 					})
-					if f.tab == 0 {
-						local.Invisible()
-					} else {
-						global.Invisible()
+					keys := ui.Column(c.Key("keys")).Gap(14).RowStart(1).ColumnStart(1).Children(func() {
+						a.shortcutsTab(c)
+					})
+					for i, tab := range []ui.Element{global, local, keys} {
+						if i != f.tab {
+							tab.Invisible()
+						}
 					}
 				})
 			})
@@ -180,6 +183,10 @@ func (a *app) settingsModal(c *ui.Context) {
 			})
 		})
 	})
+	if !f.open && a.recording != "" {
+		// Escape cancels the recording, and the dialog stays.
+		f.open, a.recording = true, ""
+	}
 	if f.settingsValues != f.saved {
 		a.saveSettings()
 	}

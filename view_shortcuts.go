@@ -46,27 +46,17 @@ func menuShortcuts(menu *mygo.Menu) (menus []string, keys [][]shortcut) {
 	return menus, keys
 }
 
-// keyLabel writes an accelerator, as "CmdOrCtrl+Shift+B", the way the
-// menus of macOS show it: ⇧⌘B.
-func keyLabel(acc string) string {
-	parts := strings.Split(acc, "+")
-	key := parts[len(parts)-1]
-	var mods string
-	// macOS orders the modifiers as Control, Option, Shift, Command.
-	for _, m := range []struct{ name, sign string }{{"Ctrl", "⌃"}, {"Alt", "⌥"}, {"Shift", "⇧"}, {"CmdOrCtrl", "⌘"}, {"Cmd", "⌘"}} {
-		for _, p := range parts[:len(parts)-1] {
-			if p == m.name {
-				mods += m.sign
-			}
+// moreShortcuts are the shortcuts of the commands the menu bar does not
+// hold, which they run where they apply.
+func (a *app) moreShortcuts() []shortcut {
+	inMenu := a.menuIDs()
+	var out []shortcut
+	for _, cm := range a.commands() {
+		if keys := a.keysOf(cm); keys != "" && !inMenu[cm.id] {
+			out = append(out, shortcut{keyLabel(keys), strings.TrimSuffix(cm.title, "…")})
 		}
 	}
-	switch key {
-	case "Up":
-		key = "↑"
-	case "Down":
-		key = "↓"
-	}
-	return mods + key
+	return out
 }
 
 func (a *app) shortcutsModal(c *ui.Context) {
@@ -94,10 +84,18 @@ func (a *app) shortcutsModal(c *ui.Context) {
 					for i, m := range menus {
 						section(m+" menu", keys[i])
 					}
+					if more := a.moreShortcuts(); len(more) > 0 {
+						section("Other commands", more)
+					}
 					section("In the window", otherKeys)
 				})
 			})
-			ui.Row(c).Padding(14, 0, 0, 0).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
+				if ui.Button(c, "Change shortcuts…").Clicked() {
+					a.shortcutsOpen = false
+					a.openSettings()
+					a.settings.tab = 2
+				}
 				ui.Spacer(c)
 				ui.PrimaryButton(c, "Done").Tooltip("Escape").AutoFocus().OnClick(func() { a.shortcutsOpen = false })
 			})

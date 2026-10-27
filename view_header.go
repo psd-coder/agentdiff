@@ -33,7 +33,7 @@ func (a *app) toolbar(c *ui.Context) {
 
 func (a *app) projectPicker(c *ui.Context) {
 	t := c.Theme()
-	anchor := pickerButton(c, folderIcon, a.repo.Name(), "", a.projectsOpen).Tooltip(a.repo.Root + " (" + keyLabel(a.cmd("switch-project").keys) + ")").Label("Project")
+	anchor := pickerButton(c, folderIcon, a.repo.Name(), "", a.projectsOpen).Tooltip(a.repo.Root + "\n" + a.tooltip(a.cmd("switch-project"))).Label("Project")
 	if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.projectsOpen {
 		a.runOn(c, "switch-project", "")
 	}
@@ -156,7 +156,7 @@ func (a *app) branchPicker(c *ui.Context) {
 	label, detail := a.branchLabel()
 	r := t.Radius
 	ui.Row(c).AlignItems(ui.Stretch).Children(func() {
-		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip("Branch to review (" + keyLabel(a.cmd("switch-branch").keys) + ")")
+		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip(a.tooltip(a.cmd("switch-branch")))
 		if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.branchesOpen {
 			a.runOn(c, "switch-branch", "")
 		}
@@ -165,7 +165,7 @@ func (a *app) branchPicker(c *ui.Context) {
 			a.refocus = ""
 		}
 		compare := a.cmd("compare")
-		iconButton(c, compareIcon, compare.tip).Tooltip(compare.tooltip()).
+		iconButton(c, compareIcon, compare.tip).Tooltip(a.tooltip(compare)).
 			PaddingX(9).Radius(0, r, r, 0).MarginStart(-1).OnClick(func() { a.runOn(c, "compare", "") })
 		ui.Popover(c, anchor, &a.branchesOpen, func() { a.branchList(c) })
 	})

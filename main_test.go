@@ -1523,3 +1523,116 @@ func TestWelcomeList(t *testing.T) {
 		t.Fatalf("opened %v, want %s", a.repo, want)
 	}
 }
+
+// TestShortcutSettings records new shortcuts in the settings: a free one,
+// one another command has, which moves, and a standard one, which stays.
+func TestShortcutSettings(t *testing.T) {
+	a := newTestApp(t)
+	a.page = "file:api/handler.go"
+	tt := ui.NewTester(a.view, 1300, 800)
+	a.openSettings()
+	a.settings.tab = 2
+	tt.Frame()
+	menuKeys := func(id string) string {
+		var keys string
+		var walk func(items []*mygo.MenuItem)
+		walk = func(items []*mygo.MenuItem) {
+			for _, it := range items {
+				if it.ID == id {
+					keys = it.Accelerator
+				}
+				walk(it.Submenu)
+			}
+		}
+		walk(a.menu().Items())
+		return keys
+	}
+	record := func(filter, current string, mods ui.Modifiers, key ui.Key) {
+		t.Helper()
+		a.keysFilter = filter
+		tt.Frame()
+		if err := tt.Click(current); err != nil {
+			t.Fatalf("%s: %v in %q", filter, err, tt.Texts())
+		}
+		tt.Frame()
+		tt.Frame()
+		if a.recording == "" {
+			t.Fatalf("%s: not recording", filter)
+		}
+		tt.Key(mods, key)
+		tt.Frame()
+	}
+
+	record("refresh", "⌘R", ui.Cmd|ui.Shift, ui.KeyY)
+	snapshot(t, tt, "shortcut-settings")
+	if !sameKeys(menuKeys("refresh"), "CmdOrCtrl+Shift+Y") || !sameKeys(a.store.LoadConfig().Keys["refresh"], "CmdOrCtrl+Shift+Y") {
+		t.Errorf("refresh: menu %q, config %v", menuKeys("refresh"), a.store.LoadConfig().Keys)
+	}
+
+	// The keys of another command move.
+	record("mark file as viewed", "None", ui.Cmd|ui.Shift, ui.KeyY)
+	if a.keysOf(a.cmd("refresh")) != "" || !sameKeys(a.keysOf(a.cmd("mark-viewed")), "CmdOrCtrl+Shift+Y") ||
+		!tt.HasText("⇧⌘Y moved from Refresh to Mark File as Viewed.") {
+		t.Errorf("move: %v, %q", a.cfg.Keys, a.keysNote)
+	}
+
+	// A standard shortcut stays where it is.
+	record("refresh", "None", ui.Cmd, ui.KeyC)
+	if a.keysOf(a.cmd("refresh")) != "" || !strings.Contains(a.keysNote, "taken by Copy") {
+		t.Errorf("taken: %v, %q", a.cfg.Keys, a.keysNote)
+	}
+
+	// Escape cancels a recording and keeps the dialog.
+	a.keysFilter = "refresh"
+	tt.Frame()
+	tt.Click("None")
+	tt.Frame()
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.recording != "" || a.settings == nil {
+		t.Errorf("Escape: recording %q, settings %v", a.recording, a.settings)
+	}
+
+	// A menu bar shortcut pressed while recording is the recorded one.
+	a.startRecording("focus-files")
+	for _, it := range a.menu().Items() {
+		for _, sub := range it.Submenu {
+			if sub.ID == "switch-branch" {
+				sub.Click(sub, nil)
+			}
+		}
+	}
+	if !sameKeys(a.keysOf(a.cmd("focus-files")), "CmdOrCtrl+B") || a.keysOf(a.cmd("switch-branch")) != "" || a.pending != "" {
+		t.Errorf("menu key: %v, pending %q", a.cfg.Keys, a.pending)
+	}
+
+	// A command outside the menu bar runs by its keys where it applies.
+	a.settings.open = false
+	tt.Frame()
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyY)
+	tt.Frame()
+	if !a.rev.Viewed["api/handler.go"] {
+		t.Error("the shortcut did not mark the file viewed")
+	}
+	// Also while the focus is in a text field.
+	a.setViewed([]string{"api/handler.go"}, false)
+	a.setKeys("mark-viewed", "CmdOrCtrl+Shift+U")
+	if err := tt.Click("Comment on file"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Frame()
+	tt.Type("hello")
+	tt.Frame()
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyU)
+	tt.Frame()
+	if !a.rev.Viewed["api/handler.go"] || a.drafts[a.thread] != "hello" {
+		t.Errorf("in a field: viewed %v, draft %q", a.rev.Viewed, a.drafts[a.thread])
+	}
+
+	a.resetKeys()
+	if len(a.cfg.Keys) != 0 || menuKeys("refresh") != "CmdOrCtrl+R" {
+		t.Errorf("reset: %v, %q", a.cfg.Keys, menuKeys("refresh"))
+	}
+}

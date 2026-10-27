@@ -142,6 +142,11 @@ type app struct {
 	paletteOpen  bool
 	paletteQuery string
 	paletteNav   pickList
+	// recording is the command whose shortcut the settings record.
+	recording   string
+	recordStart bool
+	keysFilter  string
+	keysNote    string
 }
 
 func newApp(s store.Store) *app {

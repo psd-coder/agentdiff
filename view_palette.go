@@ -81,14 +81,15 @@ func (a *app) paletteModal(c *ui.Context) {
 		ui.Scroll(c).MaxHeight(360).Children(func() {
 			nav.list(c, "Commands", func() {
 				for _, cm := range cmds {
+					keys := a.keysOf(cm)
 					row := nav.row(c.Key(cm.id), func() {
 						ui.Text(c, cm.title).SingleLine().Shrink(1).Grow(1)
-						if cm.keys != "" {
-							ui.Text(c, keyLabel(cm.keys)).Font("monospace").FontSize(12).TextColor(t.TextMuted)
+						if keys != "" {
+							ui.Text(c, keyLabel(keys)).Font("monospace").FontSize(12).TextColor(t.TextMuted)
 						}
 					}, nil)
-					if cm.keys != "" {
-						row.Label(cm.title + ", " + keyLabel(cm.keys))
+					if keys != "" {
+						row.Label(cm.title + ", " + keyLabel(keys))
 					}
 					if row.Clicked() {
 						run(cm)

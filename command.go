@@ -163,8 +163,8 @@ func (a *app) commands() []*command {
 
 		// The menu bar's commands.
 		{id: "open-repo", title: "Open Repository…", keys: "CmdOrCtrl+O", anywhere: true, run: func(*ui.Context, string) { a.chooseRepo() }},
-		{id: "switch-project", title: "Switch Project…", keys: "CmdOrCtrl+P", run: func(*ui.Context, string) { a.toggleProjects() }},
-		{id: "switch-branch", title: "Switch Branch…", keys: "CmdOrCtrl+B", run: func(*ui.Context, string) { a.toggleBranches() }},
+		{id: "switch-project", title: "Switch Project…", keys: "CmdOrCtrl+P", tip: "Open another project", run: func(*ui.Context, string) { a.toggleProjects() }},
+		{id: "switch-branch", title: "Switch Branch…", keys: "CmdOrCtrl+B", tip: "Branch to review", run: func(*ui.Context, string) { a.toggleBranches() }},
 		{id: "compare", title: "Compare…", keys: "CmdOrCtrl+Shift+B", tip: "Compare with another base, or review a custom range",
 			run: func(*ui.Context, string) { a.openCompare() }},
 		{id: "refresh", title: "Refresh", keys: "CmdOrCtrl+R", tip: "Read the changes again", run: func(*ui.Context, string) { a.refresh() }},
@@ -236,6 +236,12 @@ func (a *app) runHere(c *ui.Context, id string) {
 // some commands need, and draws the window again. The menu bar runs its
 // commands with it.
 func (a *app) queueCommand(id string) {
+	if a.recording != "" {
+		// The menu bar takes its keys before the window sees them: they
+		// are the keys being recorded.
+		a.recordKeys(a.keysOf(a.cmd(id)))
+		return
+	}
 	a.pending = id
 	if a.win != nil {
 		a.win.Invalidate()
@@ -252,12 +258,13 @@ func (a *app) runQueued(c *ui.Context) {
 
 // tooltip is the tooltip of the command's button: what it does and its
 // keys.
-func (cm *command) tooltip() string {
+func (a *app) tooltip(cm *command) string {
+	keys := a.keysOf(cm)
 	switch {
-	case cm.keys != "" && cm.tip != "":
-		return cm.tip + " (" + keyLabel(cm.keys) + ")"
-	case cm.keys != "":
-		return keyLabel(cm.keys)
+	case keys != "" && cm.tip != "":
+		return cm.tip + " (" + keyLabel(keys) + ")"
+	case keys != "":
+		return keyLabel(keys)
 	}
 	return cm.tip
 }
@@ -287,7 +294,7 @@ func (a *app) cmdButtonBase(c *ui.Context, id, target, label string, button func
 		return ui.Element{}
 	}
 	b := button(c.Key(id+target), label).OnClick(func() { cm.run(c, target) })
-	if tip := cm.tooltip(); tip != "" {
+	if tip := a.tooltip(cm); tip != "" {
 		b.Tooltip(tip)
 	}
 	return b

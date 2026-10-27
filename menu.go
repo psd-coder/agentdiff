@@ -13,7 +13,7 @@ import (
 func (a *app) menu() *mygo.Menu {
 	item := func(id string) *mygo.MenuItem {
 		cm := a.cmd(id)
-		return &mygo.MenuItem{Label: cm.title, Accelerator: cm.keys, Click: func(*mygo.MenuItem, *mygo.Window) { a.queueCommand(id) }}
+		return &mygo.MenuItem{ID: id, Label: cm.title, Accelerator: a.keysOf(cm), Click: func(*mygo.MenuItem, *mygo.Window) { a.queueCommand(id) }}
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
@@ -57,9 +57,26 @@ func (a *app) menu() *mygo.Menu {
 	})
 }
 
+// menuIDs are the commands the menu bar holds.
+func (a *app) menuIDs() map[string]bool {
+	ids := map[string]bool{}
+	var walk func(items []*mygo.MenuItem)
+	walk = func(items []*mygo.MenuItem) {
+		for _, it := range items {
+			if it.ID != "" {
+				ids[it.ID] = true
+			}
+			walk(it.Submenu)
+		}
+	}
+	walk(a.menu().Items())
+	return ids
+}
+
 // keys handles the keys that stay out of the menu: Escape, which dialogs
 // and text fields also use, and the back and forward buttons of a mouse.
 func (a *app) keys(c *ui.Context) {
+	a.commandKeys(c)
 	if c.Shortcut(0, ui.KeyEscape) {
 		a.escape()
 	}

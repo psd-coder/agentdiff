@@ -30,6 +30,9 @@ type Config struct {
 	// RecentCommands are the commands run from the command palette, the
 	// last first.
 	RecentCommands []string `json:"recentCommands,omitempty"`
+	// Keys are the shortcuts the user gave commands, by command id, in
+	// place of the app's defaults. An empty value removes the shortcut.
+	Keys map[string]string `json:"keys,omitempty"`
 	// DeeperAhead writes the deeper walkthrough of every overview step
 	// right after the overview.
 	DeeperAhead bool     `json:"deeperAhead"`

@@ -14,6 +14,7 @@ A native macOS app for reviewing the code your coding agent wrote. You read a sh
 - **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, and how the run ended. Each run shows its context size, the tokens in its last request, as Claude Code does. Codex does not report the context size, so a Codex run shows the tokens it processed. Every request reads the whole conversation again, so this number is much larger. The run details list the processed tokens (input, cache read, cache write, output) and the cost at API prices that Claude reports. The panel shows the context its runs built up. A run that resumes or forks an earlier session, as a deeper walkthrough or a follow-up question does, starts with that session's context, so it counts only the context it added. When no run reports a context size, the panel shows the processed total. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
 - **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused.
 - **Settings for all reviews and per review**: agent, model, effort, a model and effort for automatic runs, binary path, extra CLI arguments, checklist questions.
+- **Your own shortcuts**: any command can get a shortcut in Settings, also the ones outside the menu bar, as Mark File as Viewed.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
 
 ## Getting started
@@ -114,13 +115,15 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Enter in the branch list | Opens the worktree of the highlighted branch, when another worktree has it checked out |
 | Cmd+Backspace or Delete in the project list | Removes the highlighted project from the list, after you confirm |
 
-The menu bar lists these under File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog.
+These are the default shortcuts. The menu bar lists them under File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog, with the shortcuts you gave commands outside the menu bar.
 
 The command palette lists the commands that apply where you are: the menu bar's commands, and the actions of the open page and side panel, as Mark File as Viewed on a file page or Resolve Thread while a thread is open. While the field is empty, the 5 commands you ran last from it come first. The buttons of the window, the menu bar and the palette run the same commands.
 
 ## Configuration
 
-Settings has two tabs. All reviews writes the global configuration. This review overrides it for the current repository and scope only. Until you turn the override on, its fields show the global settings, disabled. Every change is saved as you make it, and Done or Escape closes the dialog.
+Settings has three tabs. All reviews writes the global configuration. This review overrides it for the current repository and scope only. Until you turn the override on, its fields show the global settings, disabled. Every change is saved as you make it, and Done or Escape closes the dialog.
+
+Shortcuts lists every command with its shortcut. Click a shortcut and press the new keys, which must include Command or Control. Escape cancels. When another command has those keys, they move to the command you record, and the tab says which command lost them. The standard shortcuts of macOS, as Copy and Quit, and Cmd+Return and Cmd+Backspace stay as they are. A command outside the menu bar runs by its shortcut where it applies, also while you type in a field. A field keeps the keys it edits with, Command with A, C, X, V, Z or Y, with or without Shift. Reset gives one command its default back, and Reset all shortcuts gives all of them theirs. `config.json` keeps only the shortcuts you changed, so new defaults still reach you.
 
 | Field | Default | Purpose |
 | --- | --- | --- |
@@ -141,7 +144,7 @@ The app saves everything under `~/Library/Application Support/AgentDiff/`.
 
 | File | Holds |
 | --- | --- |
-| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette |
+| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette, the shortcuts you changed |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, viewed files and overrides of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
 | `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. `<run>.usage.json` next to it holds the tokens the run spent. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 
