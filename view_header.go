@@ -139,14 +139,14 @@ func (a *app) branchPicker(c *ui.Context) {
 	t := c.Theme()
 	label, detail := a.branchLabel()
 	r := t.Radius
-	ui.Row(c).Children(func() {
+	ui.Row(c).AlignItems(ui.Stretch).Children(func() {
 		anchor := pickerButton(c, branchIcon, label, detail).Radius(r, 0, 0, r).Label("Branch").
 			Tooltip("Branch to review").OnClick(func() {
 			a.branchesOpen = !a.branchesOpen
 			a.branchQuery = ""
 		})
 		iconButton(c, compareIcon, "Compare with another base, or review a custom range").
-			Padding(6, 8).Radius(0, r, r, 0).MarginStart(-1).OnClick(a.openCompare)
+			PaddingX(9).Radius(0, r, r, 0).MarginStart(-1).OnClick(a.openCompare)
 		ui.Popover(c, anchor, &a.branchesOpen, func() { a.branchList(c) })
 	})
 }
