@@ -62,7 +62,7 @@ It fits when you:
 ## Reviewing a change
 
 1. Pick a project and a branch in the toolbar. The project picker lists the repositories you opened before, adds a new one, and removes one from the list after you confirm (its saved reviews stay). The branch picker lists the local and remote branches, and opens the worktree of a branch that is checked out in another worktree. The button next to it opens Compare, which picks another base for the branch or a custom range. Then pick a scope in the top part of the sidebar: Uncommitted changes (only for the checked-out branch), All changes of the branch since its base, or one of its commits. A branch review belongs to the branch: it stays the same after a checkout, and it opens too when you pick the branch while another one is checked out. The app reads the checked-out branch again when its window gets focus and on Refresh. Uncommitted changes have one review per repository, because they stay in the working tree when you check out another branch.
-2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
+2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. The Flat and Grouped switch above the files lists them by path instead, with each file's folder next to its name. Next and previous file follow the order the sidebar shows. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
 3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step opens a deeper walkthrough on its own page. Ask about this step opens a conversation in the side panel, with the questions asked about that step before. Open as page shows a conversation full width. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back above the page (Cmd+[) returns to where you were, at the same scroll place.
 4. Open a group with Review group to read all its files one after the other, or open one file. Mark a file Viewed when you are done with it.
 5. Comment: `+` in the gutter for one line, drag over the line numbers and use Comment on lines for a range, or Comment on file. The thread opens on the right. Comment saves your note. Ask agent (Cmd+Enter) also sends it to the review agent.
@@ -135,7 +135,7 @@ The app saves everything under `~/Library/Application Support/AgentDiff/`.
 
 | File | Holds |
 | --- | --- |
-| `config.json` | global settings, recent repositories, split or unified diff |
+| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, viewed files and overrides of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
 | `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. `<run>.usage.json` next to it holds the tokens the run spent. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 

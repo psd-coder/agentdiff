@@ -64,13 +64,14 @@ func (a *app) sidebar(c *ui.Context) {
 	}).Fill()
 }
 
-// sidebarHeading names a part of a sidebar, above its sections.
-func sidebarHeading(c *ui.Context, title, detail string) {
+// sidebarHeading names a part of a sidebar, above its sections, with the
+// controls end builds after the title, if any.
+func sidebarHeading(c *ui.Context, title string, end func()) {
 	t := c.Theme()
 	ui.Row(c).Gap(6).Padding(10, 8, 4, 8).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, strings.ToUpper(title)).FontSize(10).Bold().LetterSpacing(0.6).TextColor(t.TextMuted).Grow(1).SingleLine()
-		if detail != "" {
-			ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		if end != nil {
+			end()
 		}
 	})
 }
@@ -79,7 +80,7 @@ func (a *app) scopeList(c *ui.Context) {
 	t := c.Theme()
 	choice := a.scopeID
 	changed := ui.Sidebar(c, &choice, func() {
-		sidebarHeading(c, "Changes", "")
+		sidebarHeading(c, "Changes", nil)
 		if a.uncommittedShown() {
 			ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeUncommitted}), editIcon, "Uncommitted changes")
 		}
@@ -153,6 +154,13 @@ func (a *app) scopeHeader(c *ui.Context) {
 			ui.Text(c, plural(len(a.files), "file")).FontSize(11).TextColor(t.TextMuted)
 			ui.Text(c, fmt.Sprintf("+%d", add)).FontSize(11).TextColor(t.Success)
 			ui.Text(c, fmt.Sprintf("−%d", del)).FontSize(11).TextColor(t.Danger)
+			viewed := 0
+			for _, f := range a.files {
+				if a.rev.Viewed[f.Path] {
+					viewed++
+				}
+			}
+			ui.Text(c, fmt.Sprintf("%d of %d viewed", viewed, len(a.files))).FontSize(11).TextColor(t.TextMuted)
 		})
 	})
 }
@@ -162,7 +170,7 @@ func (a *app) reviewNav(c *ui.Context) {
 	page := a.page
 	groups := a.groups()
 	changed := ui.Sidebar(c, &page, func() {
-		sidebarHeading(c, "Review", "")
+		sidebarHeading(c, "Review", nil)
 		ov := ui.SidebarItem(c, "overview", overviewIcon, "Overview")
 		if a.overviewRunning() != nil {
 			ov.Children(func() { ui.Spinner(c).Size(12, 12) })
@@ -180,18 +188,25 @@ func (a *app) reviewNav(c *ui.Context) {
 				ui.Badge(c, fmt.Sprint(feedback))
 			}
 		})
-		viewed := 0
-		for _, f := range a.files {
-			if a.rev.Viewed[f.Path] {
-				viewed++
+		sidebarHeading(c, "Files", func() {
+			layout := 1
+			if a.cfg.FlatFiles {
+				layout = 0
+			}
+			if ui.Segmented(c, &layout, "Flat", "Grouped").Label("List files").FontSize(11).Changed() {
+				a.cfg.FlatFiles = layout == 0
+				a.saveConfig()
+			}
+		})
+		if a.cfg.FlatFiles {
+			for _, f := range a.files {
+				a.fileItem(c, f.Path)
 			}
 		}
-		detail := ""
-		if len(a.files) > 0 {
-			detail = fmt.Sprintf("%d of %d viewed", viewed, len(a.files))
-		}
-		sidebarHeading(c, "Files", detail)
 		for gi, g := range groups {
+			if a.cfg.FlatFiles {
+				break
+			}
 			ui.SidebarSection(c, fmt.Sprintf("%s · %d", g.Title, len(g.Files)), a.groupOpen(g.Title), func() {
 				if len(g.Files) > 1 {
 					ui.SidebarItem(c, fmt.Sprintf("group:%d", gi), layersIcon, "All files in group")
@@ -244,12 +259,16 @@ func (a *app) fileItem(c *ui.Context, file string) {
 	t := c.Theme()
 	viewed := a.rev.Viewed[file]
 	item := ui.SidebarItem(c, "file:"+file, nil, path.Base(file)).Tooltip(file)
+	dir := path.Dir(file)
 	if viewed && a.page != "file:"+file {
 		item.TextColor(t.TextMuted)
 	}
 	d := a.diffs[file]
 	n := len(a.rev.ThreadsOn(file))
 	item.Children(func() {
+		if a.cfg.FlatFiles && dir != "." {
+			ui.Text(c, dir).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1)
+		}
 		if n > 0 {
 			ui.Badge(c, fmt.Sprint(n))
 		}

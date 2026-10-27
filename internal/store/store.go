@@ -22,6 +22,9 @@ type Config struct {
 	Agent     agent.Config `json:"agent"`
 	Questions string       `json:"questions"`
 	Unified   bool         `json:"unified,omitempty"`
+	// FlatFiles lists the files in the sidebar by path instead of in
+	// their review groups.
+	FlatFiles bool `json:"flatFiles,omitempty"`
 	// DeeperAhead writes the deeper walkthrough of every overview step
 	// right after the overview.
 	DeeperAhead bool     `json:"deeperAhead"`

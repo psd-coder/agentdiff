@@ -688,6 +688,18 @@ func (a *app) fileNames() []string {
 	return out
 }
 
+// fileOrder is the order the sidebar lists the files in.
+func (a *app) fileOrder() []string {
+	if a.cfg.FlatFiles {
+		return a.fileNames()
+	}
+	var files []string
+	for _, g := range a.groups() {
+		files = append(files, g.Files...)
+	}
+	return files
+}
+
 func (a *app) groups() []review.Group {
 	if a.rev.Overview != nil && len(a.rev.Overview.Groups) > 0 {
 		return review.NormalizeGroups(a.rev.Overview.Groups, a.fileNames())

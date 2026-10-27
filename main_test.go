@@ -1084,3 +1084,27 @@ func TestSpentContext(t *testing.T) {
 		t.Error("a total without any context size")
 	}
 }
+
+func TestFlatFiles(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
+	}}
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if !tt.HasText("Cache keys · 1") || a.fileOrder()[0] != "cache/cache.go" {
+		t.Fatalf("grouped: %q", tt.Texts())
+	}
+	if err := tt.Click("Flat"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "flat-files")
+	if tt.HasText("Cache keys · 1") || !tt.HasText("api") || !a.store.LoadConfig().FlatFiles {
+		t.Errorf("flat: %q", tt.Texts())
+	}
+	a.stepFile(1)
+	if a.page != "file:api/handler.go" {
+		t.Errorf("first file in flat order: %q", a.page)
+	}
+}

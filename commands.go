@@ -95,10 +95,7 @@ func (a *app) toggleLog() {
 // stepFile opens the next or the previous file in review order, or the
 // first one from a page that shows no file.
 func (a *app) stepFile(delta int) {
-	var files []string
-	for _, g := range a.groups() {
-		files = append(files, g.Files...)
-	}
+	files := a.fileOrder()
 	if len(files) == 0 {
 		return
 	}
