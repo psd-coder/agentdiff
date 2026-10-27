@@ -121,7 +121,7 @@ func (a *app) commitName(sha string) string {
 
 func (a *app) overviewPage(c *ui.Context) {
 	t := c.Theme()
-	cfg, _ := a.cfg.Effective(a.rev.Settings)
+	cfg := a.cfg.Agent
 	run := a.overviewRunning()
 	ov := a.rev.Overview
 	ui.Scroll(c).TrackScroll(a.scrollOf("overview")).Grow(1).FillWidth().Children(func() {

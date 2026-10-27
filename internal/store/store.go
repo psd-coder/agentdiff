@@ -55,19 +55,6 @@ func (c *Config) RemoveRecent(repo string) {
 	c.Recent = slices.DeleteFunc(c.Recent, func(r string) bool { return r == repo })
 }
 
-// Effective is the configuration a review runs with: its own settings
-// over the global ones.
-func (c Config) Effective(s review.Settings) (agent.Config, string) {
-	a, q := c.Agent, c.Questions
-	if s.Agent != nil {
-		a = *s.Agent
-	}
-	if s.Questions != nil {
-		q = *s.Questions
-	}
-	return a, q
-}
-
 type Store struct{ Dir string }
 
 func (s Store) LoadConfig() Config {
@@ -101,9 +88,6 @@ func (s Store) LoadReview(repo string, scope gitx.Scope) *review.Review {
 	}
 	if r.Viewed == nil {
 		r.Viewed = map[string]bool{}
-	}
-	if q := r.Settings.Questions; q != nil && *q == review.LegacyQuestions {
-		r.Settings.Questions = nil
 	}
 	r.Repo, r.Scope = repo, scope
 	return r

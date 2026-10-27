@@ -80,19 +80,6 @@ func TestRecent(t *testing.T) {
 	}
 }
 
-func TestEffective(t *testing.T) {
-	c := Config{Agent: agent.Config{Provider: agent.Claude}, Questions: "global"}
-	a, q := c.Effective(review.Settings{})
-	if a.Provider != agent.Claude || q != "global" {
-		t.Errorf("no override: %v %q", a, q)
-	}
-	own := "mine"
-	a, q = c.Effective(review.Settings{Agent: &agent.Config{Provider: agent.Codex}, Questions: &own})
-	if a.Provider != agent.Codex || q != "mine" {
-		t.Errorf("override: %v %q", a, q)
-	}
-}
-
 func TestReviewRoundTrip(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	scope := gitx.Scope{Kind: gitx.ScopeBranch, Base: "main"}
@@ -229,16 +216,6 @@ func TestLegacyQuestionsReplaced(t *testing.T) {
 	}
 	if got := s.LoadConfig().Questions; got != review.DefaultQuestions {
 		t.Errorf("questions = %q", got)
-	}
-	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
-	r := s.LoadReview("/repo", scope)
-	legacy := review.LegacyQuestions
-	r.Settings.Questions = &legacy
-	if err := s.SaveReview(r); err != nil {
-		t.Fatal(err)
-	}
-	if got := s.LoadReview("/repo", scope).Settings.Questions; got != nil {
-		t.Errorf("review questions = %q", *got)
 	}
 }
 

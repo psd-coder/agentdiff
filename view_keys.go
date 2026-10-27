@@ -64,7 +64,7 @@ func (a *app) shortcutsTab(c *ui.Context) {
 	slices.SortFunc(cmds, func(x, y *command) int { return strings.Compare(x.title, y.title) })
 	ui.Text(c, "Click a shortcut and press the new keys, with ⌘ or ⌃. Escape cancels. A shortcut another command has moves to this one.").FontSize(12).TextColor(t.TextMuted)
 	ui.TextInput(c, &a.keysFilter).Placeholder("Filter commands").Label("Filter commands")
-	ui.Scroll(c).MaxHeight(380).FillWidth().Children(func() {
+	ui.Scroll(c).Shrink(1).MinHeight(0).FillWidth().Children(func() {
 		ui.Column(c).Gap(2).PaddingEnd(4).Children(func() {
 			for _, cm := range cmds {
 				a.shortcutRow(c.Key(cm.id), cm)

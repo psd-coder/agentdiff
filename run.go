@@ -117,7 +117,7 @@ func (a *app) generateOverview() {
 	if run := a.overviews[rev]; run != nil {
 		run.cancel()
 	}
-	cfg, questions := a.cfg.Effective(rev.Settings)
+	cfg, questions := a.cfg.Agent, a.cfg.Questions
 	cfg = cfg.Auto()
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &overviewRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
@@ -288,7 +288,7 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 	if rev == a.rev {
 		diffstat = a.diffstat
 	}
-	cfg, _ := a.cfg.Effective(rev.Settings)
+	cfg := a.cfg.Agent
 	if auto {
 		cfg = cfg.Auto()
 	}
@@ -333,7 +333,7 @@ func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 	if q == "" || a.walkBusy(w.ID) {
 		return
 	}
-	cfg, _ := a.cfg.Effective(rev.Settings)
+	cfg := a.cfg.Agent
 	f := review.FollowupRequest{Question: q, Known: w.SessionID != "" && w.Agent == cfg.Provider, NewRev: rev.Scope.NewRev()}
 	req := agent.Request{Dir: rev.Repo, SystemPrompt: review.SystemPrompt}
 	if f.Known {
@@ -439,7 +439,7 @@ func (a *app) ask(t *review.Thread, text string) {
 		return
 	}
 	rev := a.rev
-	cfg, _ := a.cfg.Effective(rev.Settings)
+	cfg := a.cfg.Agent
 	t.Messages = append(t.Messages, review.Message{Role: review.RoleUser, Text: text, Time: time.Now()})
 	req := agent.Request{Dir: a.repo.Root, SystemPrompt: review.SystemPrompt}
 	known := t.SessionID != "" && t.Agent == cfg.Provider

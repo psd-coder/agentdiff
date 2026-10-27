@@ -17,7 +17,7 @@ func (a *app) toolbar(c *ui.Context) {
 		a.projectPicker(c)
 		a.branchPicker(c)
 		ui.Spacer(c)
-		cfg, _ := a.cfg.Effective(a.rev.Settings)
+		cfg := a.cfg.Agent
 		label := providerName(cfg.Provider)
 		if cfg.Model != "" {
 			label += " · " + cfg.Model

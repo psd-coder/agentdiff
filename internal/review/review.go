@@ -110,17 +110,9 @@ func (r *Review) Empty() bool { return r.Overview == nil && len(r.Walks) == 0 &&
 // Done reports whether the overview has an explanation to show.
 func (o *Overview) Done() bool { return o != nil && (o.Walk != nil || o.Markdown != "") }
 
-// Settings are what a review overrides of the global configuration; nil
-// fields follow it.
-type Settings struct {
-	Agent     *agent.Config `json:"agent,omitempty"`
-	Questions *string       `json:"questions,omitempty"`
-}
-
 type Review struct {
 	Repo     string          `json:"repo"`
 	Scope    gitx.Scope      `json:"scope"`
-	Settings Settings        `json:"settings"`
 	Overview *Overview       `json:"overview,omitempty"`
 	Threads  []*Thread       `json:"threads"`
 	Walks    []*Walk         `json:"walks,omitempty"`

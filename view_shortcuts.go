@@ -94,7 +94,7 @@ func (a *app) shortcutsModal(c *ui.Context) {
 				if ui.Button(c, "Change shortcuts…").Clicked() {
 					a.shortcutsOpen = false
 					a.openSettings()
-					a.settings.tab = 2
+					a.settings.tab = shortcutsTab
 				}
 				ui.Spacer(c)
 				ui.PrimaryButton(c, "Done").Tooltip("Escape").AutoFocus().OnClick(func() { a.shortcutsOpen = false })

@@ -77,22 +77,23 @@ type settingsForm struct {
 
 // settingsValues are the fields of the settings form.
 type settingsValues struct {
-	global   agentForm
-	override bool
-	local    agentForm
-	ahead    bool
+	agent agentForm
+	ahead bool
 }
 
+// The tabs of the settings.
+const (
+	agentTab = iota
+	shortcutsTab
+)
+
 func (a *app) openSettings() {
-	cfg, questions := a.cfg.Effective(a.rev.Settings)
 	f := &settingsForm{
 		open:   true,
 		status: map[agent.Provider]string{},
 		settingsValues: settingsValues{
-			global:   newAgentForm(a.cfg.Agent, a.cfg.Questions),
-			override: a.rev.Settings.Agent != nil || a.rev.Settings.Questions != nil,
-			local:    newAgentForm(cfg, questions),
-			ahead:    a.cfg.DeeperAhead,
+			agent: newAgentForm(a.cfg.Agent, a.cfg.Questions),
+			ahead: a.cfg.DeeperAhead,
 		},
 	}
 	f.saved = f.settingsValues
@@ -117,15 +118,8 @@ func (a *app) openSettings() {
 func (a *app) saveSettings() {
 	f := a.settings
 	f.saved = f.settingsValues
-	a.cfg.Agent, a.cfg.Questions, a.cfg.DeeperAhead = f.global.config(), f.global.questions, f.ahead
+	a.cfg.Agent, a.cfg.Questions, a.cfg.DeeperAhead = f.agent.config(), f.agent.questions, f.ahead
 	a.saveConfig()
-	if f.override {
-		cfg, q := f.local.config(), f.local.questions
-		a.rev.Settings = review.Settings{Agent: &cfg, Questions: &q}
-	} else {
-		a.rev.Settings = review.Settings{}
-	}
-	a.saveReview()
 }
 
 func (a *app) settingsModal(c *ui.Context) {
@@ -134,53 +128,36 @@ func (a *app) settingsModal(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
-	if !f.override {
-		// Without an override the review follows the global settings,
-		// which its fields show, disabled.
-		f.local = f.global
-	}
-	ui.Modal(c, &f.open, func() {
-		ui.Column(c).Width(640).Shrink(1).MinHeight(0).Children(func() {
-			ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
-				ui.Text(c, "Settings").FontSize(18).Bold()
-				ui.Tabs(c, &f.tab, "All reviews", "This review", "Shortcuts")
-			})
-			// Both tabs take the room of the taller one, so the dialog
-			// keeps its size as the tab changes.
-			ui.Scroll(c).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-				ui.Grid(c).Columns(1).PaddingEnd(4).Children(func() {
-					global := ui.Column(c.Key("global")).Gap(14).RowStart(1).ColumnStart(1).Children(func() {
-						ui.Text(c, "Used by every review that does not override them.").FontSize(12).TextColor(t.TextMuted)
-						a.agentFields(c, &f.global, f.status)
+	ui.DialogBase(c, &f.open, func(back, panel ui.Element) {
+		// The top stays in place as the tab changes, and the dialog is as
+		// tall as the tab needs, up to the window's height.
+		back.Background(ui.RGBA(0, 0, 0, 0.4)).Justify(ui.Start).Padding(48, 16, 20, 16)
+		panel.Width(640).Shrink(1).MinHeight(0).Padding(20).Radius(10).Background(t.Background).
+			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
+		ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
+			ui.Text(c, "Settings").FontSize(18).Bold()
+			ui.Tabs(c, &f.tab, "Agent", "Shortcuts")
+		})
+		ui.Column(c).Gap(14).Shrink(1).MinHeight(0).Children(func() {
+			switch f.tab {
+			case agentTab:
+				ui.Scroll(c).Shrink(1).MinHeight(0).FillWidth().Children(func() {
+					ui.Column(c).Gap(14).PaddingEnd(4).Children(func() {
+						a.agentFields(c, &f.agent, f.status)
 						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 							ui.Switch(c, &f.ahead).Label("Write the deeper walkthrough of every step with the overview")
 							ui.Text(c, "Write the deeper walkthrough of every step with the overview")
 						})
 						ui.Text(c, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(t.TextMuted)
 					})
-					local := ui.Column(c.Key("local")).Gap(14).RowStart(1).ColumnStart(1).Children(func() {
-						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Switch(c, &f.override).Label("Override for this review")
-							ui.Text(c, "Use other settings for "+a.repo.Name()+", "+strings.ToLower(a.scope.Label()))
-						})
-						ui.Column(c).Gap(14).Disabled(!f.override).Children(func() {
-							a.agentFields(c, &f.local, f.status)
-						})
-					})
-					keys := ui.Column(c.Key("keys")).Gap(14).RowStart(1).ColumnStart(1).Children(func() {
-						a.shortcutsTab(c)
-					})
-					for i, tab := range []ui.Element{global, local, keys} {
-						if i != f.tab {
-							tab.Invisible()
-						}
-					}
 				})
-			})
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
-				ui.Text(c, "Changes are saved as you make them.").FontSize(11).TextColor(t.TextMuted).Grow(1)
-				ui.PrimaryButton(c, "Done").Tooltip("Escape").OnClick(func() { f.open = false })
-			})
+			case shortcutsTab:
+				a.shortcutsTab(c)
+			}
+		})
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
+			ui.Text(c, "Changes are saved as you make them.").FontSize(11).TextColor(t.TextMuted).Grow(1)
+			ui.PrimaryButton(c, "Done").Tooltip("Escape").OnClick(func() { f.open = false })
 		})
 	})
 	if !f.open && a.recording != "" {

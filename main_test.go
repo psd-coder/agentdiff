@@ -215,7 +215,7 @@ func TestScopeSwitchToCommit(t *testing.T) {
 	}
 }
 
-func TestSettingsOverride(t *testing.T) {
+func TestSettings(t *testing.T) {
 	a := newTestApp(t)
 	tt := ui.NewTester(a.view, 1300, 800)
 	if err := tt.Click("Settings"); err != nil {
@@ -223,34 +223,34 @@ func TestSettingsOverride(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "settings")
-	first, _ := tt.Find("Done")
-	if err := tt.Click("This review"); err != nil {
+	title, _ := tt.Find("Shortcuts")
+	if tt.HasText("This review") {
+		t.Errorf("per-review tab: %q", tt.Texts())
+	}
+	a.settings.agent.provider = 1
+	a.settings.agent.model = "gpt-5"
+	a.settings.ahead = false
+	tt.Frame()
+	if got := a.store.LoadConfig(); got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.DeeperAhead {
+		t.Errorf("not saved as changed: %+v", got)
+	}
+
+	// The tabs start at the same place, and each is as tall as it needs.
+	if err := tt.Click("Shortcuts"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	snapshot(t, tt, "settings-review")
-	if second, _ := tt.Find("Done"); second != first {
-		t.Errorf("the dialog changed its size with the tab: Done at %v, then %v", first, second)
+	snapshot(t, tt, "settings-shortcuts")
+	if tabs, _ := tt.Find("Shortcuts"); tabs.Y != title.Y {
+		t.Errorf("the top moved with the tab: %v, then %v", title, tabs)
 	}
-	a.settings.override = true
-	a.settings.local.provider = 1
-	a.settings.local.model = "gpt-5"
+	a.keysFilter = "refresh"
 	tt.Frame()
-	if got := a.store.LoadReview(a.repo.Root, a.scope).Settings.Agent; got == nil || got.Model != "gpt-5" {
-		t.Errorf("not saved as changed: %+v", got)
+	done, _ := tt.Find("Done")
+	if reset, _ := tt.Find("Reset all shortcuts"); done.Y-reset.Y > 80 {
+		t.Errorf("room under the short list: Reset all at %v, Done at %v", reset, done)
 	}
-	cfg, _ := a.cfg.Effective(a.rev.Settings)
-	if cfg.Provider != agent.Codex || cfg.Model != "gpt-5" {
-		t.Errorf("effective = %+v", cfg)
-	}
-	if a.cfg.Agent.Provider != agent.Claude {
-		t.Errorf("global changed: %+v", a.cfg.Agent)
-	}
-	a.settings.ahead = false
-	tt.Frame()
-	if a.store.LoadConfig().DeeperAhead {
-		t.Error("the global switch is not saved")
-	}
+
 	if err := tt.Click("Done"); err != nil {
 		t.Fatal(err)
 	}
@@ -1531,7 +1531,7 @@ func TestShortcutSettings(t *testing.T) {
 	a.page = "file:api/handler.go"
 	tt := ui.NewTester(a.view, 1300, 800)
 	a.openSettings()
-	a.settings.tab = 2
+	a.settings.tab = shortcutsTab
 	tt.Frame()
 	menuKeys := func(id string) string {
 		var keys string
