@@ -110,7 +110,7 @@ func (a *app) commands() []*command {
 		}},
 		{id: "save-feedback", title: "Save Feedback to File…", target: a.targetFeedback, can: a.hasFeedback,
 			run: func(c *ui.Context, _ string) { a.saveFeedback(c.Services()) }},
-		{id: "copy-agent-prompt", title: "Copy Prompt for Agent", target: a.targetFeedback,
+		{id: "copy-agent-prompt", title: "Copy Prompt for Agent", tip: "Copy a prompt that tells the agent to read the saved feedback", target: a.targetFeedback,
 			can: func(string) bool { return a.savedPath != "" },
 			run: func(c *ui.Context, _ string) {
 				c.WriteClipboard(agentPrompt(a.savedPath))

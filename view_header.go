@@ -82,7 +82,7 @@ func (a *app) projectList(c *ui.Context, nav *pickList, open string, add bool, c
 					ui.Icon(c, checkIcon).TextColor(t.Accent).Label("Open")
 				}
 			}, func() {
-				iconButton(c, trashIcon, "Remove from the list").Tooltip("Remove from the list (Cmd+Backspace)").OnClick(func() { a.confirmRemoveProject(p) })
+				iconButton(c, trashIcon, "Remove from the list", "Remove from the list (Cmd+Backspace)").OnClick(func() { a.confirmRemoveProject(p) })
 			}).Label(filepath.Base(p) + ", " + p)
 			if row.Clicked() {
 				choose(i)
@@ -165,7 +165,7 @@ func (a *app) branchPicker(c *ui.Context) {
 			a.refocus = ""
 		}
 		compare := a.cmd("compare")
-		iconButton(c, compareIcon, compare.tip).Tooltip(a.tooltip(compare)).
+		iconButton(c, compareIcon, compare.tip, a.tooltip(compare)).
 			PaddingX(9).Radius(0, r, r, 0).MarginStart(-1).OnClick(func() { a.runOn(c, "compare", "") })
 		ui.Popover(c, anchor, &a.branchesOpen, func() { a.branchList(c) })
 	})
@@ -234,7 +234,7 @@ func (a *app) branchList(c *ui.Context) {
 					var actions func()
 					if tree != "" {
 						actions = func() {
-							iconButton(c, worktreeIcon, "Open the worktree "+tree).Tooltip("Open the worktree " + tree + " (Cmd+Enter)").OnClick(func() { openTree(tree) })
+							iconButton(c, worktreeIcon, "Open the worktree "+tree, "Open the worktree "+tree+" (Cmd+Enter)").OnClick(func() { openTree(tree) })
 						}
 					}
 					label := b

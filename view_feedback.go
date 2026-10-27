@@ -41,7 +41,7 @@ func (a *app) feedbackPage(c *ui.Context) {
 			ui.Row(c).Gap(8).Children(func() {
 				a.cmdPrimaryButton(c, "copy-feedback", "", "Copy feedback")
 				a.cmdButton(c, "save-feedback", "", "Save to file…")
-				a.cmdButton(c, "copy-agent-prompt", "", "Copy prompt for agent").Tooltip(agentPrompt(a.savedPath))
+				a.cmdButton(c, "copy-agent-prompt", "", "Copy prompt for agent")
 			})
 			if a.savedPath != "" {
 				ui.Text(c, "Saved to "+a.savedPath).FontSize(12).TextColor(t.TextMuted).Selectable()

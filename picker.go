@@ -139,8 +139,10 @@ func pickerButton(c *ui.Context, svg *ui.SVG, label, detail string, open bool) u
 	})
 }
 
-func iconButton(c *ui.Context, svg *ui.SVG, label string) ui.Element {
-	return ui.Button(c, "").Padding(4, 6).Label(label).Tooltip(label).Children(func() {
+// iconButton is a button showing an icon, named label for assistive
+// technology, with the tooltip tip.
+func iconButton(c *ui.Context, svg *ui.SVG, label, tip string) ui.Element {
+	return ui.Button(c, "").Padding(4, 6).Label(label).Tooltip(tip).Children(func() {
 		ui.Icon(c, svg).FontSize(13)
 	})
 }
