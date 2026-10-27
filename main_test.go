@@ -119,6 +119,16 @@ func TestOverviewAndGroups(t *testing.T) {
 	}
 	tt.Advance(time.Second)
 	snapshot(t, tt, "group")
+	if l := a.diffs["cache/cache.go"].state.Layout; l != editor.DiffSplit {
+		t.Errorf("group diff layout = %v, want split", l)
+	}
+	if err := tt.Click("Unified"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if l := a.diffs["cache/cache.go"].state.Layout; l != editor.DiffUnified || !a.cfg.Unified {
+		t.Errorf("after Unified: layout %v, config %v", l, a.cfg.Unified)
+	}
 }
 
 func TestCommentOnFileAndExport(t *testing.T) {

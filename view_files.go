@@ -39,11 +39,14 @@ func (a *app) groupPage(c *ui.Context, i int) {
 	}
 	g := groups[i]
 	ui.Scroll(c.Key(fmt.Sprintf("group-%d", i))).TrackScroll(a.scrollOf(fmt.Sprintf("group:%d", i))).Grow(1).FillWidth().Children(func() {
-		ui.Column(c).Gap(6).Padding(16, 20).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
-			if g.Summary != "" {
-				ui.Text(c, g.Summary).TextColor(t.TextMuted)
-			}
+		ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Start).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+			ui.Column(c).Gap(6).Grow(1).Shrink(1).Children(func() {
+				ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
+				if g.Summary != "" {
+					ui.Text(c, g.Summary).TextColor(t.TextMuted)
+				}
+			})
+			a.layoutSwitch(c)
 		})
 		for _, f := range g.Files {
 			d := a.diffs[f]
@@ -100,14 +103,7 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 			a.newThread(review.Anchor{Kind: review.AnchorFile, File: f.Path})
 		})
 		if page {
-			layout := 0
-			if a.cfg.Unified {
-				layout = 1
-			}
-			if ui.Segmented(c, &layout, "Split", "Unified").Label("Layout").Changed() {
-				a.cfg.Unified = layout == 1
-				a.saveConfig()
-			}
+			a.layoutSwitch(c)
 		}
 		viewed := a.rev.Viewed[f.Path]
 		if ui.Checkbox(c.Key("viewed"), &viewed, "Viewed").Changed() {
@@ -115,6 +111,18 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 			a.saveReview()
 		}
 	})
+}
+
+// layoutSwitch picks split or unified diffs, for every diff in the app.
+func (a *app) layoutSwitch(c *ui.Context) {
+	layout := 0
+	if a.cfg.Unified {
+		layout = 1
+	}
+	if ui.Segmented(c, &layout, "Split", "Unified").Label("Diff layout").Changed() {
+		a.cfg.Unified = layout == 1
+		a.saveConfig()
+	}
 }
 
 func (a *app) fileThreads(c *ui.Context, file string) {
@@ -161,7 +169,7 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
 	s := d.state
 	s.FitContent = fit
 	s.Layout = editor.DiffSplit
-	if a.cfg.Unified || fit {
+	if a.cfg.Unified {
 		s.Layout = editor.DiffUnified
 	}
 	file := d.change.Path
