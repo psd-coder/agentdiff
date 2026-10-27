@@ -1153,19 +1153,40 @@ func TestSelectLineRange(t *testing.T) {
 	if !tt.HasText("Click a line number, then Shift+click another to select a range") {
 		t.Errorf("no hint: %q", tt.Texts())
 	}
-	// The numbers of the new side, in the split view of the file page.
-	tt.ClickAt(822, 103)
-	tt.Frame()
-	tt.ClickAtWith(ui.Shift, 822, 143)
-	tt.Frame()
-	if r, ok := a.diffs["api/handler.go"].state.SelectedLines(); !ok || r.Start != 0 || r.End != 2 {
-		t.Fatalf("selected %+v, %v", r, ok)
+	sel := func() {
+		// The numbers of the new side, in the split view of the file page.
+		tt.ClickAt(822, 103)
+		tt.Frame()
+		tt.ClickAtWith(ui.Shift, 822, 143)
+		tt.Frame()
+		if r, ok := a.diffs["api/handler.go"].state.SelectedLines(); !ok || r.Start != 0 || r.End != 2 {
+			t.Fatalf("selected %+v, %v", r, ok)
+		}
 	}
+	check := func(how string) {
+		t.Helper()
+		th := a.rev.Thread(a.thread)
+		if th == nil || th.Anchor.Start != 1 || th.Anchor.End != 3 {
+			t.Errorf("thread from %s = %+v", how, th)
+		}
+		if _, ok := a.diffs["api/handler.go"].state.SelectedLines(); ok {
+			t.Errorf("selection kept after %s", how)
+		}
+	}
+
+	// The + on a selected line comments on the whole selection.
+	sel()
+	tt.Move(800, 123)
+	tt.Frame()
+	tt.ClickAt(800, 123)
+	tt.Frame()
+	check("+")
+
+	a.thread = ""
+	tt.Frame()
+	sel()
 	if err := tt.Click("Comment on lines 1–3"); err != nil {
 		t.Fatal(err)
 	}
-	th := a.rev.Thread(a.thread)
-	if th == nil || th.Anchor.Start != 1 || th.Anchor.End != 3 {
-		t.Errorf("thread = %+v", th)
-	}
+	check("the header button")
 }

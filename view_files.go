@@ -178,7 +178,13 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
 		s.Layout = editor.DiffUnified
 	}
 	file := d.change.Path
-	s.OnGutterButton = func(r editor.DiffLineRange) { a.lineThread(file, r) }
+	s.OnGutterButton = func(r editor.DiffLineRange) {
+		if sel, ok := s.SelectedLines(); ok && sel.Side == r.Side && sel.Start <= r.Start && r.Start <= sel.End {
+			r = sel
+		}
+		a.lineThread(file, r)
+		s.SetSelectedLines(editor.DiffLineRange{}, false)
+	}
 	s.Annotations = s.Annotations[:0]
 	for _, th := range a.rev.ThreadsOn(file) {
 		if th.Anchor.Kind != review.AnchorLines || (len(th.Messages) == 0 && th.ID != a.thread) {
