@@ -229,7 +229,6 @@ func (a *app) runHere(c *ui.Context, id string) {
 	cm := a.cmd(id)
 	if target, ok := a.here(cm); ok {
 		cm.run(c, target)
-		a.usedCommand(id)
 	}
 }
 

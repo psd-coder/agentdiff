@@ -116,7 +116,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 
 The menu bar lists these under File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog.
 
-The command palette lists the commands that apply where you are: the menu bar's commands, and the actions of the open page and side panel, as Mark File as Viewed on a file page or Resolve Thread while a thread is open. While the field is empty, the 5 commands you ran last come first. The buttons of the window, the menu bar and the palette run the same commands.
+The command palette lists the commands that apply where you are: the menu bar's commands, and the actions of the open page and side panel, as Mark File as Viewed on a file page or Resolve Thread while a thread is open. While the field is empty, the 5 commands you ran last from it come first. The buttons of the window, the menu bar and the palette run the same commands.
 
 ## Configuration
 
@@ -141,7 +141,7 @@ The app saves everything under `~/Library/Application Support/AgentDiff/`.
 
 | File | Holds |
 | --- | --- |
-| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files |
+| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, viewed files and overrides of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
 | `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. `<run>.usage.json` next to it holds the tokens the run spent. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 

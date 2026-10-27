@@ -15,11 +15,9 @@ func (a *app) openPalette() {
 	a.paletteNav.open(0)
 }
 
-// usedCommand puts the command first among the ones used last.
+// usedCommand puts the command first among the ones run last from the
+// palette.
 func (a *app) usedCommand(id string) {
-	if id == "palette" {
-		return
-	}
 	recent := slices.DeleteFunc(slices.Clone(a.cfg.RecentCommands), func(r string) bool { return r == id })
 	recent = append([]string{id}, recent...)
 	a.cfg.RecentCommands = recent[:min(len(recent), maxRecentCommands)]
@@ -59,6 +57,7 @@ func (a *app) paletteModal(c *ui.Context) {
 	run := func(cm *command) {
 		a.paletteOpen = false
 		a.runHere(c, cm.id)
+		a.usedCommand(cm.id)
 	}
 	ui.DialogBase(c, &a.paletteOpen, func(back, panel ui.Element) {
 		// At the top of the window, so the field stays in place as the

@@ -1464,6 +1464,28 @@ func TestCommandPalette(t *testing.T) {
 	if got := titles(); got[0] != "Agent Log" {
 		t.Errorf("recent first: %q", got)
 	}
+	tt.Type("focus files")
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	tt.Frame()
+	if !tt.Focused("Review") {
+		t.Error("Focus Files from the palette left the files sidebar without the focus")
+	}
+	// The menu bar's commands do not count as used from the palette.
+	before := a.store.LoadConfig().RecentCommands
+	for _, it := range a.menu().Items() {
+		for _, sub := range it.Submenu {
+			if sub.Label == "Next File" {
+				sub.Click(sub, nil)
+			}
+		}
+	}
+	tt.Frame()
+	if got := a.store.LoadConfig().RecentCommands; !slices.Equal(got, before) {
+		t.Errorf("menu changed recent: %q, was %q", got, before)
+	}
+	open()
 	// Escape closes the palette, and only it.
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
