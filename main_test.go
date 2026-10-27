@@ -279,6 +279,46 @@ func TestReviewFollowsCommit(t *testing.T) {
 	}
 }
 
+// TestReviewToBiggerCommit commits the reviewed changes together with
+// another file: the review is offered to that commit.
+func TestReviewToBiggerCommit(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	a.cfg.DeeperAhead = false
+	a.queue = make(chan func(), 64)
+	a.generateOverview()
+	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+
+	write(t, dir, "extra.go", "package extra\n")
+	git(t, dir, "add", "-A")
+	git(t, dir, "commit", "-qm", "Agent work and more")
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sha := strings.TrimSpace(string(out))
+	a.refresh()
+	pump(t, a, "the reload", func() bool { return !a.loading })
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if a.archived == nil || a.movedTo != "" || a.probably != sha {
+		t.Fatalf("archived %v, moved to %q, probably %q, want %q", a.archived != nil, a.movedTo, a.probably, sha)
+	}
+	if err := tt.Click("Move review to the commit"); err != nil {
+		t.Fatal(err)
+	}
+	pump(t, a, "the commit", func() bool { return !a.loading })
+	if a.scope.Commit != sha || a.rev.Overview == nil || !a.stale() {
+		t.Fatalf("scope %+v, review %+v, stale %v", a.scope, a.rev.Overview, a.stale())
+	}
+	tt.Frame()
+	if !tt.HasText("This overview was written for 2 files. Since then, 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+}
+
 // TestArchiveUncommitted replaces the uncommitted changes with other
 // ones: their review goes to the archive, and comes back with them.
 func TestArchiveUncommitted(t *testing.T) {

@@ -293,6 +293,16 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	if err != nil || ids[before.Patch] != sha {
 		t.Errorf("commit ids = %v, err %v", ids, err)
 	}
+	tr.write("a.txt", "again\n")
+	tr.commit("again")
+	for _, tc := range []struct {
+		files []string
+		want  string
+	}{{[]string{"a.txt", "dir/new file.txt"}, sha}, {[]string{"old.txt"}, sha}, {[]string{"a.txt", "nope"}, ""}, {nil, ""}} {
+		if got, err := r.CommitWithFiles(ctx, tc.files, 10); err != nil || got != tc.want {
+			t.Errorf("commit with %v = %q, want %q, err %v", tc.files, got, tc.want, err)
+		}
+	}
 }
 
 func TestChunkPath(t *testing.T) {

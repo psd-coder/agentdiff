@@ -84,8 +84,11 @@ func (a *app) archivedCard(c *ui.Context) {
 			ui.Text(c, strings.Join(meta, " · ")).FontSize(12).TextColor(t.TextMuted)
 		})
 		text := "It was written for uncommitted changes that are no longer in the working tree. It comes back here by itself when those changes do."
-		if sha := a.movedTo; sha != "" {
-			text = "It was written for changes that are now commit " + shortSHA(sha) + ". The review moves there when you open it."
+		switch {
+		case a.movedTo != "":
+			text = "It was written for changes that are now commit " + shortSHA(a.movedTo) + ". The review moves there when you open it."
+		case a.probably != "":
+			text = "Its files were probably committed in " + a.commitName(a.probably) + ", which changes all of them. The commit has other changes too, so the review does not move there by itself."
 		}
 		ui.Text(c, text).FontSize(12).TextColor(t.TextMuted)
 		if ov.Walk != nil && ov.Walk.Summary != "" {
@@ -94,6 +97,8 @@ func (a *app) archivedCard(c *ui.Context) {
 		ui.Row(c).Gap(8).Children(func() {
 			if sha := a.movedTo; sha != "" {
 				ui.PrimaryButton(c, "Open commit").OnClick(func() { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha}) })
+			} else if sha := a.probably; sha != "" {
+				ui.PrimaryButton(c, "Move review to the commit").OnClick(func() { a.moveArchived(sha) })
 			}
 			ui.Button(c, "Restore").Tooltip("Bring the review back here, with a warning that it was written for other changes").OnClick(a.restoreArchived)
 			ui.Button(c, "Delete").OnClick(func() {
@@ -104,6 +109,17 @@ func (a *app) archivedCard(c *ui.Context) {
 }
 
 func shortSHA(sha string) string { return sha[:min(len(sha), 7)] }
+
+// commitName names a commit by its short hash and, when the commit list
+// has it, its subject.
+func (a *app) commitName(sha string) string {
+	for _, cm := range a.commits {
+		if cm.SHA == sha {
+			return cm.Short + " (" + cm.Subject + ")"
+		}
+	}
+	return shortSHA(sha)
+}
 
 func (a *app) overviewPage(c *ui.Context) {
 	t := c.Theme()

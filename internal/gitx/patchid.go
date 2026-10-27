@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -193,4 +194,29 @@ func (r *Repo) patchIDs(ctx context.Context, patch []byte) ([][2]string, error) 
 		}
 	}
 	return ids, nil
+}
+
+// CommitWithFiles returns the newest of the latest limit commits that
+// changes all of files, or "" when none does. A merge commit counts as its
+// changes against the first parent.
+func (r *Repo) CommitWithFiles(ctx context.Context, files []string, limit int) (string, error) {
+	if len(files) == 0 || !r.HasHead(ctx) {
+		return "", nil
+	}
+	out, err := r.output(ctx, "log", "-z", "--name-only", "--no-show-signature", "--diff-merges=first-parent", "--format=%x01%H",
+		"-n", strconv.Itoa(cmp.Or(limit, defaultCommitLimit)), "HEAD", "--")
+	if err != nil {
+		return "", err
+	}
+	for record := range strings.SplitSeq(string(out), "\x01") {
+		fields := strings.Split(record, "\x00")
+		sha, changed := strings.TrimSpace(fields[0]), map[string]bool{}
+		for _, f := range fields[1:] {
+			changed[strings.TrimPrefix(f, "\n")] = true
+		}
+		if sha != "" && !slices.ContainsFunc(files, func(f string) bool { return !changed[f] }) {
+			return sha, nil
+		}
+	}
+	return "", nil
 }

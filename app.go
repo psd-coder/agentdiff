@@ -84,8 +84,10 @@ type app struct {
 	// which stay even though none of their files is changed.
 	kept map[string]bool
 	// movedTo is the commit that now holds the changes a stale overview
-	// of the uncommitted changes was written for.
-	movedTo string
+	// of the uncommitted changes was written for. When none does,
+	// probably is a commit that changes all of its files.
+	movedTo  string
+	probably string
 	// adoptedFrom is the scope the review was moved or copied from when
 	// the scope opened.
 	adoptedFrom *gitx.Scope
@@ -422,12 +424,13 @@ func (a *app) reload() {
 	gen, r, s := a.gen, a.repo, a.scope
 	a.loading, a.loadErr = true, ""
 	a.files, a.diffstat = nil, ""
-	a.patch, a.patchKnown, a.movedTo, a.fileIDs = "", false, "", nil
+	a.patch, a.patchKnown, a.movedTo, a.probably, a.fileIDs = "", false, "", "", nil
 	a.diffs = map[string]*fileDiff{}
 	a.extra = map[string]*extraFile{}
 	written, empty := "", a.rev.Empty()
+	var writtenFiles []string
 	if ov := a.rev.Overview; ov != nil {
-		written = ov.PatchID
+		written, writtenFiles = ov.PatchID, ov.WrittenFiles()
 	}
 	uncommitted := s.Kind == gitx.ScopeUncommitted
 	a.async(func() {
@@ -444,16 +447,21 @@ func (a *app) reload() {
 		var archived *review.Review
 		if uncommitted && empty {
 			if arch, ok := a.store.LatestArchive(r.Root); ok && arch.Overview != nil {
-				archived, written = arch, arch.Overview.PatchID
+				archived, written, writtenFiles = arch, arch.Overview.PatchID, arch.Overview.WrittenFiles()
 			}
 		}
-		movedTo := ""
+		movedTo, probably := "", ""
 		if uncommitted && perr == nil && written != "" && written != fp.Patch {
 			ids, err := r.CommitPatchIDs(ctx, "", "", commitsShown)
 			if err != nil {
 				log.Printf("commit patch ids: %v", err)
 			}
 			movedTo = ids[written]
+			if movedTo == "" {
+				if probably, err = r.CommitWithFiles(ctx, writtenFiles, commitsShown); err != nil {
+					log.Printf("commit with files: %v", err)
+				}
+			}
 		}
 		var from *gitx.Scope
 		if (empty || uncommitted && written != fp.Patch) && perr == nil && fp.Patch != "" {
@@ -471,7 +479,7 @@ func (a *app) reload() {
 				return
 			}
 			a.files, a.diffstat = files, stat
-			a.patch, a.patchKnown, a.movedTo, a.fileIDs = fp.Patch, perr == nil, movedTo, fp.Files
+			a.patch, a.patchKnown, a.movedTo, a.probably, a.fileIDs = fp.Patch, perr == nil, movedTo, probably, fp.Files
 			a.archived = archived
 			switch {
 			case from != nil && a.rev.Empty():
@@ -583,6 +591,24 @@ func (a *app) restoreArchived() {
 	a.kept[archiveID(arch.Overview)] = true
 	a.adopt(arch.Scope)
 	a.adoptedFrom, a.archived = nil, nil
+}
+
+// moveArchived moves the shown archived review to a commit that has no
+// review of its own, and opens it.
+func (a *app) moveArchived(sha string) {
+	arch := a.archived
+	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha}
+	if arch == nil || !a.store.LoadReview(a.repo.Root, to).Empty() {
+		a.setScope(to)
+		return
+	}
+	if err := a.store.MoveReview(a.repo.Root, arch.Scope, to); err != nil {
+		log.Printf("move archived review: %v", err)
+		return
+	}
+	a.archived = nil
+	delete(a.reviews, reviewKey(a.repo.Root, to))
+	a.setScope(to)
 }
 
 func (a *app) deleteArchived() {

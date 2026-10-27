@@ -3,6 +3,8 @@ package review
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/psdcoder/agentdiff/internal/agent"
@@ -230,15 +232,7 @@ func (d Drift) Disjoint() bool { return d.Written > 0 && d.Gone == d.Written }
 // Drift compares the files the overview was written for with files, which
 // maps the changed files to the IDs of their changes.
 func (o *Overview) Drift(files map[string]string) Drift {
-	written, known := o.Files, o.Files != nil
-	if !known {
-		written = map[string]string{}
-		for _, g := range o.Groups {
-			for _, f := range g.Files {
-				written[f] = ""
-			}
-		}
-	}
+	written, known := o.written(), o.Files != nil
 	d := Drift{Written: len(written), Known: known}
 	for f, id := range written {
 		now, ok := files[f]
@@ -255,4 +249,22 @@ func (o *Overview) Drift(files map[string]string) Drift {
 		}
 	}
 	return d
+}
+
+// WrittenFiles returns the files the overview was written for.
+func (o *Overview) WrittenFiles() []string { return slices.Sorted(maps.Keys(o.written())) }
+
+// written maps the files the overview was written for to the IDs of
+// their changes, which an overview from before file IDs does not know.
+func (o *Overview) written() map[string]string {
+	if o.Files != nil {
+		return o.Files
+	}
+	out := map[string]string{}
+	for _, g := range o.Groups {
+		for _, f := range g.Files {
+			out[f] = ""
+		}
+	}
+	return out
 }
