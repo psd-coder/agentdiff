@@ -51,8 +51,11 @@ func (p *pickList) key(k ui.Key, n int) bool {
 func (p *pickList) list(c *ui.Context, label string, fn func()) ui.Element {
 	p.rows, p.bars = p.rows[:0], p.bars[:0]
 	l := ui.Column(c).Gap(2).Role(ui.RoleList).Label(label).KeepFocus()
+	// In window coordinates, so that the list scrolling under a resting
+	// pointer does not count as the pointer moving.
 	x, y, over := l.PointerPosition()
-	pt := [2]float32{x, y}
+	wx, wy := l.LocalToWindow(x, y)
+	pt := [2]float32{wx, wy}
 	p.follow = over && pt != p.pointer
 	if over {
 		p.pointer = pt

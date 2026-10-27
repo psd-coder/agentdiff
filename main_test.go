@@ -1022,3 +1022,35 @@ func TestPickersFromKeyboard(t *testing.T) {
 		t.Fatalf("open %v, repo %q, want %q", a.projectsOpen, a.repo.Root, other)
 	}
 }
+
+// TestPickListScrollKeepsHighlight scrolls the branch list from the
+// keyboard while the pointer rests on a row.
+func TestPickListScrollKeepsHighlight(t *testing.T) {
+	a := newTestApp(t)
+	for i := range 30 {
+		git(t, a.repo.Root, "branch", fmt.Sprintf("b%02d", i))
+	}
+	a.openRepo(a.repo.Root)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if err := tt.Click("Branch"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	r, ok := tt.Find("b25")
+	if !ok || r.H == 0 {
+		t.Fatalf("no row b25: %v", r)
+	}
+	tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+	if got := a.branches[a.branchNav.hi]; got != "b25" {
+		t.Fatalf("the pointer left the highlight on %q", got)
+	}
+	for range 20 {
+		tt.Key(0, ui.KeyUp)
+		tt.Frame()
+	}
+	if got := a.branches[a.branchNav.hi]; got != "b05" {
+		t.Errorf("highlight on %q, want b05", got)
+	}
+}
