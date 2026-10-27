@@ -86,6 +86,11 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 		ui.Badge(c, statusLabel(f))
 		ui.Text(c, fmt.Sprintf("+%d", f.Additions)).FontSize(12).TextColor(t.Success)
 		ui.Text(c, fmt.Sprintf("−%d", f.Deletions)).FontSize(12).TextColor(t.Danger)
+		if d.state != nil {
+			if _, ok := d.state.SelectedLines(); !ok {
+				ui.Text(c, "Click a line number, then Shift+click another to select a range").FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1)
+			}
+		}
 		ui.Spacer(c)
 		if d.state != nil {
 			if r, ok := d.state.SelectedLines(); ok {

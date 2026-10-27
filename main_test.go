@@ -1142,3 +1142,30 @@ func TestFlatFiles(t *testing.T) {
 		t.Errorf("first file in flat order: %q", a.page)
 	}
 }
+
+// TestSelectLineRange selects lines by their numbers: a click, then a
+// Shift+click.
+func TestSelectLineRange(t *testing.T) {
+	a := newTestApp(t)
+	a.page = "file:api/handler.go"
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if !tt.HasText("Click a line number, then Shift+click another to select a range") {
+		t.Errorf("no hint: %q", tt.Texts())
+	}
+	// The numbers of the new side, in the split view of the file page.
+	tt.ClickAt(822, 103)
+	tt.Frame()
+	tt.ClickAtWith(ui.Shift, 822, 143)
+	tt.Frame()
+	if r, ok := a.diffs["api/handler.go"].state.SelectedLines(); !ok || r.Start != 0 || r.End != 2 {
+		t.Fatalf("selected %+v, %v", r, ok)
+	}
+	if err := tt.Click("Comment on lines 1–3"); err != nil {
+		t.Fatal(err)
+	}
+	th := a.rev.Thread(a.thread)
+	if th == nil || th.Anchor.Start != 1 || th.Anchor.End != 3 {
+		t.Errorf("thread = %+v", th)
+	}
+}
