@@ -136,6 +136,12 @@ type app struct {
 	// ("project" or "branch"), or a sidebar ("changes" or "files").
 	refocus       string
 	shortcutsOpen bool
+
+	cmds         map[string]*command
+	pending      string // the command the menu bar queued
+	paletteOpen  bool
+	paletteQuery string
+	paletteNav   pickList
 }
 
 func newApp(s store.Store) *app {

@@ -116,6 +116,6 @@ func (a *app) backBar(c *ui.Context) {
 	}
 	prev := a.history[len(a.history)-1]
 	ui.Row(c).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		ui.Button(c, "‹ Back to "+a.pageLabel(prev)).Tooltip("Cmd+[").OnClick(a.goBack)
+		a.cmdButton(c, "back", "", "‹ Back to "+a.pageLabel(prev))
 	})
 }

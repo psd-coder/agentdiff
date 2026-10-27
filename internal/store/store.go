@@ -27,6 +27,9 @@ type Config struct {
 	FlatFiles bool `json:"flatFiles,omitempty"`
 	// HideViewed leaves the viewed files out of the sidebar.
 	HideViewed bool `json:"hideViewed,omitempty"`
+	// RecentCommands are the commands run from the palette or the menu
+	// bar, the last first.
+	RecentCommands []string `json:"recentCommands,omitempty"`
 	// DeeperAhead writes the deeper walkthrough of every overview step
 	// right after the overview.
 	DeeperAhead bool     `json:"deeperAhead"`

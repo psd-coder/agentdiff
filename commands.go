@@ -11,59 +11,50 @@ import (
 // menu is the menu bar. Its shortcuts work wherever the keyboard focus
 // is, and the menus show them.
 func (a *app) menu() *mygo.Menu {
-	item := func(label, key string, fn func()) *mygo.MenuItem {
-		return &mygo.MenuItem{Label: label, Accelerator: key, Click: func(*mygo.MenuItem, *mygo.Window) { a.command(fn) }}
+	item := func(id string) *mygo.MenuItem {
+		cm := a.cmd(id)
+		return &mygo.MenuItem{Label: cm.title, Accelerator: cm.keys, Click: func(*mygo.MenuItem, *mygo.Window) { a.queueCommand(id) }}
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
 		{Label: "File", Submenu: []*mygo.MenuItem{
-			{Label: "Open Repository…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { a.chooseRepo() }},
-			item("Switch Project…", "CmdOrCtrl+P", a.toggleProjects),
-			item("Switch Branch…", "CmdOrCtrl+B", a.toggleBranches),
-			item("Compare…", "CmdOrCtrl+Shift+B", a.openCompare),
-			item("Refresh", "CmdOrCtrl+R", a.refresh),
+			item("open-repo"),
+			item("switch-project"),
+			item("switch-branch"),
+			item("compare"),
+			item("refresh"),
 			mygo.Separator(),
-			item("Settings…", "CmdOrCtrl+,", a.openSettings),
+			item("settings"),
 			mygo.Separator(),
 			{Role: mygo.RoleClose},
 		}},
 		{Role: mygo.RoleEditMenu},
 		{Label: "View", Submenu: []*mygo.MenuItem{
-			item("Focus Changes", "CmdOrCtrl+Shift+C", func() { a.refocus = "changes" }),
-			item("Focus Files", "CmdOrCtrl+Shift+F", func() { a.refocus = "files" }),
+			item("palette"),
 			mygo.Separator(),
-			item("Agent Log", "CmdOrCtrl+L", a.toggleLog),
+			item("focus-changes"),
+			item("focus-files"),
+			mygo.Separator(),
+			item("agent-log"),
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
 		}},
 		{Label: "Go", Submenu: []*mygo.MenuItem{
-			item("Back", "CmdOrCtrl+[", a.goBack),
-			item("Forward", "CmdOrCtrl+]", a.goForward),
+			item("back"),
+			item("forward"),
 			mygo.Separator(),
-			item("Overview", "CmdOrCtrl+1", func() { a.goTo("overview") }),
-			item("Questions & Comments", "CmdOrCtrl+2", func() { a.goTo("threads") }),
-			item("Feedback", "CmdOrCtrl+3", func() { a.goTo("feedback") }),
+			item("go-overview"),
+			item("go-threads"),
+			item("go-feedback"),
 			mygo.Separator(),
-			item("Next File", "Alt+CmdOrCtrl+Down", func() { a.stepFile(1) }),
-			item("Previous File", "Alt+CmdOrCtrl+Up", func() { a.stepFile(-1) }),
+			item("next-file"),
+			item("previous-file"),
 		}},
 		{Role: mygo.RoleWindowMenu},
 		{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{
-			item("Keyboard Shortcuts", "CmdOrCtrl+/", func() { a.shortcutsOpen = true }),
+			item("shortcuts"),
 		}},
 	})
-}
-
-// command runs a menu command on the open repository and draws the
-// window again.
-func (a *app) command(fn func()) {
-	if a.repo == nil {
-		return
-	}
-	fn()
-	if a.win != nil {
-		a.win.Invalidate()
-	}
 }
 
 // keys handles the keys that stay out of the menu: Escape, which dialogs

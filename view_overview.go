@@ -10,7 +10,6 @@ import (
 
 	"github.com/psdcoder/agentdiff/internal/gitx"
 	"github.com/psdcoder/agentdiff/internal/review"
-	"github.com/psdcoder/agentdiff/internal/store"
 )
 
 // staleBanner warns when the review was written for other changes, and
@@ -25,7 +24,7 @@ func (a *app) staleBanner(c *ui.Context) {
 		if sha := a.movedTo; sha != "" {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Those changes are now commit "+shortSHA(sha)+". The review moves there when you open it.").Grow(1).Shrink(1)
-				ui.PrimaryButton(c, "Open commit").OnClick(func() { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha}) })
+				a.cmdPrimaryButton(c, "open-moved-commit", "", "Open commit")
 			})
 		}
 	})
@@ -64,9 +63,13 @@ func isAre(n int) string {
 
 // archivedCard offers the latest archived review on the uncommitted
 // scope, while it has no review of its own.
+func (a *app) archivedShown() bool {
+	return a.archived != nil && a.scope.Kind == gitx.ScopeUncommitted && a.rev.Empty() && !a.loading
+}
+
 func (a *app) archivedCard(c *ui.Context) {
 	arch := a.archived
-	if arch == nil || a.scope.Kind != gitx.ScopeUncommitted || !a.rev.Empty() || a.loading {
+	if !a.archivedShown() {
 		return
 	}
 	t := c.Theme()
@@ -95,15 +98,10 @@ func (a *app) archivedCard(c *ui.Context) {
 			ui.Text(c, ov.Walk.Summary).MaxLines(2)
 		}
 		ui.Row(c).Gap(8).Children(func() {
-			if sha := a.movedTo; sha != "" {
-				ui.PrimaryButton(c, "Open commit").OnClick(func() { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha}) })
-			} else if sha := a.probably; sha != "" {
-				ui.PrimaryButton(c, "Move review to the commit").OnClick(func() { a.moveArchived(sha) })
-			}
-			ui.Button(c, "Restore").Tooltip("Bring the review back here, with a warning that it was written for other changes").OnClick(a.restoreArchived)
-			ui.Button(c, "Delete").OnClick(func() {
-				a.confirm("Delete the earlier review?", "Its overview, walkthroughs and comments are deleted.", "Delete", a.deleteArchived)
-			})
+			a.cmdPrimaryButton(c, "open-moved-commit", "", "Open commit")
+			a.cmdPrimaryButton(c, "move-archived", "", "Move review to the commit")
+			a.cmdButton(c, "restore-archived", "", "Restore")
+			a.cmdButton(c, "delete-archived", "", "Delete")
 		})
 	})
 }
@@ -131,18 +129,10 @@ func (a *app) overviewPage(c *ui.Context) {
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Overview").FontSize(22).Bold()
 				ui.Spacer(c)
-				switch {
-				case run != nil:
-					ui.Button(c, "Stop").OnClick(a.stopOverview)
-				case ov.Done():
-					ui.Button(c, "Regenerate").Disabled(len(a.files) == 0).OnClick(func() { a.regenerate("") })
-				}
-				if run != nil || ov != nil {
-					ui.Button(c, "Log").Tooltip("What the agent did to write the overview").OnClick(func() { a.showLog(store.TargetOverview) })
-				}
-				if ov != nil || len(a.rev.Threads) > 0 || len(a.rev.Walks) > 0 {
-					ui.Button(c, "Start over").Tooltip("Delete the overview and comments of this scope").OnClick(a.confirmStartOver)
-				}
+				a.cmdButton(c, "stop-overview", "", "Stop")
+				a.cmdButton(c, "regenerate-overview", "", "Regenerate")
+				a.cmdButton(c, "overview-log", "", "Log")
+				a.cmdButton(c, "start-over", "", "Start over")
 			})
 			a.summaryLine(c)
 			if from := a.adoptedFrom; from != nil {
@@ -219,8 +209,8 @@ func (a *app) overviewIntro(c *ui.Context, agentName string) {
 		ui.Text(c, agentName+" reads the changes in read-only mode and walks you through them in a few short steps, each with the code that shows it. Go deeper into any step, or ask about it, and you get a walkthrough one level closer to the code. It also answers your checklist and groups the files in the order to review them.").TextColor(t.TextMuted)
 		ui.Text(c, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the questions in Settings.").FontSize(12).TextColor(t.TextMuted)
 		ui.Row(c).Gap(8).Children(func() {
-			ui.PrimaryButton(c, "Explain changes with "+agentName).OnClick(a.generateOverview)
-			ui.Button(c, "Settings").OnClick(a.openSettings)
+			a.cmdPrimaryButton(c, "explain", "", "Explain changes with "+agentName)
+			a.cmdButton(c, "settings", "", "Settings")
 		})
 	})
 }

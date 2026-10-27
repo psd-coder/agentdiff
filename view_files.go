@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -47,12 +47,8 @@ func (a *app) groupPage(c *ui.Context, i int) {
 					ui.Text(c, g.Summary).TextColor(t.TextMuted)
 				}
 			})
-			viewed := !slices.ContainsFunc(g.Files, func(f string) bool { return !a.rev.Viewed[f] })
-			label := "Mark all as viewed"
-			if viewed {
-				label = "Mark all as not viewed"
-			}
-			ui.Button(c, label).OnClick(func() { a.setViewed(g.Files, !viewed) })
+			a.cmdButton(c, "mark-group-viewed", strconv.Itoa(i), "Mark all as viewed")
+			a.cmdButton(c, "mark-group-not-viewed", strconv.Itoa(i), "Mark all as not viewed")
 			a.layoutSwitch(c)
 		})
 		for _, f := range g.Files {
@@ -105,36 +101,20 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 				if r.End > r.Start {
 					label = fmt.Sprintf("Comment on lines %d–%d", r.Start+1, r.End+1)
 				}
-				ui.Button(c.Key("sel"), label).OnClick(func() {
-					a.lineThread(f.Path, r)
-					d.state.SetSelectedLines(editor.DiffLineRange{}, false)
-				})
+				a.cmdButton(c, "comment-lines", f.Path, label)
 			}
 		}
-		ui.Button(c.Key("file-comment"), "Comment on file").OnClick(func() {
-			a.newThread(review.Anchor{Kind: review.AnchorFile, File: f.Path})
-		})
+		a.cmdButton(c, "comment-file", f.Path, "Comment on file")
 		if page {
 			a.layoutSwitch(c)
 		}
-		viewed := a.rev.Viewed[f.Path]
-		if ui.Checkbox(c.Key("viewed"), &viewed, "Viewed").Changed() {
-			a.rev.Viewed[f.Path] = viewed
-			a.saveReview()
-		}
+		a.cmdCheckbox(c, "mark-viewed", "mark-not-viewed", f.Path, "Viewed")
 	})
 }
 
 // layoutSwitch picks split or unified diffs, for every diff in the app.
 func (a *app) layoutSwitch(c *ui.Context) {
-	layout := 0
-	if a.cfg.Unified {
-		layout = 1
-	}
-	if ui.Segmented(c, &layout, "Split", "Unified").Label("Diff layout").Changed() {
-		a.cfg.Unified = layout == 1
-		a.saveConfig()
-	}
+	a.cmdSegmented(c, []string{"split-diffs", "unified-diffs"}, "Split", "Unified").Label("Diff layout")
 }
 
 func (a *app) fileThreads(c *ui.Context, file string) {

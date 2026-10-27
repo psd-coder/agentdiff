@@ -325,13 +325,10 @@ func (a *app) walkPage(c *ui.Context, id string) {
 			})
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.rev.WalkTitle(w)).FontSize(22).Bold().Grow(1).Shrink(1)
-				if run != nil || a.queued(w.ID) {
-					ui.Button(c, "Stop").OnClick(func() { a.stopWalk(w.ID) })
-				} else {
-					ui.Button(c, "Regenerate").OnClick(func() { a.regenerate(w.ID) })
-				}
-				ui.Button(c, "Log").Tooltip("What the agent did for this walkthrough").OnClick(func() { a.showLog(w.ID) })
-				ui.Button(c, "Delete").Tooltip("Delete this walkthrough and the ones under it").OnClick(func() { a.deleteWalk(w) })
+				a.cmdButton(c, "stop-walk", w.ID, "Stop")
+				a.cmdButton(c, "regenerate-walk", w.ID, "Regenerate")
+				a.cmdButton(c, "walk-log", w.ID, "Log")
+				a.cmdButton(c, "delete-walk", w.ID, "Delete")
 			})
 			if s, ok := a.rev.StepOf(w); ok && w.Question != "" {
 				ui.Text(c, "About the step: "+s.Title).FontSize(12).TextColor(t.TextMuted)

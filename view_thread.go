@@ -32,10 +32,8 @@ func (a *app) threadPanel(c *ui.Context) {
 					a.goTo(target)
 				}
 			}
-			if th.Agent != "" {
-				ui.Button(c, "Log").Tooltip("What the agent did in this thread").OnClick(func() { a.showLog(th.ID) })
-			}
-			ui.Button(c, "Close").Tooltip("Escape").OnClick(a.closeThread)
+			a.cmdButton(c, "thread-log", th.ID, "Log")
+			a.cmdButton(c, "close-thread", th.ID, "Close")
 		})
 		if th.Anchor.Quote != "" && th.Anchor.Kind == review.AnchorLines {
 			ui.Text(c, strings.TrimRight(th.Anchor.Quote, "\n")).Font("monospace").FontSize(12).MaxLines(8).
@@ -53,21 +51,10 @@ func (a *app) threadPanel(c *ui.Context) {
 		})
 		a.composer(c, th)
 		ui.Row(c).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-			included := !th.Excluded
-			if ui.Checkbox(c, &included, "In feedback").Changed() {
-				th.Excluded = !included
-				a.saveReview()
-			}
-			if ui.Checkbox(c, &th.Resolved, "Resolved").Changed() {
-				a.saveReview()
-			}
+			a.cmdCheckbox(c, "include-thread", "exclude-thread", th.ID, "In feedback")
+			a.cmdCheckbox(c, "resolve-thread", "reopen-thread", th.ID, "Resolved")
 			ui.Spacer(c)
-			ui.Button(c, "Delete").OnClick(func() {
-				a.stopThread(th)
-				a.rev.DeleteThread(th.ID)
-				a.thread = ""
-				a.saveReview()
-			})
+			a.cmdButton(c, "delete-thread", th.ID, "Delete")
 		})
 	})
 }
@@ -139,9 +126,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 		empty := strings.TrimSpace(draft) == ""
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Cmd+Enter asks the agent").FontSize(11).TextColor(t.TextMuted).Grow(1)
-			if busy {
-				ui.Button(c, "Stop").OnClick(func() { a.stopThread(th) })
-			}
+			a.cmdButton(c, "stop-thread", th.ID, "Stop")
 			ui.Button(c, "Comment").Disabled(empty).Tooltip("Add to the feedback without asking the agent").OnClick(func() {
 				a.comment(th, draft)
 				a.drafts[th.ID] = ""

@@ -46,10 +46,8 @@ func (a *app) logPanel(c *ui.Context) {
 				}
 				ui.Text(c, label).FontSize(12).TextColor(t.TextMuted).Tooltip(tip)
 			}
-			if a.logTarget != "" {
-				ui.Button(c, "Show all").OnClick(func() { a.logTarget = "" })
-			}
-			ui.Button(c, "Close").OnClick(func() { a.logOpen = false })
+			a.cmdButton(c, "log-show-all", "", "Show all")
+			a.cmdButton(c, "close-log", "", "Close")
 		})
 		ui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Gap(6).Padding(10, 12).Children(func() {

@@ -102,6 +102,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Shift+C, Cmd+Shift+F | Move the keyboard focus to the list of changes or to the list of files |
 | Cmd+L | Agent log |
 | Cmd+R | Read the changes again |
+| Cmd+Shift+P | Command palette: type part of a command's name and press Return to run it |
 | Cmd+P | Opens the project list |
 | Cmd+B | Opens the branch list |
 | Cmd+Shift+B | Compare |
@@ -114,6 +115,8 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Backspace or Delete in the project list | Removes the highlighted project from the list, after you confirm |
 
 The menu bar lists these under File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog.
+
+The command palette lists the commands that apply where you are: the menu bar's commands, and the actions of the open page and side panel, as Mark File as Viewed on a file page or Resolve Thread while a thread is open. While the field is empty, the 5 commands you ran last come first. The buttons of the window, the menu bar and the palette run the same commands.
 
 ## Configuration
 

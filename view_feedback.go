@@ -39,17 +39,9 @@ func (a *app) feedbackPage(c *ui.Context) {
 				ui.Checkbox(c, &a.exportDone, "Include resolved threads")
 			})
 			ui.Row(c).Gap(8).Children(func() {
-				ui.PrimaryButton(c, "Copy feedback").Disabled(n == 0).OnClick(func() {
-					c.WriteClipboard(a.feedback())
-					c.Toast("Feedback copied")
-				})
-				ui.Button(c, "Save to file…").Disabled(n == 0).OnClick(func() { a.saveFeedback(c.Services()) })
-				if a.savedPath != "" {
-					ui.Button(c, "Copy prompt for agent").Tooltip(agentPrompt(a.savedPath)).OnClick(func() {
-						c.WriteClipboard(agentPrompt(a.savedPath))
-						c.Toast("Prompt copied")
-					})
-				}
+				a.cmdPrimaryButton(c, "copy-feedback", "", "Copy feedback")
+				a.cmdButton(c, "save-feedback", "", "Save to file…")
+				a.cmdButton(c, "copy-agent-prompt", "", "Copy prompt for agent").Tooltip(agentPrompt(a.savedPath))
 			})
 			if a.savedPath != "" {
 				ui.Text(c, "Saved to "+a.savedPath).FontSize(12).TextColor(t.TextMuted).Selectable()

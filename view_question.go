@@ -61,13 +61,10 @@ func (a *app) questionPanel(c *ui.Context) {
 			}
 			ui.Text(c, title).Bold().SingleLine().Shrink(1).Grow(1).Tooltip(title)
 			if w != nil {
-				ui.Button(c, "Log").OnClick(func() { a.showLog(w.ID) })
-				ui.Button(c, "Open as page").OnClick(func() {
-					a.closeQuestion()
-					a.goTo("walk:" + w.ID)
-				})
+				a.cmdButton(c, "question-log", w.ID, "Log")
+				a.cmdButton(c, "question-page", w.ID, "Open as page")
 			}
-			ui.Button(c, "Close").Tooltip("Escape").OnClick(a.closeQuestion)
+			a.cmdButton(c, "close-question", "", "Close")
 		})
 		ui.Text(c, "About: "+a.targetLabel(target.parent, target.step)).FontSize(12).TextColor(t.TextMuted).
 			SingleLine().Padding(6, 12).BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
@@ -90,12 +87,7 @@ func (a *app) questionPanel(c *ui.Context) {
 		if w != nil {
 			ui.Row(c).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
 				ui.Text(c, writtenBy(w.Agent, w.Model, w.Generated.Format("Jan 2 15:04"))).FontSize(11).TextColor(t.TextMuted).Grow(1)
-				ui.Button(c, "Delete").OnClick(func() {
-					a.stopWalk(w.ID)
-					rev.DeleteWalk(w.ID)
-					a.closeQuestion()
-					a.saveReview()
-				})
+				a.cmdButton(c, "delete-question", w.ID, "Delete")
 			})
 		}
 	})

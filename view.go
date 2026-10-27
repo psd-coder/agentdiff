@@ -14,6 +14,7 @@ import (
 )
 
 func (a *app) view(c *ui.Context) {
+	a.runQueued(c)
 	if a.repo == nil {
 		a.welcome(c)
 		return
@@ -50,6 +51,7 @@ func (a *app) view(c *ui.Context) {
 	a.settingsModal(c)
 	a.compareModal(c)
 	a.shortcutsModal(c)
+	a.paletteModal(c)
 }
 
 func (a *app) sidebar(c *ui.Context) {
@@ -195,19 +197,10 @@ func (a *app) reviewNav(c *ui.Context) {
 			}
 		})
 		sidebarHeading(c, "Files", func() {
-			layout := 1
-			if a.cfg.FlatFiles {
-				layout = 0
-			}
-			if ui.Segmented(c, &layout, "Flat", "Grouped").Label("List files").FontSize(11).Changed() {
-				a.cfg.FlatFiles = layout == 0
-				a.saveConfig()
-			}
+			a.cmdSegmented(c, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
 		})
 		ui.Row(c).Padding(0, 8, 4, 8).Children(func() {
-			if ui.Checkbox(c, &a.cfg.HideViewed, "Hide viewed files").FontSize(12).Changed() {
-				a.saveConfig()
-			}
+			a.cmdCheckbox(c, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
 		})
 		if a.cfg.FlatFiles {
 			for _, f := range a.files {

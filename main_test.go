@@ -1398,3 +1398,83 @@ func TestFocusAndShortcuts(t *testing.T) {
 		t.Error("Escape left the dialog open")
 	}
 }
+
+// TestCommandPalette runs commands from the palette: only the ones that
+// apply on the page show, and the ones used last come first.
+func TestCommandPalette(t *testing.T) {
+	a := newTestApp(t)
+	a.page = "file:api/handler.go"
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	open := func() {
+		t.Helper()
+		var walk func(items []*mygo.MenuItem)
+		walk = func(items []*mygo.MenuItem) {
+			for _, it := range items {
+				if it.Label == "Command Palette…" {
+					it.Click(it, nil)
+				}
+				walk(it.Submenu)
+			}
+		}
+		walk(a.menu().Items())
+		tt.Frame()
+		tt.Frame()
+		if !a.paletteOpen {
+			t.Fatal("palette closed")
+		}
+	}
+	titles := func() []string {
+		var out []string
+		for _, cm := range a.paletteCommands() {
+			out = append(out, cm.title)
+		}
+		return out
+	}
+
+	open()
+	snapshot(t, tt, "palette")
+	if got := titles(); !slices.Contains(got, "Mark File as Viewed") || slices.Contains(got, "Mark File as Not Viewed") ||
+		slices.Contains(got, "Close Thread") || slices.Contains(got, "Command Palette…") {
+		t.Errorf("file page commands = %q", got)
+	}
+	tt.Type("as viewed")
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.paletteOpen || !a.rev.Viewed["api/handler.go"] {
+		t.Fatalf("open = %v, viewed = %v", a.paletteOpen, a.rev.Viewed)
+	}
+	if got := a.store.LoadConfig().RecentCommands; len(got) == 0 || got[0] != "mark-viewed" {
+		t.Errorf("recent = %q", got)
+	}
+
+	// A click on a row runs it, and it comes first next time.
+	open()
+	tt.Type("agent log")
+	tt.Frame()
+	if err := tt.Click("Agent Log"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.paletteOpen || !a.logOpen {
+		t.Fatalf("open = %v, log = %v", a.paletteOpen, a.logOpen)
+	}
+	open()
+	if got := titles(); got[0] != "Agent Log" {
+		t.Errorf("recent first: %q", got)
+	}
+	// Escape closes the palette, and only it.
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.paletteOpen || !a.logOpen {
+		t.Errorf("Escape: open = %v, log = %v", a.paletteOpen, a.logOpen)
+	}
+
+	a.goTo("overview")
+	tt.Frame()
+	open()
+	if got := titles(); slices.Contains(got, "Mark File as Viewed") || slices.Contains(got, "Comment on File") {
+		t.Errorf("overview commands = %q", got)
+	}
+}

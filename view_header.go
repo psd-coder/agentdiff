@@ -23,19 +23,19 @@ func (a *app) toolbar(c *ui.Context) {
 			label += " · " + cfg.Model
 		}
 		ui.Text(c, label).FontSize(12).TextColor(t.TextMuted).SingleLine()
-		ui.Button(c, "Agent log").Tooltip("Every call to the agent: command, prompt, tool calls, tokens (Cmd+L)").OnClick(a.toggleLog)
-		ui.Button(c, "Refresh").Tooltip("Read the changes again (Cmd+R)").OnClick(a.refresh)
-		ui.Button(c, "Settings").Tooltip("Cmd+,").OnClick(a.openSettings)
+		a.cmdButton(c, "agent-log", "", "Agent log")
+		a.cmdButton(c, "refresh", "", "Refresh")
+		a.cmdButton(c, "settings", "", "Settings")
 		n := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
-		ui.PrimaryButton(c, fmt.Sprintf("Feedback (%d)", n)).OnClick(func() { a.goTo("feedback") })
+		a.cmdPrimaryButton(c, "go-feedback", "", fmt.Sprintf("Feedback (%d)", n))
 	})
 }
 
 func (a *app) projectPicker(c *ui.Context) {
 	t := c.Theme()
-	anchor := pickerButton(c, folderIcon, a.repo.Name(), "", a.projectsOpen).Tooltip(a.repo.Root + " (Cmd+P)").Label("Project")
+	anchor := pickerButton(c, folderIcon, a.repo.Name(), "", a.projectsOpen).Tooltip(a.repo.Root + " (" + keyLabel(a.cmd("switch-project").keys) + ")").Label("Project")
 	if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.projectsOpen {
-		a.toggleProjects()
+		a.runOn(c, "switch-project", "")
 	}
 	if a.refocus == "project" {
 		anchor.Focus()
@@ -141,16 +141,17 @@ func (a *app) branchPicker(c *ui.Context) {
 	label, detail := a.branchLabel()
 	r := t.Radius
 	ui.Row(c).AlignItems(ui.Stretch).Children(func() {
-		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip("Branch to review (Cmd+B)")
+		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip("Branch to review (" + keyLabel(a.cmd("switch-branch").keys) + ")")
 		if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.branchesOpen {
-			a.toggleBranches()
+			a.runOn(c, "switch-branch", "")
 		}
 		if a.refocus == "branch" {
 			anchor.Focus()
 			a.refocus = ""
 		}
-		iconButton(c, compareIcon, "Compare with another base, or review a custom range").
-			PaddingX(9).Radius(0, r, r, 0).MarginStart(-1).OnClick(a.openCompare)
+		compare := a.cmd("compare")
+		iconButton(c, compareIcon, compare.tip).Tooltip(compare.tooltip()).
+			PaddingX(9).Radius(0, r, r, 0).MarginStart(-1).OnClick(func() { a.runOn(c, "compare", "") })
 		ui.Popover(c, anchor, &a.branchesOpen, func() { a.branchList(c) })
 	})
 }
