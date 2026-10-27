@@ -208,9 +208,8 @@ func (a *app) overviewIntro(c *ui.Context, agentName string) {
 		ui.Text(c, "Get a walkthrough of these changes").FontSize(16).Bold()
 		ui.Text(c, agentName+" reads the changes in read-only mode and walks you through them in a few short steps, each with the code that shows it. Go deeper into any step, or ask about it, and you get a walkthrough one level closer to the code. It also answers your checklist and groups the files in the order to review them.").TextColor(t.TextMuted)
 		ui.Text(c, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the questions in Settings.").FontSize(12).TextColor(t.TextMuted)
-		ui.Row(c).Gap(8).Children(func() {
+		ui.Row(c).Children(func() {
 			a.cmdPrimaryButton(c, "explain", "", "Explain changes with "+agentName)
-			a.cmdButton(c, "settings", "", "Settings")
 		})
 	})
 }
