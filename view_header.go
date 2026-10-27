@@ -84,7 +84,7 @@ func (a *app) projectPicker(c *ui.Context) {
 	anchor := pickerButton(c, folderIcon, a.repo.Name(), "").Tooltip(a.repo.Root).Label("Project").
 		OnClick(func() { a.projectsOpen = !a.projectsOpen })
 	ui.Popover(c, anchor, &a.projectsOpen, func() {
-		ui.Column(c).Width(360).Gap(2).Children(func() {
+		ui.Column(c).MinWidth(360).MaxWidth(480).FillWidth().Gap(2).Children(func() {
 			ui.Text(c, "Projects").FontSize(11).Bold().TextColor(t.TextMuted).Padding(4, 8)
 			for _, p := range a.cfg.Recent {
 				current := p == a.repo.Root
@@ -167,7 +167,7 @@ func (a *app) branchList(c *ui.Context) {
 			trees[w.Branch] = w.Path
 		}
 	}
-	ui.Column(c).Width(340).Gap(4).Children(func() {
+	ui.Column(c).MinWidth(340).MaxWidth(560).FillWidth().Gap(4).Children(func() {
 		ui.SearchField(c, &a.branchQuery).Padding(6, menuInset-1).Gap(menuGap).Placeholder("Filter branches").Label("Filter branches").AutoFocus()
 		ui.Scroll(c).MaxHeight(380).Children(func() {
 			ui.Column(c).Gap(2).Children(func() {
