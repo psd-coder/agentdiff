@@ -1000,7 +1000,7 @@ func TestKeyboardNavigation(t *testing.T) {
 		}
 	}
 	walk(a.menu().Items())
-	if seen["CmdOrCtrl+["] != "Back" {
+	if seen["CmdOrCtrl+["] != "Back" || seen["CmdOrCtrl+P"] != "Switch Project…" || seen["CmdOrCtrl+B"] != "Switch Branch…" {
 		t.Errorf("shortcuts = %v", seen)
 	}
 }
@@ -1299,5 +1299,50 @@ func TestGroupItem(t *testing.T) {
 	tt.Frame()
 	if shows(tt, "cache.go") {
 		t.Errorf("Left did not hide the files: %q", tt.Texts())
+	}
+}
+
+// TestPickerShortcuts opens the project and branch lists from the menu
+// bar's shortcuts, with the keyboard focus in them.
+func TestPickerShortcuts(t *testing.T) {
+	a := newTestApp(t)
+	git(t, a.repo.Root, "branch", "docs")
+	a.openRepo(a.repo.Root)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	click := func(label string) {
+		var walk func(items []*mygo.MenuItem)
+		walk = func(items []*mygo.MenuItem) {
+			for _, it := range items {
+				if it.Label == label {
+					it.Click(it, nil)
+				}
+				walk(it.Submenu)
+			}
+		}
+		walk(a.menu().Items())
+		tt.Frame()
+	}
+
+	click("Switch Branch…")
+	if !a.branchesOpen {
+		t.Fatal("branch list closed")
+	}
+	tt.Type("docs")
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.branchesOpen || a.head != "docs" {
+		t.Errorf("open = %v, branch = %q", a.branchesOpen, a.head)
+	}
+
+	click("Switch Project…")
+	if !a.projectsOpen {
+		t.Fatal("project list closed")
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.projectsOpen {
+		t.Error("Escape left the project list open")
 	}
 }

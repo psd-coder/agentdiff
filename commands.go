@@ -18,6 +18,8 @@ func (a *app) menu() *mygo.Menu {
 		{Role: mygo.RoleAppMenu},
 		{Label: "File", Submenu: []*mygo.MenuItem{
 			{Label: "Open Repository…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) { a.chooseRepo() }},
+			item("Switch Project…", "CmdOrCtrl+P", a.toggleProjects),
+			item("Switch Branch…", "CmdOrCtrl+B", a.toggleBranches),
 			item("Compare…", "CmdOrCtrl+Shift+B", a.openCompare),
 			item("Refresh", "CmdOrCtrl+R", a.refresh),
 			mygo.Separator(),

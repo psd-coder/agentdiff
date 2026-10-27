@@ -33,7 +33,7 @@ func (a *app) toolbar(c *ui.Context) {
 
 func (a *app) projectPicker(c *ui.Context) {
 	t := c.Theme()
-	anchor := pickerButton(c, folderIcon, a.repo.Name(), "", a.projectsOpen).Tooltip(a.repo.Root).Label("Project")
+	anchor := pickerButton(c, folderIcon, a.repo.Name(), "", a.projectsOpen).Tooltip(a.repo.Root + " (Cmd+P)").Label("Project")
 	if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.projectsOpen {
 		a.toggleProjects()
 	}
@@ -141,7 +141,7 @@ func (a *app) branchPicker(c *ui.Context) {
 	label, detail := a.branchLabel()
 	r := t.Radius
 	ui.Row(c).AlignItems(ui.Stretch).Children(func() {
-		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip("Branch to review")
+		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip("Branch to review (Cmd+B)")
 		if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.branchesOpen {
 			a.toggleBranches()
 		}

@@ -101,6 +101,8 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Option+Cmd+Down, Option+Cmd+Up | Next and previous file, in review order |
 | Cmd+L | Agent log |
 | Cmd+R | Read the changes again |
+| Cmd+P | Opens the project list |
+| Cmd+B | Opens the branch list |
 | Cmd+Shift+B | Compare |
 | Cmd+, | Settings |
 | Cmd+Enter | Sends the question or comment you are typing |
