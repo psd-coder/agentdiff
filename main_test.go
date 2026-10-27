@@ -288,7 +288,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	}
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
-	pump(t, a, "the reload", func() bool { return !a.loading })
+	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if a.movedTo != sha || a.archived == nil || !a.rev.Empty() || !tt.HasText("Earlier review") || !tt.HasText("Open commit") {
@@ -298,7 +298,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	if err := tt.Click("Open commit"); err != nil {
 		t.Fatal(err)
 	}
-	pump(t, a, "the commit", func() bool { return !a.loading })
+	pump(t, a, "the commit", func() bool { return !a.loading && !a.switching })
 	if a.scope.Commit != sha || a.rev.Overview == nil || a.rev.Overview.PatchID != rev.Overview.PatchID || a.stale() {
 		t.Fatalf("scope %+v, review %+v, stale %v", a.scope, a.rev.Overview, a.stale())
 	}
@@ -307,7 +307,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 		t.Errorf("texts %q", tt.Texts())
 	}
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	pump(t, a, "the uncommitted changes", func() bool { return !a.loading })
+	pump(t, a, "the uncommitted changes", func() bool { return !a.loading && !a.switching })
 	if !a.rev.Empty() || a.archived != nil {
 		t.Errorf("the uncommitted scope kept the review: %+v, archived %+v", a.rev, a.archived)
 	}
@@ -334,7 +334,7 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	}
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
-	pump(t, a, "the reload", func() bool { return !a.loading })
+	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if a.archived == nil || a.movedTo != "" || a.probably != sha {
@@ -343,7 +343,7 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	if err := tt.Click("Move review to the commit"); err != nil {
 		t.Fatal(err)
 	}
-	pump(t, a, "the commit", func() bool { return !a.loading })
+	pump(t, a, "the commit", func() bool { return !a.loading && !a.switching })
 	if a.scope.Commit != sha || a.rev.Overview == nil || !a.stale() {
 		t.Fatalf("scope %+v, review %+v, stale %v", a.scope, a.rev.Overview, a.stale())
 	}
@@ -370,7 +370,7 @@ func TestArchiveUncommitted(t *testing.T) {
 	reload := func(what string) *ui.Tester {
 		t.Helper()
 		a.refresh()
-		pump(t, a, what, func() bool { return !a.loading })
+		pump(t, a, what, func() bool { return !a.loading && !a.switching })
 		tt := ui.NewTester(a.view, 1300, 800)
 		tt.Frame()
 		return tt
@@ -1657,5 +1657,41 @@ func TestShortcutSettings(t *testing.T) {
 	a.resetKeys()
 	if len(a.cfg.Keys) != 0 || menuKeys("refresh") != "CmdOrCtrl+R" {
 		t.Errorf("reset: %v, %q", a.cfg.Keys, menuKeys("refresh"))
+	}
+}
+
+// TestScopeShowsAtOnce keeps the shown changes while the next ones load,
+// then shows them with the files of the code snippets already read.
+func TestScopeShowsAtOnce(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
+		{Title: "A", Text: "a", Refs: []review.Ref{{File: "api/handler.go", Start: 1, End: 2}}},
+	}}}
+	a.queue = make(chan func(), 64)
+	a.reload()
+	if !a.switching || a.loading || len(a.files) == 0 {
+		t.Fatalf("switching %v, loading %v, files %d", a.switching, a.loading, len(a.files))
+	}
+	(<-a.queue)()
+	if a.switching || len(a.files) == 0 {
+		t.Fatalf("switching %v, files %d", a.switching, len(a.files))
+	}
+	if d := a.diffs["api/handler.go"]; d == nil || d.state == nil {
+		t.Error("the file of the snippet is not read with the changes")
+	}
+	if d := a.diffs["cache/cache.go"]; d == nil || !d.loading {
+		t.Error("the other file is read before the changes show")
+	}
+
+	// A new scope shows once its changes are read.
+	old := a.scope
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits[0].SHA}
+	a.setScope(commit)
+	if a.scope != old || a.scopeID != scopeID(commit) || !a.switching {
+		t.Fatalf("scope %+v, id %q, switching %v", a.scope, a.scopeID, a.switching)
+	}
+	pump(t, a, "the commit", func() bool { return !a.switching })
+	if a.scope != commit || a.page != "overview" {
+		t.Errorf("scope %+v, page %q", a.scope, a.page)
 	}
 }

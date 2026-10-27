@@ -210,18 +210,21 @@ func (a *app) extraOf(path string) *extraFile {
 	a.async(func() {
 		_, text, err := r.Contents(context.Background(), s, gitx.FileChange{Path: path, Status: gitx.StatusAdded})
 		a.update(func() {
-			if gen != a.gen {
-				return
+			if gen == a.gen {
+				*f = *newExtraFile(text, err)
 			}
-			f.loading = false
-			if err != nil {
-				f.err = err.Error()
-				return
-			}
-			f.lines = strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 		})
 	})
 	return f
+}
+
+// newExtraFile is a file outside the changes, read as text, or failing
+// with err.
+func newExtraFile(text string, err error) *extraFile {
+	if err != nil {
+		return &extraFile{err: err.Error()}
+	}
+	return &extraFile{lines: strings.Split(strings.TrimSuffix(text, "\n"), "\n")}
 }
 
 func (a *app) refView(c *ui.Context, r review.Ref) {

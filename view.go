@@ -156,7 +156,12 @@ func (a *app) scopeHeader(c *ui.Context) {
 		del += f.Deletions
 	}
 	ui.Column(c).Gap(2).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, a.scopeLabel()).Bold().SingleLine().Tooltip(a.scopeLabel())
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, a.scopeLabel()).Bold().SingleLine().Shrink(1).Tooltip(a.scopeLabel())
+			if a.switching {
+				ui.Spinner(c).Size(12, 12).Label("Reading changes")
+			}
+		})
 		if len(a.files) == 0 {
 			return
 		}

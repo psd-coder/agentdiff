@@ -68,8 +68,12 @@ type app struct {
 	diffstat string
 	loading  bool
 	loadErr  string
-	diffs    map[string]*fileDiff
-	gen      int
+	// shown is set once the window shows the changes of a scope, which
+	// stay while the next scope loads, and switching while it does.
+	shown     bool
+	switching bool
+	diffs     map[string]*fileDiff
+	gen       int
 	// patch identifies the changes of the scope once patchKnown, see
 	// gitx.Repo.PatchID.
 	patch      string
@@ -234,7 +238,7 @@ func (a *app) openRepo(path string) {
 func (a *app) closeRepo() {
 	a.repo = nil
 	a.gen++
-	a.projectsOpen = false
+	a.projectsOpen, a.shown = false, false
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff")
 	}
@@ -428,30 +432,56 @@ func (a *app) reviewOf(s gitx.Scope) *review.Review {
 }
 
 func (a *app) setScope(s gitx.Scope) {
-	a.scope, a.scopeID = s, scopeID(s)
-	a.rev = a.reviewOf(s)
-	a.rev.Scope = s
+	a.scopeID = scopeID(s)
+	a.load(s, true)
+}
+
+// reload reads the changes of the scope again, keeping the review.
+func (a *app) reload() { a.load(a.scope, false) }
+
+// enterScope makes s, with its review rev, the scope the window shows.
+func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
+	a.scope, a.rev = s, rev
 	a.resetNav()
 	a.thread = ""
 	a.exportDone, a.savedPath = false, ""
 	a.adoptedFrom = nil
-	a.reload()
 }
 
-// reload reads the changes of the scope again, keeping the review.
-func (a *app) reload() {
+// contents is a file read for a diff or a code snippet.
+type contents struct {
+	change           gitx.FileChange
+	oldText, newText string
+	err              error
+}
+
+// load reads the changes of s, with the files the first page shows, and
+// shows them all at once, so the page does not grow as they come. Until
+// then the window keeps what it shows, under a spinner. A new scope
+// opens with its own review on its overview.
+func (a *app) load(s gitx.Scope, fresh bool) {
 	a.gen++
-	gen, r, s := a.gen, a.repo, a.scope
-	a.loading, a.loadErr = true, ""
-	a.files, a.diffstat = nil, ""
-	a.patch, a.patchKnown, a.movedTo, a.probably, a.fileIDs = "", false, "", "", nil
-	a.diffs = map[string]*fileDiff{}
-	a.extra = map[string]*extraFile{}
-	written, empty := "", a.rev.Empty()
+	gen, r := a.gen, a.repo
+	rev, page := a.rev, a.page
+	if fresh {
+		rev, page = a.reviewOf(s), "overview"
+		rev.Scope = s
+	}
+	if a.shown && a.rev != nil && a.rev.Repo == r.Root {
+		a.switching = true
+	} else {
+		if fresh {
+			a.enterScope(s, rev)
+		}
+		a.clearChanges()
+		a.loading = true
+	}
+	written, empty := "", rev.Empty()
 	var writtenFiles []string
-	if ov := a.rev.Overview; ov != nil {
+	if ov := rev.Overview; ov != nil {
 		written, writtenFiles = ov.PatchID, ov.WrittenFiles()
 	}
+	first := a.firstPaint(rev, page, fresh)
 	uncommitted := s.Kind == gitx.ScopeUncommitted
 	a.async(func() {
 		ctx := context.Background()
@@ -489,15 +519,32 @@ func (a *app) reload() {
 				from = &src
 			}
 		}
+		// The files of the first page, read before it shows.
+		read := map[string]contents{}
+		if err == nil {
+			for _, p := range first {
+				f := gitx.FileChange{Path: p, Status: gitx.StatusAdded}
+				if i := slices.IndexFunc(files, func(f gitx.FileChange) bool { return f.Path == p }); i >= 0 {
+					f = files[i]
+				}
+				oldText, newText, cerr := r.Contents(ctx, s, f)
+				read[p] = contents{f, oldText, newText, cerr}
+			}
+		}
 		a.update(func() {
 			if gen != a.gen {
 				return
 			}
-			a.loading = false
+			if fresh && !a.loading {
+				a.enterScope(s, rev)
+			}
+			a.clearChanges()
+			a.loading, a.switching = false, false
 			if err != nil {
 				a.loadErr = err.Error()
 				return
 			}
+			a.shown = true
 			a.files, a.diffstat = files, stat
 			a.patch, a.patchKnown, a.movedTo, a.probably, a.fileIDs = fp.Patch, perr == nil, movedTo, probably, fp.Files
 			a.archived = archived
@@ -516,6 +563,13 @@ func (a *app) reload() {
 			for _, f := range files {
 				a.diffs[f.Path] = &fileDiff{change: f, loading: true}
 			}
+			for p, c := range read {
+				if a.diffs[p] != nil {
+					a.setContents(c.change, c.oldText, c.newText, c.err)
+				} else {
+					a.extra[p] = newExtraFile(c.newText, c.err)
+				}
+			}
 			if f, ok := strings.CutPrefix(a.page, "file:"); ok && a.diffs[f] == nil {
 				a.page = "overview"
 			}
@@ -524,6 +578,9 @@ func (a *app) reload() {
 			return
 		}
 		for _, f := range files {
+			if _, ok := read[f.Path]; ok {
+				continue
+			}
 			oldText, newText, cerr := r.Contents(ctx, s, f)
 			a.update(func() {
 				if gen != a.gen {
@@ -533,6 +590,51 @@ func (a *app) reload() {
 			})
 		}
 	})
+}
+
+// clearChanges forgets the changes of the scope, which load reads.
+func (a *app) clearChanges() {
+	a.loadErr = ""
+	a.files, a.diffstat = nil, ""
+	a.patch, a.patchKnown, a.movedTo, a.probably, a.fileIDs = "", false, "", "", nil
+	a.diffs = map[string]*fileDiff{}
+	a.extra = map[string]*extraFile{}
+}
+
+// firstPaint are the files the page shows first: the code snippets of
+// an overview or a walkthrough, the file of a file page, the files of a
+// group page.
+func (a *app) firstPaint(rev *review.Review, page string, fresh bool) []string {
+	var paths []string
+	walk := func(w *review.Walkthrough) {
+		if w == nil {
+			return
+		}
+		for _, s := range w.Steps {
+			for _, r := range s.Refs {
+				paths = append(paths, r.File)
+			}
+		}
+		for _, c := range w.Checklist {
+			for _, r := range c.Refs {
+				paths = append(paths, r.File)
+			}
+		}
+	}
+	switch {
+	case page == "overview" && rev.Overview != nil:
+		walk(rev.Overview.Walk)
+	case strings.HasPrefix(page, "walk:"):
+		if w := rev.Walk(strings.TrimPrefix(page, "walk:")); w != nil {
+			walk(w.Content)
+		}
+	case strings.HasPrefix(page, "file:"):
+		paths = append(paths, strings.TrimPrefix(page, "file:"))
+	case strings.HasPrefix(page, "group:") && !fresh:
+		paths = append(paths, a.groupFiles(strings.TrimPrefix(page, "group:"))...)
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths)
 }
 
 // adopt takes over the saved review of src, which was written for the
