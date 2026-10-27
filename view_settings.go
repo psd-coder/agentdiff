@@ -130,9 +130,10 @@ func (a *app) settingsModal(c *ui.Context) {
 	t := c.Theme()
 	ui.DialogBase(c, &f.open, func(back, panel ui.Element) {
 		// The top stays in place as the tab changes, and the dialog is as
-		// tall as the tab needs, up to the window's height.
+		// tall as the tab needs, leaving as much room under it as above.
 		_, h := c.Size()
-		back.Background(ui.RGBA(0, 0, 0, 0.4)).Justify(ui.Start).Padding(max(48, h*0.15), 16, 20, 16)
+		gap := max(48, h*0.15)
+		back.Background(ui.RGBA(0, 0, 0, 0.4)).Justify(ui.Start).Padding(gap, 16, gap, 16)
 		panel.Width(640).Shrink(1).MinHeight(0).Padding(20).Radius(10).Background(t.Background).
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
 		ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {

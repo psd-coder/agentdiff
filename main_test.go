@@ -1717,3 +1717,20 @@ func TestScopeLoadsInOrder(t *testing.T) {
 		t.Errorf("scope %+v, id %q", a.scope, a.scopeID)
 	}
 }
+
+// TestSettingsRoom leaves as much room under a tall settings dialog as
+// above it.
+func TestSettingsRoom(t *testing.T) {
+	a := newTestApp(t)
+	tt := ui.NewTester(a.view, 1300, 800)
+	a.openSettings()
+	a.settings.tab = shortcutsTab
+	tt.Frame()
+	snapshot(t, tt, "settings-room")
+	// 15% of the window above the dialog, and Done about 26 points
+	// inside it: the padding of the dialog and of the button.
+	done, _ := tt.Find("Done")
+	if below := 800 - (done.Y + done.H); below < 140 || below > 152 {
+		t.Errorf("room under Done %v, want about 146", below)
+	}
+}
