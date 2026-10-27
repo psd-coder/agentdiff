@@ -3,6 +3,7 @@ package gitx
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -256,29 +257,55 @@ func mustEval(t *testing.T, p string) string {
 	return got
 }
 
-func TestPatchIDFollowsCommit(t *testing.T) {
+func TestFingerprintFollowsCommit(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.write("a.txt", "one\ntwo\n")
+	tr.write("old.txt", "old\n")
 	tr.commit("init")
 	r := tr.open()
 	ctx := context.Background()
 	uncommitted := Scope{Kind: ScopeUncommitted}
-	if id, err := r.PatchID(ctx, uncommitted); err != nil || id != "" {
-		t.Fatalf("clean tree: id %q, err %v", id, err)
+	if fp, err := r.Fingerprint(ctx, uncommitted); err != nil || fp.Patch != "" || len(fp.Files) != 0 {
+		t.Fatalf("clean tree: %+v, err %v", fp, err)
 	}
 	tr.write("a.txt", "one\nTWO\nthree\n")
-	tr.write("dir/new.txt", "new\n")
-	before, err := r.PatchID(ctx, uncommitted)
-	if err != nil || before == "" {
-		t.Fatalf("uncommitted: id %q, err %v", before, err)
+	tr.write("dir/new file.txt", "new\n")
+	tr.write("pic.bin", "\x00\x01")
+	if err := os.Remove(filepath.Join(tr.dir, "old.txt")); err != nil {
+		t.Fatal(err)
+	}
+	before, err := r.Fingerprint(ctx, uncommitted)
+	if err != nil || before.Patch == "" {
+		t.Fatalf("uncommitted: %+v, err %v", before, err)
+	}
+	if len(before.Files) != 4 || before.Files["a.txt"] == "" || before.Files["dir/new file.txt"] == "" || before.Files["old.txt"] == "" {
+		t.Fatalf("files = %v", before.Files)
+	}
+	if _, ok := before.Files["pic.bin"]; !ok {
+		t.Errorf("binary file missing: %v", before.Files)
 	}
 	sha := tr.commit("change")
-	after, err := r.PatchID(ctx, Scope{Kind: ScopeCommit, Commit: sha})
-	if err != nil || after != before {
-		t.Errorf("commit id %q, uncommitted id %q, err %v", after, before, err)
+	after, err := r.Fingerprint(ctx, Scope{Kind: ScopeCommit, Commit: sha})
+	if err != nil || after.Patch != before.Patch || !maps.Equal(after.Files, before.Files) {
+		t.Errorf("commit %+v, uncommitted %+v, err %v", after, before, err)
 	}
 	ids, err := r.CommitPatchIDs(ctx, "", "", 10)
-	if err != nil || ids[before] != sha {
+	if err != nil || ids[before.Patch] != sha {
 		t.Errorf("commit ids = %v, err %v", ids, err)
+	}
+}
+
+func TestChunkPath(t *testing.T) {
+	for _, tc := range []struct{ diff, want string }{
+		{"diff --git a/x.go b/x.go\nindex 1..2 100644\n--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n", "x.go"},
+		{"diff --git a/gone.go b/gone.go\ndeleted file mode 100644\n--- a/gone.go\n+++ /dev/null\n@@ -1 +0,0 @@\n-a\n", "gone.go"},
+		{"diff --git a/old.go b/new.go\nsimilarity index 100%\nrename from old.go\nrename to new.go\n", "new.go"},
+		{"diff --git a/p.png b/p.png\nindex 1..2 100644\nBinary files a/p.png and b/p.png differ\n", "p.png"},
+		{"diff --git \"a/sp\\303\\251.go\" \"b/sp\\303\\251.go\"\n--- \"a/sp\\303\\251.go\"\n+++ \"b/sp\\303\\251.go\"\n@@ -1 +1 @@\n", "spé.go"},
+	} {
+		chunks := splitPatch([]byte(tc.diff + tc.diff))
+		if len(chunks) != 2 || chunks[0].path != tc.want || string(chunks[1].text) != tc.diff {
+			t.Errorf("%q: chunks %+v, want path %q", tc.diff, chunks, tc.want)
+		}
 	}
 }

@@ -226,3 +226,24 @@ func TestOverviewStale(t *testing.T) {
 		t.Error("an overview with a patch ID does not compare it")
 	}
 }
+
+func TestDrift(t *testing.T) {
+	ov := &Overview{Files: map[string]string{"a.go": "1", "b.go": "2", "c.go": "3", "bin": ""}}
+	d := ov.Drift(map[string]string{"a.go": "1", "b.go": "9", "bin": "", "new.go": "4"})
+	if d != (Drift{Written: 4, Changed: 2, Gone: 1, New: 1, Known: true}) || d.Disjoint() {
+		t.Errorf("drift = %+v", d)
+	}
+	if d := ov.Drift(map[string]string{"output.json": "5"}); !d.Disjoint() || d.New != 1 {
+		t.Errorf("other files: %+v", d)
+	}
+	if d := ov.Drift(nil); !d.Disjoint() {
+		t.Errorf("clean tree: %+v", d)
+	}
+	old := &Overview{Groups: []Group{{Files: []string{"a.go", "b.go"}}}}
+	if d := old.Drift(map[string]string{"a.go": "1"}); d != (Drift{Written: 2, Gone: 1}) {
+		t.Errorf("overview without file IDs: %+v", d)
+	}
+	if d := (&Overview{Markdown: "x"}).Drift(nil); d.Disjoint() {
+		t.Errorf("an overview without files is disjoint: %+v", d)
+	}
+}

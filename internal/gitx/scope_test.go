@@ -19,6 +19,7 @@ func TestScopeKey(t *testing.T) {
 		{"other branch", Scope{Kind: ScopeBranch, Base: "main", Head: "dev"}, "branch-dev-vs-main"},
 		{"commit uses 12 chars", Scope{Kind: ScopeCommit, Commit: sha}, "commit-0123456789ab"},
 		{"plain range", Scope{Kind: ScopeRange, From: "v1.0", To: "v2.0"}, "range-v1.0-v2.0"},
+		{"archived", Scope{Kind: ScopeArchived, From: "0a1b"}, "archived-0a1b"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

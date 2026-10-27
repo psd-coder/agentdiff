@@ -21,13 +21,85 @@ func (a *app) staleBanner(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Column(c).Gap(10).Padding(10, 14).Radius(8).Background(t.Warning.Alpha(0.15)).Border(1, t.Warning).Children(func() {
-		ui.Text(c, "This review was written for other changes than the ones here now, so its code snippets can show the wrong lines. Regenerate the overview, or start over.")
+		ui.Text(c, staleText(a.rev.Overview.Drift(a.fileIDs)))
 		if sha := a.movedTo; sha != "" {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Those changes are now commit "+shortSHA(sha)+". The review moves there when you open it.").Grow(1).Shrink(1)
 				ui.PrimaryButton(c, "Open commit").OnClick(func() { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha}) })
 			})
 		}
+	})
+}
+
+// staleText warns that an overview was written for other changes, and
+// says how its files differ from the changed ones.
+func staleText(d review.Drift) string {
+	const tail = "Its code snippets can show the wrong lines. Regenerate the overview, or start over."
+	var parts []string
+	if d.Changed > 0 {
+		parts = append(parts, fmt.Sprintf("%d changed", d.Changed))
+	}
+	if d.Gone > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s no longer in the changes", d.Gone, isAre(d.Gone)))
+	}
+	if d.New > 0 {
+		parts = append(parts, fmt.Sprintf("%s %s not in it", plural(d.New, "new file"), isAre(d.New)))
+	}
+	if len(parts) == 0 {
+		return "This overview was written for other changes than the ones here now. " + tail
+	}
+	list := parts[0]
+	if n := len(parts); n > 1 {
+		list = strings.Join(parts[:n-1], ", ") + " and " + parts[n-1]
+	}
+	return fmt.Sprintf("This overview was written for %s. Since then, %s. %s", plural(d.Written, "file"), list, tail)
+}
+
+func isAre(n int) string {
+	if n == 1 {
+		return "is"
+	}
+	return "are"
+}
+
+// archivedCard offers the latest archived review on the uncommitted
+// scope, while it has no review of its own.
+func (a *app) archivedCard(c *ui.Context) {
+	arch := a.archived
+	if arch == nil || a.scope.Kind != gitx.ScopeUncommitted || !a.rev.Empty() || a.loading {
+		return
+	}
+	t := c.Theme()
+	ov := arch.Overview
+	ui.Column(c).Gap(10).Padding(14, 16).Radius(8).Background(t.Surface).Border(1, t.Border).Children(func() {
+		meta := []string{ov.Generated.Format("Jan 2 15:04")}
+		if ov.Walk != nil {
+			meta = append(meta, plural(len(ov.Walk.Steps), "step"))
+		}
+		if n := len(arch.Threads); n > 0 {
+			meta = append(meta, plural(n, "comment"))
+		}
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Earlier review").Bold()
+			ui.Text(c, strings.Join(meta, " · ")).FontSize(12).TextColor(t.TextMuted)
+		})
+		text := "It was written for uncommitted changes that are no longer in the working tree. It comes back here by itself when those changes do."
+		if sha := a.movedTo; sha != "" {
+			text = "It was written for changes that are now commit " + shortSHA(sha) + ". The review moves there when you open it."
+		}
+		ui.Text(c, text).FontSize(12).TextColor(t.TextMuted)
+		if ov.Walk != nil && ov.Walk.Summary != "" {
+			ui.Text(c, ov.Walk.Summary).MaxLines(2)
+		}
+		ui.Row(c).Gap(8).Children(func() {
+			if sha := a.movedTo; sha != "" {
+				ui.PrimaryButton(c, "Open commit").OnClick(func() { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha}) })
+			}
+			ui.Button(c, "Restore").Tooltip("Bring the review back here, with a warning that it was written for other changes").OnClick(a.restoreArchived)
+			ui.Button(c, "Delete").OnClick(func() {
+				a.confirm("Delete the earlier review?", "Its overview, walkthroughs and comments are deleted.", "Delete", a.deleteArchived)
+			})
+		})
 	})
 }
 
@@ -59,7 +131,7 @@ func (a *app) overviewPage(c *ui.Context) {
 			a.summaryLine(c)
 			if from := a.adoptedFrom; from != nil {
 				verb := "Copied"
-				if from.Kind == gitx.ScopeUncommitted {
+				if from.Kind == gitx.ScopeUncommitted || from.Kind == gitx.ScopeArchived {
 					verb = "Moved"
 				}
 				ui.Text(c, verb+" here from "+strings.ToLower(from.Label())+", which had the same changes.").FontSize(12).TextColor(t.TextMuted)
@@ -90,6 +162,7 @@ func (a *app) overviewPage(c *ui.Context) {
 					ui.Text(c, ov.Err).FontSize(12).Font("monospace").Selectable()
 				})
 			}
+			a.archivedCard(c)
 			if len(a.files) > 0 && !a.loading {
 				a.groupCards(c)
 				a.askWalk(c, "")

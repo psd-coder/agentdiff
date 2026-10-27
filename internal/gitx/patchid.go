@@ -4,43 +4,149 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 )
 
-// PatchID identifies the content of a scope's changes, the same way for
-// uncommitted changes and for the commit that later holds them. It is
-// empty when there are no changes. Line numbers and whitespace do not
-// count, as in `git patch-id --stable`.
-func (r *Repo) PatchID(ctx context.Context, s Scope) (string, error) {
+// Fingerprint identifies the changes of a scope, the same way for
+// uncommitted changes and for the commit that later holds them. Line
+// numbers and whitespace do not count, as in `git patch-id --stable`.
+type Fingerprint struct {
+	// Patch identifies all the changes, empty when there are none.
+	Patch string
+	// Files maps each changed file to an ID of its own changes, empty
+	// when git patch-id finds nothing to identify in its diff.
+	Files map[string]string
+}
+
+// wholePatch is the made-up commit hash that marks all the changes in
+// the input of git patch-id; the files' chunks are numbered below it.
+const wholePatch = "ffffffffffffffffffffffffffffffffffffffff"
+
+func (r *Repo) Fingerprint(ctx context.Context, s Scope) (Fingerprint, error) {
+	patch, err := r.patch(ctx, s)
+	if err != nil {
+		return Fingerprint{}, err
+	}
+	chunks := splitPatch(patch)
+	var in bytes.Buffer
+	fmt.Fprintf(&in, "commit %s\n", wholePatch)
+	in.Write(patch)
+	for i, ch := range chunks {
+		fmt.Fprintf(&in, "commit %040x\n", i)
+		in.Write(ch.text)
+	}
+	ids, err := r.patchIDs(ctx, in.Bytes())
+	if err != nil {
+		return Fingerprint{}, err
+	}
+	fp := Fingerprint{Files: map[string]string{}}
+	for _, ch := range chunks {
+		fp.Files[ch.path] = ""
+	}
+	for _, id := range ids {
+		if id[1] == wholePatch {
+			fp.Patch = id[0]
+		} else if i, err := strconv.ParseInt(id[1], 16, 64); err == nil && int(i) < len(chunks) {
+			fp.Files[chunks[i].path] = id[0]
+		}
+	}
+	return fp, nil
+}
+
+// patch is the diff of a scope, with the untracked files as added ones.
+func (r *Repo) patch(ctx context.Context, s Scope) ([]byte, error) {
 	v, err := r.resolve(ctx, s)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	patch, err := r.diff(ctx, v, "-p")
+	if err != nil || !v.worktree() {
+		return patch, err
+	}
+	paths, err := r.untrackedPaths(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if v.worktree() {
-		paths, err := r.untrackedPaths(ctx)
-		if err != nil {
-			return "", err
+	for _, p := range paths {
+		var out bytes.Buffer
+		args := append([]string{"diff"}, diffFlags...)
+		// --no-index exits with 1 when the files differ, which they always do.
+		if err := r.run(ctx, &out, append(args, "--no-index", "--", "/dev/null", p)...); err != nil && exitCode(err) != 1 {
+			return nil, err
 		}
-		for _, p := range paths {
-			var out bytes.Buffer
-			args := append([]string{"diff"}, diffFlags...)
-			// --no-index exits with 1 when the files differ, which they always do.
-			if err := r.run(ctx, &out, append(args, "--no-index", "--", "/dev/null", p)...); err != nil && exitCode(err) != 1 {
-				return "", err
-			}
-			patch = append(patch, out.Bytes()...)
+		patch = append(patch, out.Bytes()...)
+	}
+	return patch, nil
+}
+
+type fileChunk struct {
+	path string
+	text []byte
+}
+
+// splitPatch cuts a patch into the diffs of its files.
+func splitPatch(patch []byte) []fileChunk {
+	var chunks []fileChunk
+	for line := range bytes.Lines(patch) {
+		if bytes.HasPrefix(line, []byte("diff --git ")) {
+			chunks = append(chunks, fileChunk{})
+		}
+		if len(chunks) > 0 {
+			ch := &chunks[len(chunks)-1]
+			ch.text = append(ch.text, line...)
 		}
 	}
-	ids, err := r.patchIDs(ctx, patch)
-	if err != nil || len(ids) == 0 {
-		return "", err
+	for i := range chunks {
+		chunks[i].path = chunkPath(chunks[i].text)
 	}
-	return ids[0][0], nil
+	return chunks
+}
+
+// chunkPath reads the path of a file's diff: the new one, or the old one
+// for a deleted file.
+func chunkPath(text []byte) string {
+	header, old := "", ""
+	for line := range strings.Lines(string(text)) {
+		// git ends the --- and +++ lines of a path with spaces with a tab.
+		line = strings.TrimRight(line, "\t\n")
+		switch {
+		case strings.HasPrefix(line, "diff --git "):
+			header = strings.TrimPrefix(line, "diff --git ")
+		case strings.HasPrefix(line, "rename to "):
+			return unquotePath(strings.TrimPrefix(line, "rename to "))
+		case strings.HasPrefix(line, "+++ ") && line != "+++ /dev/null":
+			return strings.TrimPrefix(unquotePath(strings.TrimPrefix(line, "+++ ")), "b/")
+		case strings.HasPrefix(line, "--- ") && line != "--- /dev/null":
+			old = strings.TrimPrefix(unquotePath(strings.TrimPrefix(line, "--- ")), "a/")
+		case strings.HasPrefix(line, "@@"):
+			return old
+		}
+	}
+	if old != "" {
+		return old
+	}
+	// A diff without lines, as of a binary file: "a/path b/path".
+	if strings.HasPrefix(header, `"`) {
+		if i := strings.LastIndex(header, ` "b/`); i >= 0 {
+			return strings.TrimPrefix(unquotePath(header[i+1:]), "b/")
+		}
+	}
+	if i := strings.LastIndex(header, " b/"); i >= 0 {
+		return header[i+3:]
+	}
+	return header
+}
+
+// unquotePath reads a path git quoted because of unusual characters.
+func unquotePath(p string) string {
+	if strings.HasPrefix(p, `"`) {
+		if u, err := strconv.Unquote(p); err == nil {
+			return u
+		}
+	}
+	return p
 }
 
 // CommitPatchIDs maps the patch IDs of the commits Commits lists to their

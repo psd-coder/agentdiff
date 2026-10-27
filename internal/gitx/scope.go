@@ -14,6 +14,10 @@ const (
 	ScopeBranch      ScopeKind = "branch"
 	ScopeCommit      ScopeKind = "commit"
 	ScopeRange       ScopeKind = "range"
+	// ScopeArchived holds a review of uncommitted changes that are gone
+	// from the working tree, under the ID in From. It has no changes of
+	// its own.
+	ScopeArchived ScopeKind = "archived"
 )
 
 type Scope struct {
@@ -44,6 +48,8 @@ func (s Scope) Key() string {
 		return "commit-" + keyPart(truncate(s.Commit, 12))
 	case ScopeRange:
 		return "range-" + keyPart(s.From) + "-" + keyPart(s.To)
+	case ScopeArchived:
+		return "archived-" + keyPart(s.From)
 	}
 	return "unknown-" + keyPart(string(s.Kind))
 }
@@ -86,6 +92,8 @@ func (s Scope) Label() string {
 		return "Commit " + shortRef(s.Commit)
 	case ScopeRange:
 		return shortRef(s.From) + ".." + shortRef(s.To)
+	case ScopeArchived:
+		return "Earlier uncommitted changes"
 	}
 	return string(s.Kind)
 }

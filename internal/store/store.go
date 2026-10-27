@@ -148,7 +148,7 @@ func (s Store) MoveReview(repo string, from, to gitx.Scope) error {
 	if err := os.Rename(s.runDir(repo, from), s.runDir(repo, to)); err != nil && !IsNotExist(err) {
 		return err
 	}
-	return nil
+	return s.rescope(repo, to)
 }
 
 // CopyReview copies a review and the logs of its runs to another scope.
@@ -161,21 +161,73 @@ func (s Store) CopyReview(repo string, from, to gitx.Scope) error {
 		return err
 	}
 	runs, err := os.ReadDir(s.runDir(repo, from))
-	if err != nil {
-		if IsNotExist(err) {
-			return nil
-		}
+	if err != nil && !IsNotExist(err) {
 		return err
 	}
-	if err := os.MkdirAll(s.runDir(repo, to), 0o755); err != nil {
-		return err
+	if len(runs) > 0 {
+		if err := os.MkdirAll(s.runDir(repo, to), 0o755); err != nil {
+			return err
+		}
 	}
 	for _, e := range runs {
 		if err := copyFile(filepath.Join(s.runDir(repo, from), e.Name()), filepath.Join(s.runDir(repo, to), e.Name())); err != nil {
 			return err
 		}
 	}
-	return nil
+	return s.rescope(repo, to)
+}
+
+// rescope writes the scope into a review that moved or was copied there,
+// so FindReview reads where it is.
+func (s Store) rescope(repo string, scope gitx.Scope) error {
+	return writeJSON(s.reviewPath(repo, scope), s.LoadReview(repo, scope))
+}
+
+// maxArchived is how many archived reviews a repository keeps.
+const maxArchived = 20
+
+// ArchiveReview moves the review of the uncommitted changes, which are
+// gone from the working tree, under id. It deletes the oldest archived
+// reviews past maxArchived.
+func (s Store) ArchiveReview(repo, id string) (gitx.Scope, error) {
+	to := gitx.Scope{Kind: gitx.ScopeArchived, From: id}
+	if err := s.MoveReview(repo, gitx.Scope{Kind: gitx.ScopeUncommitted}, to); err != nil {
+		return to, err
+	}
+	// Saving marks the time of archiving, which orders the archive.
+	if err := s.SaveReview(s.LoadReview(repo, to)); err != nil {
+		return to, err
+	}
+	archived := s.archived(repo)
+	var errs []error
+	for _, r := range archived[min(len(archived), maxArchived):] {
+		errs = append(errs, s.DeleteReview(repo, r.Scope))
+	}
+	return to, errors.Join(errs...)
+}
+
+// LatestArchive returns the archived review that was updated last.
+func (s Store) LatestArchive(repo string) (*review.Review, bool) {
+	archived := s.archived(repo)
+	if len(archived) == 0 {
+		return nil, false
+	}
+	return archived[0], true
+}
+
+// archived returns the archived reviews of repo, the newest first.
+func (s Store) archived(repo string) []*review.Review {
+	pattern := filepath.Join(filepath.Dir(s.reviewPath(repo, gitx.Scope{})), "archived-*.json")
+	paths, _ := filepath.Glob(pattern)
+	var out []*review.Review
+	for _, path := range paths {
+		r := &review.Review{}
+		if readJSON(path, r) == nil && r.Scope.Kind == gitx.ScopeArchived {
+			out = append(out, s.LoadReview(repo, r.Scope))
+		}
+	}
+	slices.SortFunc(out, func(a, b *review.Review) int { return b.Updated.Compare(a.Updated) })
+	return out
 }
 
 func copyFile(from, to string) error {

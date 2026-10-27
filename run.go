@@ -122,7 +122,7 @@ func (a *app) generateOverview() {
 	run := &overviewRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.overviews[rev] = run
 	files := a.fileNames()
-	patch := a.patch
+	patch, fileIDs := a.patch, a.fileIDs
 	prompt := review.OverviewPrompt(a.scope.Describe(), a.diffstat, a.scope.NewRev(), files, questions)
 	session := ""
 	req := agent.Request{Dir: a.repo.Root, Prompt: prompt, SystemPrompt: review.SystemPrompt}
@@ -141,7 +141,7 @@ func (a *app) generateOverview() {
 			run.activity = ev.Text
 		case agent.EventDone:
 			ov := review.ReadOverview(answer(ev.Text, run.text), files)
-			ov.SessionID, ov.Agent, ov.Model, ov.Generated, ov.PatchID = session, cfg.Provider, cfg.Model, time.Now(), patch
+			ov.SessionID, ov.Agent, ov.Model, ov.Generated, ov.PatchID, ov.Files = session, cfg.Provider, cfg.Model, time.Now(), patch, fileIDs
 			rev.Overview = &ov
 			delete(a.overviews, rev)
 			a.saveReviewOf(rev)
@@ -153,7 +153,7 @@ func (a *app) generateOverview() {
 			}
 			ov := &review.Overview{Agent: cfg.Provider, Model: cfg.Model, Generated: time.Now(), Err: ev.Err.Error()}
 			if old := rev.Overview; old.Done() {
-				ov.Walk, ov.Markdown, ov.Groups, ov.SessionID, ov.PatchID = old.Walk, old.Markdown, old.Groups, old.SessionID, old.PatchID
+				ov.Walk, ov.Markdown, ov.Groups, ov.SessionID, ov.PatchID, ov.Files = old.Walk, old.Markdown, old.Groups, old.SessionID, old.PatchID, old.Files
 			}
 			rev.Overview = ov
 			a.saveReviewOf(rev)

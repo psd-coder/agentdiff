@@ -95,9 +95,10 @@ type Overview struct {
 	Model     string         `json:"model,omitempty"`
 	Generated time.Time      `json:"generated"`
 	Err       string         `json:"err,omitempty"`
-	// PatchID identifies the changes the overview was written for, see
-	// gitx.Repo.PatchID.
-	PatchID string `json:"patchId,omitempty"`
+	// PatchID and Files identify the changes the overview was written
+	// for, see gitx.Fingerprint.
+	PatchID string            `json:"patchId,omitempty"`
+	Files   map[string]string `json:"files,omitempty"`
 }
 
 // Empty reports whether the review has nothing written: no overview,
@@ -207,4 +208,51 @@ func (o *Overview) Stale(patchID string, files []string) bool {
 		}
 	}
 	return false
+}
+
+// Drift counts how the changed files differ from the ones an overview was
+// written for.
+type Drift struct {
+	// Written is how many files the overview was written for.
+	Written int
+	// Changed counts the files whose changes are not the same any more,
+	// Gone the files that are no longer changed, and New the changed
+	// files the overview does not cover.
+	Changed, Gone, New int
+	// Known is false for an overview from before file IDs, which knows
+	// its files from its groups only and cannot tell a changed one.
+	Known bool
+}
+
+// Disjoint reports whether none of the overview's files is still changed.
+func (d Drift) Disjoint() bool { return d.Written > 0 && d.Gone == d.Written }
+
+// Drift compares the files the overview was written for with files, which
+// maps the changed files to the IDs of their changes.
+func (o *Overview) Drift(files map[string]string) Drift {
+	written, known := o.Files, o.Files != nil
+	if !known {
+		written = map[string]string{}
+		for _, g := range o.Groups {
+			for _, f := range g.Files {
+				written[f] = ""
+			}
+		}
+	}
+	d := Drift{Written: len(written), Known: known}
+	for f, id := range written {
+		now, ok := files[f]
+		switch {
+		case !ok:
+			d.Gone++
+		case known && (id == "" || id != now):
+			d.Changed++
+		}
+	}
+	for f := range files {
+		if _, ok := written[f]; !ok {
+			d.New++
+		}
+	}
+	return d
 }

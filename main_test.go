@@ -230,8 +230,6 @@ func lineRange(start, end int) editor.DiffLineRange {
 	return editor.DiffLineRange{Side: editor.DiffNew, Start: start, End: end}
 }
 
-const staleText = "This review was written for other changes than the ones here now, so its code snippets can show the wrong lines. Regenerate the overview, or start over."
-
 // TestReviewFollowsCommit writes an overview of uncommitted changes and
 // commits them: the review then belongs to the commit.
 func TestReviewFollowsCommit(t *testing.T) {
@@ -259,7 +257,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	pump(t, a, "the reload", func() bool { return !a.loading })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if a.movedTo != sha || !tt.HasText(staleText) || !tt.HasText("Open commit") {
+	if a.movedTo != sha || a.archived == nil || !a.rev.Empty() || !tt.HasText("Earlier review") || !tt.HasText("Open commit") {
 		t.Fatalf("moved to %q, want %q; texts %q", a.movedTo, sha, tt.Texts())
 	}
 
@@ -271,13 +269,78 @@ func TestReviewFollowsCommit(t *testing.T) {
 		t.Fatalf("scope %+v, review %+v, stale %v", a.scope, a.rev.Overview, a.stale())
 	}
 	tt.Frame()
-	if !tt.HasText("Moved here from uncommitted changes, which had the same changes.") {
+	if !tt.HasText("Moved here from earlier uncommitted changes, which had the same changes.") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	pump(t, a, "the uncommitted changes", func() bool { return !a.loading })
-	if !a.rev.Empty() {
-		t.Errorf("the uncommitted scope kept the review: %+v", a.rev)
+	if !a.rev.Empty() || a.archived != nil {
+		t.Errorf("the uncommitted scope kept the review: %+v, archived %+v", a.rev, a.archived)
+	}
+}
+
+// TestArchiveUncommitted replaces the uncommitted changes with other
+// ones: their review goes to the archive, and comes back with them.
+func TestArchiveUncommitted(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	answer := "```json\n" + `{"summary": "Lower-case keys.", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	a.cfg.DeeperAhead = false
+	a.queue = make(chan func(), 64)
+	a.generateOverview()
+	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	if len(a.rev.Overview.Files) != 2 {
+		t.Fatalf("overview files = %v", a.rev.Overview.Files)
+	}
+	reload := func(what string) *ui.Tester {
+		t.Helper()
+		a.refresh()
+		pump(t, a, what, func() bool { return !a.loading })
+		tt := ui.NewTester(a.view, 1300, 800)
+		tt.Frame()
+		return tt
+	}
+
+	git(t, dir, "stash", "-u", "-q")
+	write(t, dir, "output.json", "{}\n")
+	a.overviews[a.rev] = &overviewRun{cancel: func() {}}
+	reload("the busy reload")
+	if a.rev.Overview == nil {
+		t.Fatal("archived a review an agent writes into")
+	}
+	delete(a.overviews, a.rev)
+	tt := reload("the other changes")
+	if !a.rev.Empty() || a.archived == nil || !tt.HasText("Earlier review") || !tt.HasText("Lower-case keys.") {
+		t.Fatalf("review %+v, archived %v; texts %q", a.rev, a.archived != nil, tt.Texts())
+	}
+	snapshot(t, tt, "archived")
+
+	if err := os.Remove(filepath.Join(dir, "output.json")); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "stash", "pop", "-q")
+	tt = reload("the changes back")
+	if a.rev.Overview == nil || a.stale() || a.archived != nil || !tt.HasText("Moved here from earlier uncommitted changes") {
+		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
+	}
+
+	git(t, dir, "stash", "-u", "-q")
+	write(t, dir, "output.json", "{}\n")
+	reload("the other changes again")
+	if a.archived == nil {
+		t.Fatal("not archived")
+	}
+	a.restoreArchived()
+	tt = reload("the restored review")
+	if a.rev.Overview == nil || a.archived != nil || !a.stale() || !tt.HasText("This overview was written for 2 files. Since then, 2 are no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
+		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
+	}
+
+	write(t, dir, "cache/cache.go", "package cache\n")
+	tt = reload("a file of the review")
+	if !tt.HasText("This overview was written for 2 files. Since then, 1 changed, 1 is no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
+		t.Errorf("texts %q", tt.Texts())
 	}
 }
 
@@ -287,8 +350,8 @@ func TestStaleOverviewAndStartOver(t *testing.T) {
 	a.comment(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "old note")
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if !tt.HasText(staleText) {
-		t.Error("stale warning missing")
+	if !tt.HasText("This overview was written for 1 file. Since then, 1 is no longer in the changes and 2 new files are not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
+		t.Errorf("stale warning missing: %q", tt.Texts())
 	}
 	a.startOver()
 	tt.Frame()

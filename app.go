@@ -74,6 +74,15 @@ type app struct {
 	// gitx.Repo.PatchID.
 	patch      string
 	patchKnown bool
+	// fileIDs maps the changed files to the IDs of their changes, see
+	// gitx.Fingerprint.
+	fileIDs map[string]string
+	// archived is the latest archived review, shown on the uncommitted
+	// scope while it has no review of its own.
+	archived *review.Review
+	// kept holds the archive IDs of reviews restored in this session,
+	// which stay even though none of their files is changed.
+	kept map[string]bool
 	// movedTo is the commit that now holds the changes a stale overview
 	// of the uncommitted changes was written for.
 	movedTo string
@@ -134,6 +143,7 @@ func newApp(s store.Store) *app {
 		walkRuns:    map[string]*walkRun{},
 		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},
+		kept:        map[string]bool{},
 		sidebarW:    280,
 		scopePct:    34,
 		mainPct:     62,
@@ -412,13 +422,14 @@ func (a *app) reload() {
 	gen, r, s := a.gen, a.repo, a.scope
 	a.loading, a.loadErr = true, ""
 	a.files, a.diffstat = nil, ""
-	a.patch, a.patchKnown, a.movedTo = "", false, ""
+	a.patch, a.patchKnown, a.movedTo, a.fileIDs = "", false, "", nil
 	a.diffs = map[string]*fileDiff{}
 	a.extra = map[string]*extraFile{}
 	written, empty := "", a.rev.Empty()
 	if ov := a.rev.Overview; ov != nil {
 		written = ov.PatchID
 	}
+	uncommitted := s.Kind == gitx.ScopeUncommitted
 	a.async(func() {
 		ctx := context.Background()
 		files, err := r.Changes(ctx, s)
@@ -426,12 +437,18 @@ func (a *app) reload() {
 		if err == nil {
 			stat, err = r.DiffStat(ctx, s)
 		}
-		patch, perr := r.PatchID(ctx, s)
+		fp, perr := r.Fingerprint(ctx, s)
 		if perr != nil {
-			log.Printf("patch id: %v", perr)
+			log.Printf("fingerprint: %v", perr)
+		}
+		var archived *review.Review
+		if uncommitted && empty {
+			if arch, ok := a.store.LatestArchive(r.Root); ok && arch.Overview != nil {
+				archived, written = arch, arch.Overview.PatchID
+			}
 		}
 		movedTo := ""
-		if s.Kind == gitx.ScopeUncommitted && perr == nil && written != "" && written != patch {
+		if uncommitted && perr == nil && written != "" && written != fp.Patch {
 			ids, err := r.CommitPatchIDs(ctx, "", "", commitsShown)
 			if err != nil {
 				log.Printf("commit patch ids: %v", err)
@@ -439,8 +456,8 @@ func (a *app) reload() {
 			movedTo = ids[written]
 		}
 		var from *gitx.Scope
-		if empty && perr == nil && patch != "" {
-			if src, ok := a.store.FindReview(r.Root, s, patch); ok {
+		if (empty || uncommitted && written != fp.Patch) && perr == nil && fp.Patch != "" {
+			if src, ok := a.store.FindReview(r.Root, s, fp.Patch); ok {
 				from = &src
 			}
 		}
@@ -454,9 +471,19 @@ func (a *app) reload() {
 				return
 			}
 			a.files, a.diffstat = files, stat
-			a.patch, a.patchKnown, a.movedTo = patch, perr == nil, movedTo
-			if from != nil {
+			a.patch, a.patchKnown, a.movedTo, a.fileIDs = fp.Patch, perr == nil, movedTo, fp.Files
+			a.archived = archived
+			switch {
+			case from != nil && a.rev.Empty():
 				a.adopt(*from)
+			case from != nil && a.archivable():
+				a.archiveCurrent()
+				a.adopt(*from)
+			case a.archivable() && a.rev.Overview.Drift(a.fileIDs).Disjoint():
+				a.archiveCurrent()
+			}
+			if !a.rev.Empty() {
+				a.archived = nil
 			}
 			for _, f := range files {
 				a.diffs[f.Path] = &fileDiff{change: f, loading: true}
@@ -493,7 +520,7 @@ func (a *app) adopt(src gitx.Scope) {
 	if from != nil && a.reviewBusy(from) {
 		return
 	}
-	move := src.Kind == gitx.ScopeUncommitted
+	move := src.Kind == gitx.ScopeUncommitted || src.Kind == gitx.ScopeArchived
 	var err error
 	if move {
 		err = a.store.MoveReview(a.repo.Root, src, a.scope)
@@ -512,6 +539,62 @@ func (a *app) adopt(src gitx.Scope) {
 	a.rev = a.store.LoadReview(a.repo.Root, a.scope)
 	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
 	a.adoptedFrom = &src
+}
+
+// archivable reports whether the review of the uncommitted changes can
+// go to the archive: it has an overview, no agent writes into it, and the
+// user did not restore it in this session.
+func (a *app) archivable() bool {
+	ov := a.rev.Overview
+	return a.scope.Kind == gitx.ScopeUncommitted && ov.Done() && a.patchKnown && !a.kept[archiveID(ov)] && !a.reviewBusy(a.rev)
+}
+
+// archiveID names an archived review: the patch ID of its overview, or
+// the time it was written for an overview from before patch IDs.
+func archiveID(ov *review.Overview) string {
+	return cmp.Or(ov.PatchID, fmt.Sprint(ov.Generated.Unix()))
+}
+
+// archiveCurrent moves the review of the uncommitted changes into the
+// archive and starts an empty one.
+func (a *app) archiveCurrent() {
+	old := a.rev
+	to, err := a.store.ArchiveReview(a.repo.Root, archiveID(old.Overview))
+	if err != nil {
+		log.Printf("archive review: %v", err)
+		return
+	}
+	delete(a.runs, old)
+	old.Scope = to
+	a.archived = old
+	a.rev = review.New(a.repo.Root, a.scope)
+	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
+	a.thread = ""
+	a.resetNav()
+}
+
+// restoreArchived brings the shown archived review back to the
+// uncommitted scope, which keeps it from then on.
+func (a *app) restoreArchived() {
+	arch := a.archived
+	if arch == nil || !a.rev.Empty() {
+		return
+	}
+	a.kept[archiveID(arch.Overview)] = true
+	a.adopt(arch.Scope)
+	a.adoptedFrom, a.archived = nil, nil
+}
+
+func (a *app) deleteArchived() {
+	arch := a.archived
+	if arch == nil {
+		return
+	}
+	if err := a.store.DeleteReview(a.repo.Root, arch.Scope); err != nil {
+		log.Printf("delete archived review: %v", err)
+	}
+	a.archived = nil
+	a.reload()
 }
 
 // reviewBusy reports whether an agent run writes into rev.

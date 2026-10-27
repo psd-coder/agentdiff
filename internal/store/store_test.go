@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -276,5 +277,45 @@ func TestFindMoveCopyReview(t *testing.T) {
 	}
 	if s.LoadReview("/repo", commit).Overview == nil || len(s.Runs("/repo", amended)) != 1 {
 		t.Error("the copy lost the review or its runs")
+	}
+	// The same changes again, as a cherry-pick: the review comes from a
+	// commit, which keeps it, and the uncommitted changes stay alone.
+	if src, ok := s.FindReview("/repo", uncommitted, "p1"); !ok || src.Kind != gitx.ScopeCommit {
+		t.Errorf("found %+v, %v; a moved review must name its new scope", src, ok)
+	}
+}
+
+func TestArchiveReview(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	uncommitted := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	if _, ok := s.LatestArchive("/repo"); ok {
+		t.Error("an archive without reviews")
+	}
+	for i := range maxArchived + 2 {
+		r := review.New("/repo", uncommitted)
+		r.Overview = &review.Overview{Markdown: "x", PatchID: fmt.Sprint("p", i)}
+		if err := s.SaveReview(r); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.ArchiveReview("/repo", r.Overview.PatchID); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if s.LoadReview("/repo", uncommitted).Overview != nil {
+		t.Error("the review stayed")
+	}
+	latest, ok := s.LatestArchive("/repo")
+	if !ok || latest.Overview.PatchID != fmt.Sprint("p", maxArchived+1) || latest.Scope.Kind != gitx.ScopeArchived {
+		t.Fatalf("latest = %+v, %v", latest, ok)
+	}
+	if n := len(s.archived("/repo")); n != maxArchived {
+		t.Errorf("kept %d archived reviews, want %d", n, maxArchived)
+	}
+	if src, ok := s.FindReview("/repo", uncommitted, "p5"); !ok || src.Kind != gitx.ScopeArchived {
+		t.Errorf("found %+v, %v", src, ok)
+	}
+	if _, ok := s.FindReview("/repo", uncommitted, "p0"); ok {
+		t.Error("the oldest archived review is still there")
 	}
 }
