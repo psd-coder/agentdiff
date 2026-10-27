@@ -216,13 +216,28 @@ func TestSettingsOverride(t *testing.T) {
 	a.settings.override = true
 	a.settings.local.provider = 1
 	a.settings.local.model = "gpt-5"
-	a.saveSettings()
+	tt.Frame()
+	if got := a.store.LoadReview(a.repo.Root, a.scope).Settings.Agent; got == nil || got.Model != "gpt-5" {
+		t.Errorf("not saved as changed: %+v", got)
+	}
 	cfg, _ := a.cfg.Effective(a.rev.Settings)
 	if cfg.Provider != agent.Codex || cfg.Model != "gpt-5" {
 		t.Errorf("effective = %+v", cfg)
 	}
 	if a.cfg.Agent.Provider != agent.Claude {
 		t.Errorf("global changed: %+v", a.cfg.Agent)
+	}
+	a.settings.ahead = false
+	tt.Frame()
+	if a.store.LoadConfig().DeeperAhead {
+		t.Error("the global switch is not saved")
+	}
+	if err := tt.Click("Done"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.settings != nil {
+		t.Error("Done left the settings open")
 	}
 }
 

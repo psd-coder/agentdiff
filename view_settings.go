@@ -67,25 +67,35 @@ func effortOf(p agent.Provider, picked string) string {
 }
 
 type settingsForm struct {
-	open     bool
-	tab      int
+	open   bool
+	tab    int
+	status map[agent.Provider]string
+	settingsValues
+	// saved is what the form held when it last saved.
+	saved settingsValues
+}
+
+// settingsValues are the fields of the settings form.
+type settingsValues struct {
 	global   agentForm
 	override bool
 	local    agentForm
 	ahead    bool
-	status   map[agent.Provider]string
 }
 
 func (a *app) openSettings() {
 	cfg, questions := a.cfg.Effective(a.rev.Settings)
 	f := &settingsForm{
-		open:     true,
-		global:   newAgentForm(a.cfg.Agent, a.cfg.Questions),
-		override: a.rev.Settings.Agent != nil || a.rev.Settings.Questions != nil,
-		local:    newAgentForm(cfg, questions),
-		status:   map[agent.Provider]string{},
-		ahead:    a.cfg.DeeperAhead,
+		open:   true,
+		status: map[agent.Provider]string{},
+		settingsValues: settingsValues{
+			global:   newAgentForm(a.cfg.Agent, a.cfg.Questions),
+			override: a.rev.Settings.Agent != nil || a.rev.Settings.Questions != nil,
+			local:    newAgentForm(cfg, questions),
+			ahead:    a.cfg.DeeperAhead,
+		},
 	}
+	f.saved = f.settingsValues
 	a.settings = f
 	if a.win == nil {
 		return
@@ -103,8 +113,10 @@ func (a *app) openSettings() {
 	}
 }
 
+// saveSettings saves what the settings form holds, as the user changes it.
 func (a *app) saveSettings() {
 	f := a.settings
+	f.saved = f.settingsValues
 	a.cfg.Agent, a.cfg.Questions, a.cfg.DeeperAhead = f.global.config(), f.global.questions, f.ahead
 	a.saveConfig()
 	if f.override {
@@ -114,7 +126,6 @@ func (a *app) saveSettings() {
 		a.rev.Settings = review.Settings{}
 	}
 	a.saveReview()
-	f.open = false
 }
 
 func (a *app) settingsModal(c *ui.Context) {
@@ -130,7 +141,10 @@ func (a *app) settingsModal(c *ui.Context) {
 			if f.tab == 0 {
 				ui.Text(c, "Used by every review that does not override them.").FontSize(12).TextColor(t.TextMuted)
 				a.agentFields(c, &f.global, f.status)
-				ui.Switch(c, &f.ahead).Label("Write the deeper walkthrough of every step with the overview")
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Switch(c, &f.ahead).Label("Write the deeper walkthrough of every step with the overview")
+					ui.Text(c, "Write the deeper walkthrough of every step with the overview")
+				})
 				ui.Text(c, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(t.TextMuted)
 			} else {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -141,12 +155,15 @@ func (a *app) settingsModal(c *ui.Context) {
 					a.agentFields(c, &f.local, f.status)
 				}
 			}
-			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				ui.Button(c, "Cancel").OnClick(func() { f.open = false })
-				ui.PrimaryButton(c, "Save").OnClick(a.saveSettings)
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Changes are saved as you make them.").FontSize(11).TextColor(t.TextMuted).Grow(1)
+				ui.PrimaryButton(c, "Done").Tooltip("Escape").OnClick(func() { f.open = false })
 			})
 		})
 	})
+	if f.settingsValues != f.saved {
+		a.saveSettings()
+	}
 	if !f.open {
 		a.settings = nil
 	}
