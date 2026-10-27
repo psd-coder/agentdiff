@@ -1346,3 +1346,55 @@ func TestPickerShortcuts(t *testing.T) {
 		t.Error("Escape left the project list open")
 	}
 }
+
+// TestFocusAndShortcuts moves the focus to the sidebars from the menu
+// bar and lists the shortcuts in a dialog.
+func TestFocusAndShortcuts(t *testing.T) {
+	a := newTestApp(t)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	click := func(label string) {
+		var walk func(items []*mygo.MenuItem)
+		walk = func(items []*mygo.MenuItem) {
+			for _, it := range items {
+				if it.Label == label {
+					it.Click(it, nil)
+				}
+				walk(it.Submenu)
+			}
+		}
+		walk(a.menu().Items())
+		tt.Frame()
+		tt.Frame()
+	}
+
+	click("Focus Files")
+	if !tt.Focused("Review") {
+		t.Error("files sidebar has no focus")
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if a.page != "threads" {
+		t.Errorf("Down in the files sidebar: %q", a.page)
+	}
+	click("Focus Changes")
+	if !tt.Focused("Changes") {
+		t.Error("changes sidebar has no focus")
+	}
+
+	click("Keyboard Shortcuts")
+	snapshot(t, tt, "shortcuts")
+	for _, s := range []string{"Keyboard shortcuts", "Go menu", "Next File", "⌥⌘↓", "⇧⌘B", "⌘P", "In the window"} {
+		if !tt.HasText(s) {
+			t.Errorf("no %q in %q", s, tt.Texts())
+		}
+	}
+	if tt.HasText("Edit menu") || tt.HasText("Copy") {
+		t.Errorf("standard items listed: %q", tt.Texts())
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.shortcutsOpen {
+		t.Error("Escape left the dialog open")
+	}
+}

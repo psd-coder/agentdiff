@@ -131,9 +131,11 @@ type app struct {
 	branchesOpen bool
 	branchQuery  string
 	branchNav    pickList
-	// refocus names the picker button that takes the focus back once
-	// its list closed after a choice: "project" or "branch".
-	refocus string
+	// refocus names the element that takes the keyboard focus in the
+	// next frame: a picker button once its list closed after a choice
+	// ("project" or "branch"), or a sidebar ("changes" or "files").
+	refocus       string
+	shortcutsOpen bool
 }
 
 func newApp(s store.Store) *app {

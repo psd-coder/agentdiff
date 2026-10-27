@@ -49,6 +49,7 @@ func (a *app) view(c *ui.Context) {
 	}).Background(t.Background)
 	a.settingsModal(c)
 	a.compareModal(c)
+	a.shortcutsModal(c)
 }
 
 func (a *app) sidebar(c *ui.Context) {
@@ -80,7 +81,7 @@ func sidebarHeading(c *ui.Context, title string, end func()) {
 func (a *app) scopeList(c *ui.Context) {
 	t := c.Theme()
 	choice := a.scopeID
-	changed := ui.Sidebar(c, &choice, func() {
+	list := ui.Sidebar(c, &choice, func() {
 		sidebarHeading(c, "Changes", nil)
 		if a.uncommittedShown() {
 			ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeUncommitted}), editIcon, "Uncommitted changes")
@@ -102,8 +103,12 @@ func (a *app) scopeList(c *ui.Context) {
 				ui.Text(c, "No commits").FontSize(12).TextColor(t.TextMuted).Padding(4, 8)
 			}
 		})
-	}).Fill().Label("Changes").Changed()
-	if !changed || choice == a.scopeID {
+	}).Fill().Label("Changes")
+	if a.refocus == "changes" {
+		list.Focus()
+		a.refocus = ""
+	}
+	if !list.Changed() || choice == a.scopeID {
 		return
 	}
 	if s, ok := a.scopeFromID(choice); ok {
@@ -239,6 +244,10 @@ func (a *app) reviewNav(c *ui.Context) {
 			})
 		}
 	}).Fill().Label("Review")
+	if a.refocus == "files" {
+		nav.Focus()
+		a.refocus = ""
+	}
 	// Left and Right close and open the group chosen, as in a tree.
 	if gi, ok := strings.CutPrefix(page, "group:"); ok {
 		var i int

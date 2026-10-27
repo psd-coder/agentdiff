@@ -99,6 +99,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Escape | Closes the side panel on top: a thread or question, then the agent log |
 | Cmd+1, Cmd+2, Cmd+3 | Overview, Questions & comments, Feedback |
 | Option+Cmd+Down, Option+Cmd+Up | Next and previous file, in review order |
+| Cmd+Shift+C, Cmd+Shift+F | Move the keyboard focus to the list of changes or to the list of files |
 | Cmd+L | Agent log |
 | Cmd+R | Read the changes again |
 | Cmd+P | Opens the project list |
@@ -112,7 +113,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Enter in the branch list | Opens the worktree of the highlighted branch, when another worktree has it checked out |
 | Cmd+Backspace or Delete in the project list | Removes the highlighted project from the list, after you confirm |
 
-The menu bar lists these under File, View and Go.
+The menu bar lists these under File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog.
 
 ## Configuration
 

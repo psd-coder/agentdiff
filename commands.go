@@ -29,6 +29,9 @@ func (a *app) menu() *mygo.Menu {
 		}},
 		{Role: mygo.RoleEditMenu},
 		{Label: "View", Submenu: []*mygo.MenuItem{
+			item("Focus Changes", "CmdOrCtrl+Shift+C", func() { a.refocus = "changes" }),
+			item("Focus Files", "CmdOrCtrl+Shift+F", func() { a.refocus = "files" }),
+			mygo.Separator(),
 			item("Agent Log", "CmdOrCtrl+L", a.toggleLog),
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
@@ -45,6 +48,9 @@ func (a *app) menu() *mygo.Menu {
 			item("Previous File", "Alt+CmdOrCtrl+Up", func() { a.stepFile(-1) }),
 		}},
 		{Role: mygo.RoleWindowMenu},
+		{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{
+			item("Keyboard Shortcuts", "CmdOrCtrl+/", func() { a.shortcutsOpen = true }),
+		}},
 	})
 }
 
