@@ -23,6 +23,9 @@ type command struct {
 	tip   string // what it does, for the tooltip of its button
 	// anywhere runs it without an open repository.
 	anywhere bool
+	// overlay is set on a command that opens a dialog or a list over the
+	// window, which closes the others.
+	overlay bool
 	// target is what the command acts on from the menu bar or the
 	// palette: the file of the page, the open thread. ok is false where
 	// there is none. A nil target acts on the app as a whole.
@@ -164,15 +167,15 @@ func (a *app) commands() []*command {
 
 		// The menu bar's commands.
 		{id: "open-repo", title: "Open Repository…", keys: "CmdOrCtrl+O", anywhere: true, run: func(*ui.Context, string) { a.chooseRepo() }},
-		{id: "switch-project", title: "Switch Project…", keys: "CmdOrCtrl+P", tip: "Open another project", run: func(*ui.Context, string) { a.toggleProjects() }},
-		{id: "switch-branch", title: "Switch Branch…", keys: "CmdOrCtrl+B", tip: "Branch to review", run: func(*ui.Context, string) { a.toggleBranches() }},
-		{id: "compare", title: "Compare…", keys: "CmdOrCtrl+Shift+B", tip: "Compare with another base, or review a custom range",
+		{id: "switch-project", overlay: true, title: "Switch Project…", keys: "CmdOrCtrl+P", tip: "Open another project", run: func(*ui.Context, string) { a.toggleProjects() }},
+		{id: "switch-branch", overlay: true, title: "Switch Branch…", keys: "CmdOrCtrl+B", tip: "Branch to review", run: func(*ui.Context, string) { a.toggleBranches() }},
+		{id: "compare", overlay: true, title: "Compare…", keys: "CmdOrCtrl+Shift+B", tip: "Compare with another base, or review a custom range",
 			run: func(*ui.Context, string) { a.openCompare() }},
 		{id: "refresh", title: "Refresh", keys: "CmdOrCtrl+R", tip: "Read the changes again", run: func(*ui.Context, string) { a.refresh() }},
-		{id: "settings", title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { a.openSettings() }},
+		{id: "settings", overlay: true, title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { a.openSettings() }},
 		{id: "focus-changes", title: "Focus Changes", keys: "CmdOrCtrl+Shift+C", run: func(*ui.Context, string) { a.refocus = "changes" }},
 		{id: "focus-files", title: "Focus Files", keys: "CmdOrCtrl+Shift+F", run: func(*ui.Context, string) { a.focusFiles() }},
-		{id: "palette", title: "Command Palette…", keys: "CmdOrCtrl+Shift+P", run: func(*ui.Context, string) { a.openPalette() }},
+		{id: "palette", overlay: true, title: "Command Palette…", keys: "CmdOrCtrl+Shift+P", run: func(*ui.Context, string) { a.openPalette() }},
 		{id: "agent-log", title: "Agent Log", keys: "CmdOrCtrl+L", tip: "Every call to the agent: command, prompt, tool calls, tokens",
 			run: func(*ui.Context, string) { a.toggleLog() }},
 		{id: "back", title: "Back", keys: "CmdOrCtrl+[", run: func(*ui.Context, string) { a.goBack() }},
@@ -182,7 +185,7 @@ func (a *app) commands() []*command {
 		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { a.goTo("feedback") }},
 		{id: "next-file", title: "Next File", keys: "Alt+CmdOrCtrl+Down", run: func(*ui.Context, string) { a.stepFile(1) }},
 		{id: "previous-file", title: "Previous File", keys: "Alt+CmdOrCtrl+Up", run: func(*ui.Context, string) { a.stepFile(-1) }},
-		{id: "shortcuts", title: "Keyboard Shortcuts", keys: "CmdOrCtrl+/", run: func(*ui.Context, string) { a.shortcutsOpen = true }},
+		{id: "shortcuts", overlay: true, title: "Keyboard Shortcuts", keys: "CmdOrCtrl+/", run: func(*ui.Context, string) { a.shortcutsOpen = true }},
 	}
 }
 
@@ -229,7 +232,34 @@ func (a *app) here(cm *command) (string, bool) {
 func (a *app) runHere(c *ui.Context, id string) {
 	cm := a.cmd(id)
 	if target, ok := a.here(cm); ok {
+		if cm.overlay {
+			a.closeOverlays(id)
+		}
 		cm.run(c, target)
+	}
+}
+
+// closeOverlays closes the dialogs and lists over the window, but the one
+// of the command keep, which toggles its own.
+func (a *app) closeOverlays(keep string) {
+	if keep != "palette" {
+		a.paletteOpen = false
+	}
+	if keep != "switch-project" {
+		a.projectsOpen = false
+	}
+	if keep != "switch-branch" {
+		a.branchesOpen = false
+	}
+	if keep != "shortcuts" {
+		a.shortcutsOpen = false
+	}
+	if f := a.compareForm; f != nil && keep != "compare" {
+		f.open = false
+	}
+	if f := a.settings; f != nil && keep != "settings" {
+		f.open = false
+		a.recording = ""
 	}
 }
 

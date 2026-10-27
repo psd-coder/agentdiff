@@ -1734,3 +1734,47 @@ func TestSettingsRoom(t *testing.T) {
 		t.Errorf("room under Done %v, want about 146", below)
 	}
 }
+
+// TestOverlaysCloseEachOther opens a dialog or a list over another from
+// the menu bar: the one under it closes.
+func TestOverlaysCloseEachOther(t *testing.T) {
+	a := newTestApp(t)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	menu := func(id string) {
+		for _, it := range a.menu().Items() {
+			for _, sub := range it.Submenu {
+				if sub.ID == id {
+					sub.Click(sub, nil)
+				}
+			}
+		}
+		tt.Frame()
+		tt.Frame()
+	}
+
+	menu("palette")
+	menu("settings")
+	if a.paletteOpen || a.settings == nil {
+		t.Fatalf("palette %v, settings %v", a.paletteOpen, a.settings)
+	}
+	menu("switch-project")
+	if a.settings != nil || !a.projectsOpen {
+		t.Fatalf("settings %v, projects %v", a.settings, a.projectsOpen)
+	}
+	menu("switch-branch")
+	if a.projectsOpen || !a.branchesOpen {
+		t.Fatalf("projects %v, branches %v", a.projectsOpen, a.branchesOpen)
+	}
+	// Its own shortcut still closes a list.
+	menu("switch-branch")
+	if a.branchesOpen {
+		t.Error("the branch list stayed open")
+	}
+	// A command that opens nothing leaves the palette.
+	menu("palette")
+	menu("refresh")
+	if !a.paletteOpen {
+		t.Error("Refresh closed the palette")
+	}
+}
