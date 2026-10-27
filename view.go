@@ -215,10 +215,7 @@ func (a *app) reviewNav(c *ui.Context) {
 			if a.cfg.FlatFiles {
 				break
 			}
-			files := g.Files
-			if id := fmt.Sprintf("group:%d", gi); a.page != id {
-				files = slices.DeleteFunc(slices.Clone(files), func(f string) bool { return !a.listed(f) })
-			}
+			files := slices.DeleteFunc(slices.Clone(g.Files), func(f string) bool { return !a.listed(f) })
 			if len(files) == 0 {
 				continue
 			}

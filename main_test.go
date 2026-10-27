@@ -1215,11 +1215,6 @@ func TestViewedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !shows(tt, "Cache keys") {
-		t.Errorf("open group hidden: %q", tt.Texts())
-	}
-	a.goTo("overview")
-	tt.Frame()
 	snapshot(t, tt, "hide-viewed")
 	if shows(tt, "Cache keys") || !shows(tt, "API") || !a.store.LoadConfig().HideViewed {
 		t.Errorf("hidden: %q", tt.Texts())
@@ -1227,6 +1222,18 @@ func TestViewedFiles(t *testing.T) {
 	if got := a.fileOrder(); !slices.Equal(got, []string{"api/handler.go"}) {
 		t.Errorf("order = %q", got)
 	}
+
+	// On a group page, a file marked viewed leaves the sidebar.
+	a.goTo("group:1")
+	tt.Frame()
+	if err := tt.Click("Viewed"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if shows(tt, "handler.go") || shows(tt, "API") {
+		t.Errorf("group page: %q", tt.Texts())
+	}
+	a.rev.Viewed["api/handler.go"] = false
 
 	// The open file stays listed after it is marked viewed.
 	a.goTo("file:api/handler.go")
