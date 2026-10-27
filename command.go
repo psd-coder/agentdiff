@@ -235,6 +235,8 @@ func (a *app) runHere(c *ui.Context, id string) {
 	if target, ok := a.here(cm); ok {
 		if cm.overlay {
 			a.closeOverlays(id)
+		} else {
+			a.paletteOpen = false
 		}
 		cm.run(c, target)
 		if cm.overlay {

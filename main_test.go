@@ -1771,11 +1771,11 @@ func TestOverlaysCloseEachOther(t *testing.T) {
 	if a.branchesOpen {
 		t.Error("the branch list stayed open")
 	}
-	// A command that opens nothing leaves the palette.
+	// Every other command closes the palette too.
 	menu("palette")
 	menu("refresh")
-	if !a.paletteOpen {
-		t.Error("Refresh closed the palette")
+	if a.paletteOpen {
+		t.Error("Refresh left the palette open")
 	}
 }
 
