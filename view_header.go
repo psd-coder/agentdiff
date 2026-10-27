@@ -43,6 +43,14 @@ func pickerButton(c *ui.Context, svg *ui.SVG, label, detail string) ui.Element {
 	})
 }
 
+// The insets of a picker row line its icon and text up with those of
+// the search field above the list, which has a 15 DIP magnifier.
+const (
+	menuInset = 9
+	menuGap   = 7
+	menuIcon  = 15
+)
+
 // menuRow is a row of a picker list: a button that fills the row, with
 // actions after it that show while the pointer is over the row.
 func menuRow(c *ui.Context, chosen bool, body func(), actions func()) ui.Element {
@@ -54,7 +62,7 @@ func menuRow(c *ui.Context, chosen bool, body func(), actions func()) ui.Element
 		row.Background(t.Surface)
 	}
 	row.Children(func() {
-		b = ui.ButtonBase(c).Grow(1).Shrink(1).Justify(ui.Start).Gap(8).Padding(6, 8).Children(body)
+		b = ui.ButtonBase(c).Grow(1).Shrink(1).Justify(ui.Start).Gap(menuGap).Padding(6, menuInset).Children(body)
 		if actions != nil {
 			bar := ui.Row(c).Gap(2).PaddingEnd(4).Children(actions)
 			if !hovered {
@@ -160,7 +168,7 @@ func (a *app) branchList(c *ui.Context) {
 		}
 	}
 	ui.Column(c).Width(340).Gap(4).Children(func() {
-		ui.SearchField(c, &a.branchQuery).Placeholder("Filter branches").Label("Filter branches").AutoFocus()
+		ui.SearchField(c, &a.branchQuery).Padding(6, menuInset-1).Gap(menuGap).Placeholder("Filter branches").Label("Filter branches").AutoFocus()
 		ui.Scroll(c).MaxHeight(380).Children(func() {
 			ui.Column(c).Gap(2).Children(func() {
 				shown := 0
@@ -181,7 +189,7 @@ func (a *app) branchList(c *ui.Context) {
 						}
 					}
 					row := menuRow(c.Key(b), chosen, func() {
-						check := ui.Icon(c, checkIcon).TextColor(t.Accent)
+						check := ui.Icon(c, checkIcon).Size(menuIcon, menuIcon).TextColor(t.Accent)
 						if !chosen {
 							check.Invisible()
 						}
