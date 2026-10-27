@@ -65,6 +65,7 @@ func (a *app) sidebar(c *ui.Context) {
 		ui.Column(c).Fill().Background(t.Surface).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
 			a.scopeHeader(c)
 			a.reviewNav(c)
+			a.fileNav(c)
 		})
 	}).Fill()
 }
@@ -175,9 +176,7 @@ func (a *app) scopeHeader(c *ui.Context) {
 }
 
 func (a *app) reviewNav(c *ui.Context) {
-	t := c.Theme()
 	page := a.page
-	groups := a.groups()
 	nav := ui.Sidebar(c, &page, func() {
 		sidebarHeading(c, "Review", nil)
 		ov := ui.SidebarItem(c, "overview", overviewIcon, "Overview")
@@ -197,12 +196,27 @@ func (a *app) reviewNav(c *ui.Context) {
 				ui.Badge(c, fmt.Sprint(feedback))
 			}
 		})
+	}).Shrink(0).Label("Review")
+	if nav.Changed() {
+		a.goTo(page)
+	}
+}
+
+// fileNav lists the files, by path or in their groups, under the switches
+// that choose how.
+func (a *app) fileNav(c *ui.Context) {
+	t := c.Theme()
+	page := a.page
+	groups := a.groups()
+	ui.Column(c).Padding(0, 10).Children(func() {
 		sidebarHeading(c, "Files", func() {
 			a.cmdSegmented(c, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
 		})
 		ui.Row(c).Padding(0, 8, 4, 8).Children(func() {
 			a.cmdCheckbox(c, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
 		})
+	})
+	nav := ui.Sidebar(c, &page, func() {
 		if a.cfg.FlatFiles {
 			for _, f := range a.files {
 				if a.listed(f.Path) {
@@ -219,7 +233,11 @@ func (a *app) reviewNav(c *ui.Context) {
 				continue
 			}
 			open := a.groupOpen(g.Title)
-			ui.Column(c.Key(g.Title)).Gap(2).Margin(8, 0, 0, 0).Children(func() {
+			column := ui.Column(c.Key(g.Title)).Gap(2)
+			if gi > 0 {
+				column.Margin(8, 0, 0, 0)
+			}
+			column.Children(func() {
 				a.groupItem(c, gi, g.Title, len(files), open)
 				if *open {
 					for _, f := range files {
@@ -237,7 +255,7 @@ func (a *app) reviewNav(c *ui.Context) {
 				ui.Text(c, "Reading changes…").FontSize(12).TextColor(t.TextMuted)
 			})
 		}
-	}).Fill().Label("Review")
+	}).Grow(1).Shrink(1).MinHeight(0).Label("Files")
 	if a.refocus == "files" {
 		nav.Focus()
 		a.refocus = ""

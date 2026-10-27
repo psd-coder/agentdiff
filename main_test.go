@@ -1368,14 +1368,21 @@ func TestFocusAndShortcuts(t *testing.T) {
 		tt.Frame()
 	}
 
+	// Focus Files opens the first file, in the list of files only.
 	click("Focus Files")
-	if !tt.Focused("Review") {
-		t.Error("files sidebar has no focus")
+	if !tt.Focused("Files") || a.page != "file:api/handler.go" {
+		t.Errorf("files sidebar: focused %v, page %q", tt.Focused("Files"), a.page)
 	}
-	tt.Key(0, ui.KeyDown)
+	tt.Key(0, ui.KeyUp)
 	tt.Frame()
-	if a.page != "threads" {
-		t.Errorf("Down in the files sidebar: %q", a.page)
+	if a.page != "group:0" {
+		t.Errorf("Up in the files sidebar: %q", a.page)
+	}
+	// It keeps the file open.
+	a.goTo("file:cache/cache.go")
+	click("Focus Files")
+	if a.page != "file:cache/cache.go" {
+		t.Errorf("open file: %q", a.page)
 	}
 	click("Focus Changes")
 	if !tt.Focused("Changes") {
@@ -1469,7 +1476,7 @@ func TestCommandPalette(t *testing.T) {
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	tt.Frame()
-	if !tt.Focused("Review") {
+	if !tt.Focused("Files") {
 		t.Error("Focus Files from the palette left the files sidebar without the focus")
 	}
 	// The menu bar's commands do not count as used from the palette.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -170,7 +171,7 @@ func (a *app) commands() []*command {
 		{id: "refresh", title: "Refresh", keys: "CmdOrCtrl+R", tip: "Read the changes again", run: func(*ui.Context, string) { a.refresh() }},
 		{id: "settings", title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { a.openSettings() }},
 		{id: "focus-changes", title: "Focus Changes", keys: "CmdOrCtrl+Shift+C", run: func(*ui.Context, string) { a.refocus = "changes" }},
-		{id: "focus-files", title: "Focus Files", keys: "CmdOrCtrl+Shift+F", run: func(*ui.Context, string) { a.refocus = "files" }},
+		{id: "focus-files", title: "Focus Files", keys: "CmdOrCtrl+Shift+F", run: func(*ui.Context, string) { a.focusFiles() }},
 		{id: "palette", title: "Command Palette…", keys: "CmdOrCtrl+Shift+P", run: func(*ui.Context, string) { a.openPalette() }},
 		{id: "agent-log", title: "Agent Log", keys: "CmdOrCtrl+L", tip: "Every call to the agent: command, prompt, tool calls, tokens",
 			run: func(*ui.Context, string) { a.toggleLog() }},
@@ -329,6 +330,24 @@ func (a *app) cmdSegmented(c *ui.Context, ids []string, labels ...string) ui.Ele
 		a.cmd(ids[at]).run(c, "")
 	}
 	return seg
+}
+
+// focusFiles moves the keyboard focus to the list of files, on the file
+// or group open, or else on the first file listed, which it opens.
+func (a *app) focusFiles() {
+	a.refocus = "files"
+	if f, ok := a.targetFile(); ok && a.listed(f) {
+		return
+	}
+	if g, ok := a.targetGroup(); ok && !a.cfg.FlatFiles && slices.ContainsFunc(a.groupFiles(g), a.listed) {
+		return
+	}
+	for _, f := range a.fileOrder() {
+		if a.listed(f) {
+			a.goTo("file:" + f)
+			return
+		}
+	}
 }
 
 func (a *app) targetFile() (string, bool) {

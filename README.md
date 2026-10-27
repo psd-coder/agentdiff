@@ -100,7 +100,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Escape | Closes the side panel on top: a thread or question, then the agent log |
 | Cmd+1, Cmd+2, Cmd+3 | Overview, Questions & comments, Feedback |
 | Option+Cmd+Down, Option+Cmd+Up | Next and previous file, in review order |
-| Cmd+Shift+C, Cmd+Shift+F | Move the keyboard focus to the list of changes or to the list of files |
+| Cmd+Shift+C, Cmd+Shift+F | Move the keyboard focus to the list of changes or to the list of files. In the list of files it stays on the open file or group, or opens the first file |
 | Cmd+L | Agent log |
 | Cmd+R | Read the changes again |
 | Cmd+Shift+P | Command palette: type part of a command's name and press Return to run it |
