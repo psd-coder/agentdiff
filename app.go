@@ -70,10 +70,11 @@ type app struct {
 	loadErr  string
 	// shown is set once the window shows the changes of a scope, which
 	// stay while the next scope loads, and switching while it does.
-	shown     bool
-	switching bool
-	diffs     map[string]*fileDiff
-	gen       int
+	shown        bool
+	switching    bool
+	loadingScope *scopeLoad
+	diffs        map[string]*fileDiff
+	gen          int
 	// patch identifies the changes of the scope once patchKnown, see
 	// gitx.Repo.PatchID.
 	patch      string
@@ -210,6 +211,7 @@ func (a *app) openRepo(path string) {
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
 	a.branch, a.head, a.base, a.branches, a.commits = "", "", "", nil, nil
+	a.shown = false
 	a.baseSet, a.rng, a.worktrees = false, nil, nil
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff: " + r.Name())
@@ -436,8 +438,21 @@ func (a *app) setScope(s gitx.Scope) {
 	a.load(s, true)
 }
 
-// reload reads the changes of the scope again, keeping the review.
-func (a *app) reload() { a.load(a.scope, false) }
+// reload reads the changes of the scope again, keeping the review: of
+// the scope being loaded, if one is.
+func (a *app) reload() {
+	if t := a.loadingScope; t != nil {
+		a.load(t.scope, t.fresh)
+		return
+	}
+	a.load(a.scope, false)
+}
+
+// scopeLoad is a scope load reads, and whether it opens anew.
+type scopeLoad struct {
+	scope gitx.Scope
+	fresh bool
+}
 
 // enterScope makes s, with its review rev, the scope the window shows.
 func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
@@ -467,11 +482,14 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		rev, page = a.reviewOf(s), "overview"
 		rev.Scope = s
 	}
+	a.loadingScope = &scopeLoad{s, fresh}
+	entered := !fresh
 	if a.shown && a.rev != nil && a.rev.Repo == r.Root {
 		a.switching = true
 	} else {
 		if fresh {
 			a.enterScope(s, rev)
+			entered = true
 		}
 		a.clearChanges()
 		a.loading = true
@@ -535,11 +553,11 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			if gen != a.gen {
 				return
 			}
-			if fresh && !a.loading {
+			if !entered {
 				a.enterScope(s, rev)
 			}
 			a.clearChanges()
-			a.loading, a.switching = false, false
+			a.loading, a.switching, a.loadingScope = false, false, nil
 			if err != nil {
 				a.loadErr = err.Error()
 				return

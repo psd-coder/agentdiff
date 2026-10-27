@@ -1695,3 +1695,25 @@ func TestScopeShowsAtOnce(t *testing.T) {
 		t.Errorf("scope %+v, page %q", a.scope, a.page)
 	}
 }
+
+// TestScopeLoadsInOrder opens a commit while a project is still read,
+// and refreshes while the commit is.
+func TestScopeLoadsInOrder(t *testing.T) {
+	a := newTestApp(t)
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits[0].SHA}
+	a.queue = make(chan func(), 64)
+	a.openRepo(a.repo.Root)
+	a.setScope(commit)
+	pump(t, a, "the commit", func() bool { return !a.loading && !a.switching })
+	if a.scope != commit || a.rev.Scope != commit {
+		t.Fatalf("scope %+v, review of %+v", a.scope, a.rev.Scope)
+	}
+
+	uncommitted := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	a.setScope(uncommitted)
+	a.refresh()
+	pump(t, a, "the uncommitted changes", func() bool { return !a.loading && !a.switching })
+	if a.scope != uncommitted || a.scopeID != scopeID(uncommitted) {
+		t.Errorf("scope %+v, id %q", a.scope, a.scopeID)
+	}
+}
