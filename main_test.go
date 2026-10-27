@@ -213,6 +213,15 @@ func TestSettingsOverride(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "settings")
+	first, _ := tt.Find("Done")
+	if err := tt.Click("This review"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "settings-review")
+	if second, _ := tt.Find("Done"); second != first {
+		t.Errorf("the dialog changed its size with the tab: Done at %v, then %v", first, second)
+	}
 	a.settings.override = true
 	a.settings.local.provider = 1
 	a.settings.local.model = "gpt-5"

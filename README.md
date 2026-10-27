@@ -114,7 +114,7 @@ The menu bar lists these under File, View and Go.
 
 ## Configuration
 
-Settings has two tabs. All reviews writes the global configuration. This review overrides it for the current repository and scope only. Every change is saved as you make it, and Done or Escape closes the dialog.
+Settings has two tabs. All reviews writes the global configuration. This review overrides it for the current repository and scope only. Until you turn the override on, its fields show the global settings, disabled. Every change is saved as you make it, and Done or Escape closes the dialog.
 
 | Field | Default | Purpose |
 | --- | --- | --- |

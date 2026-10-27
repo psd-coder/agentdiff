@@ -134,28 +134,47 @@ func (a *app) settingsModal(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
+	if !f.override {
+		// Without an override the review follows the global settings,
+		// which its fields show, disabled.
+		f.local = f.global
+	}
 	ui.Modal(c, &f.open, func() {
-		ui.Column(c).Width(640).Gap(14).Children(func() {
-			ui.Text(c, "Settings").FontSize(18).Bold()
-			ui.Tabs(c, &f.tab, "All reviews", "This review")
-			if f.tab == 0 {
-				ui.Text(c, "Used by every review that does not override them.").FontSize(12).TextColor(t.TextMuted)
-				a.agentFields(c, &f.global, f.status)
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Switch(c, &f.ahead).Label("Write the deeper walkthrough of every step with the overview")
-					ui.Text(c, "Write the deeper walkthrough of every step with the overview")
+		ui.Column(c).Width(640).Shrink(1).MinHeight(0).Children(func() {
+			ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
+				ui.Text(c, "Settings").FontSize(18).Bold()
+				ui.Tabs(c, &f.tab, "All reviews", "This review")
+			})
+			// Both tabs take the room of the taller one, so the dialog
+			// keeps its size as the tab changes.
+			ui.Scroll(c).Shrink(1).MinHeight(0).FillWidth().Children(func() {
+				ui.Grid(c).Columns(1).PaddingEnd(4).Children(func() {
+					global := ui.Column(c.Key("global")).Gap(14).RowStart(1).ColumnStart(1).Children(func() {
+						ui.Text(c, "Used by every review that does not override them.").FontSize(12).TextColor(t.TextMuted)
+						a.agentFields(c, &f.global, f.status)
+						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+							ui.Switch(c, &f.ahead).Label("Write the deeper walkthrough of every step with the overview")
+							ui.Text(c, "Write the deeper walkthrough of every step with the overview")
+						})
+						ui.Text(c, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(t.TextMuted)
+					})
+					local := ui.Column(c.Key("local")).Gap(14).RowStart(1).ColumnStart(1).Children(func() {
+						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+							ui.Switch(c, &f.override).Label("Override for this review")
+							ui.Text(c, "Use other settings for "+a.repo.Name()+", "+strings.ToLower(a.scope.Label()))
+						})
+						ui.Column(c).Gap(14).Disabled(!f.override).Children(func() {
+							a.agentFields(c, &f.local, f.status)
+						})
+					})
+					if f.tab == 0 {
+						local.Invisible()
+					} else {
+						global.Invisible()
+					}
 				})
-				ui.Text(c, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(t.TextMuted)
-			} else {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Switch(c, &f.override).Label("Override for this review")
-					ui.Text(c, "Use other settings for "+a.repo.Name()+", "+strings.ToLower(a.scope.Label()))
-				})
-				if f.override {
-					a.agentFields(c, &f.local, f.status)
-				}
-			}
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			})
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
 				ui.Text(c, "Changes are saved as you make them.").FontSize(11).TextColor(t.TextMuted).Grow(1)
 				ui.PrimaryButton(c, "Done").Tooltip("Escape").OnClick(func() { f.open = false })
 			})
