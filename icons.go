@@ -12,6 +12,7 @@ var (
 	folderIcon   = icon(`<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>`)
 	branchIcon   = icon(`<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>`)
 	compareIcon  = icon(`<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>`)
+	searchIcon   = icon(`<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>`)
 	plusIcon     = icon(`<path d="M12 5v14M5 12h14"/>`)
 	trashIcon    = icon(`<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>`)
 	checkIcon    = icon(`<path d="M20 6 9 17l-5-5"/>`)

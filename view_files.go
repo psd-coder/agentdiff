@@ -75,8 +75,9 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 	t := c.Theme()
 	f := d.change
 	ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		name := ui.Text(c, f.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
-		if !page && name.Clicked() {
+		if page {
+			ui.Text(c, f.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
+		} else if textLink(c, f.Path, func(e ui.Element) { e.Font("monospace").Bold().TextColor(t.Text) }).Tooltip("Open the file on its own page").Clicked() {
 			a.goTo("file:" + f.Path)
 		}
 		ui.Badge(c, statusLabel(f))
@@ -192,7 +193,7 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
 func (a *app) threadCard(c *ui.Context, th *review.Thread) {
 	t := c.Theme()
 	card := ui.ButtonBase(c.Key("card-"+th.ID)).Height(threadCardHeight).Padding(6, 10).Gap(10).Radius(8).AlignItems(ui.Center).
-		Background(t.Background).Border(1, t.Border).Label("Open thread")
+		Background(t.Background).Border(1, t.Border)
 	if th.ID == a.thread {
 		card.Border(2, t.Accent)
 	} else if card.Hovered() {

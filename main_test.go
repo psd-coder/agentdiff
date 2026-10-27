@@ -969,3 +969,56 @@ func TestKeyboardNavigation(t *testing.T) {
 		t.Errorf("shortcuts = %v", seen)
 	}
 }
+
+func TestPickersFromKeyboard(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	for _, b := range []string{"agent", "agent-two", "docs"} {
+		git(t, dir, "branch", b)
+	}
+	other := fixtureRepo(t)
+	a.cfg.AddRecent(other)
+	a.openRepo(dir)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+
+	if err := tt.Click("Branch"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Type("agent")
+	tt.Frame()
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.branchesOpen || a.head != "agent-two" {
+		t.Fatalf("open %v, head %q", a.branchesOpen, a.head)
+	}
+	if !tt.Focused("Branch") {
+		t.Error("the focus did not go back to the branch button")
+	}
+
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if !a.branchesOpen || a.branchNav.hi != slices.Index(a.branches, "agent-two") {
+		t.Fatalf("Down on the button: open %v, highlight %d", a.branchesOpen, a.branchNav.hi)
+	}
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.branchesOpen {
+		t.Fatal("Escape left the list open")
+	}
+
+	if err := tt.Click("Project"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.projectsOpen || !strings.HasSuffix(a.repo.Root, other) {
+		t.Fatalf("open %v, repo %q, want %q", a.projectsOpen, a.repo.Root, other)
+	}
+}

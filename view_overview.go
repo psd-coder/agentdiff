@@ -307,7 +307,7 @@ func (a *app) groupCards(c *ui.Context) {
 						mark = "✓"
 					}
 					ui.Text(c, mark).Width(14).TextColor(t.Success)
-					link := ui.Text(c, f).Font("monospace").FontSize(12).TextColor(t.Accent).Cursor(ui.CursorPointer).SingleLine().Shrink(1)
+					link := textLink(c, f, func(e ui.Element) { e.Font("monospace").FontSize(12) })
 					if link.Clicked() {
 						a.goTo("file:" + f)
 					}

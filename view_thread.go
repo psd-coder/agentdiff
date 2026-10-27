@@ -17,11 +17,20 @@ func (a *app) threadPanel(c *ui.Context) {
 	}
 	ui.Column(c).Fill().Background(t.Background).BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Children(func() {
 		ui.Row(c).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			title := ui.Text(c, th.Anchor.Label()).Bold().SingleLine().Shrink(1).Grow(1).Tooltip("Go to it")
-			if title.Clicked() && th.Anchor.File != "" {
-				a.goTo("file:" + th.Anchor.File)
-			} else if title.Clicked() && th.Anchor.Kind == review.AnchorSection {
-				a.goTo("overview")
+			target := ""
+			switch {
+			case th.Anchor.File != "":
+				target = "file:" + th.Anchor.File
+			case th.Anchor.Kind == review.AnchorSection:
+				target = "overview"
+			}
+			if target == "" {
+				ui.Text(c, th.Anchor.Label()).Bold().SingleLine().Shrink(1).Grow(1)
+			} else {
+				title := textLink(c, th.Anchor.Label(), func(e ui.Element) { e.Bold().TextColor(t.Text) }).Grow(1).Justify(ui.Start).Tooltip("Go to it")
+				if title.Clicked() {
+					a.goTo(target)
+				}
 			}
 			if th.Agent != "" {
 				ui.Button(c, "Log").Tooltip("What the agent did in this thread").OnClick(func() { a.showLog(th.ID) })
@@ -168,7 +177,7 @@ func (a *app) threadsPage(c *ui.Context) {
 
 func (a *app) threadRow(c *ui.Context, th *review.Thread) {
 	t := c.Theme()
-	row := ui.ButtonBase(c.Key("row-"+th.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, t.Border).Column().AlignItems(ui.Stretch).Label("Open thread")
+	row := ui.ButtonBase(c.Key("row-"+th.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, t.Border).Column().AlignItems(ui.Stretch)
 	if row.Hovered() {
 		row.Background(t.SurfaceHover)
 	}

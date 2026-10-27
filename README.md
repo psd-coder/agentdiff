@@ -104,6 +104,11 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Shift+B | Compare |
 | Cmd+, | Settings |
 | Cmd+Enter | Sends the question or comment you are typing |
+| Down, Enter or Space on the project or branch button | Opens its list |
+| Up, Down, Page Up, Page Down in a list | Move the highlight. Typing in the branch list filters it |
+| Enter in a list | Opens the highlighted project or branch |
+| Cmd+Enter in the branch list | Opens the worktree of the highlighted branch, when another worktree has it checked out |
+| Cmd+Backspace or Delete in the project list | Removes the highlighted project from the list, after you confirm |
 
 The menu bar lists these under File, View and Go.
 

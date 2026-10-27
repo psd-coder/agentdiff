@@ -216,7 +216,7 @@ func (a *app) questionsList(c *ui.Context) {
 			continue
 		}
 		n++
-		row := ui.ButtonBase(c.Key("q-"+w.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, t.Border).Column().AlignItems(ui.Stretch).Label("Open question")
+		row := ui.ButtonBase(c.Key("q-"+w.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, t.Border).Column().AlignItems(ui.Stretch)
 		if row.Hovered() {
 			row.Background(t.SurfaceHover)
 		}

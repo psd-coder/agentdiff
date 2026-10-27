@@ -81,7 +81,7 @@ func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 // walkRow links to a walk from the page above it.
 func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 	t := c.Theme()
-	row := ui.ButtonBase(c.Key("walk-"+w.ID)).Padding(8, 12).Gap(8).Radius(8).Border(1, t.Border).AlignItems(ui.Center).Label("Open walkthrough")
+	row := ui.ButtonBase(c.Key("walk-"+w.ID)).Padding(8, 12).Gap(8).Radius(8).Border(1, t.Border).AlignItems(ui.Center)
 	if row.Hovered() {
 		row.Background(t.SurfaceHover)
 	}
@@ -229,12 +229,12 @@ func (a *app) refView(c *ui.Context, r review.Ref) {
 	s := a.snippetOf(r)
 	ui.Column(c).Radius(8).Border(1, t.Border).Clip().Children(func() {
 		ui.Row(c).Gap(10).Padding(6, 10).AlignItems(ui.Center).Background(t.Surface).Children(func() {
-			label := ui.Text(c, r.Label()).Font("monospace").FontSize(12).SingleLine().Shrink(0)
 			if s.inDiff {
-				label.TextColor(t.Accent).Cursor(ui.CursorPointer).Tooltip("Open in the diff")
-				if label.Clicked() {
+				if textLink(c, r.Label(), func(e ui.Element) { e.Font("monospace").FontSize(12) }).Shrink(0).Tooltip("Open in the diff").Clicked() {
 					a.openRef(r)
 				}
+			} else {
+				ui.Text(c, r.Label()).Font("monospace").FontSize(12).SingleLine().Shrink(0)
 			}
 			if r.Why != "" {
 				ui.Text(c, r.Why).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
@@ -311,7 +311,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
 				crumb := func(label, page string) {
-					link := ui.Text(c, excerpt(label, 40)).FontSize(12).TextColor(t.Accent).Cursor(ui.CursorPointer)
+					link := textLink(c, excerpt(label, 40), func(e ui.Element) { e.FontSize(12) }).Tooltip(label)
 					if link.Clicked() {
 						a.goTo(page)
 					}

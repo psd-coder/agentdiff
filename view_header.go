@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -30,94 +31,86 @@ func (a *app) toolbar(c *ui.Context) {
 	})
 }
 
-// pickerButton is the face of a button that opens a list below it.
-func pickerButton(c *ui.Context, svg *ui.SVG, label, detail string) ui.Element {
-	t := c.Theme()
-	return ui.Button(c, "").Children(func() {
-		ui.Icon(c, svg).TextColor(t.TextMuted)
-		ui.Text(c, label).Bold().SingleLine()
-		if detail != "" {
-			ui.Text(c, detail).TextColor(t.TextMuted).SingleLine()
-		}
-		ui.Icon(c, chevronIcon).FontSize(12).TextColor(t.TextMuted)
-	})
-}
-
-// The insets of a picker row line its icon and text up with those of
-// the search field above the list, which has a 15 DIP magnifier.
-const (
-	menuInset = 9
-	menuGap   = 7
-	menuIcon  = 15
-)
-
-// menuRow is a row of a picker list: a button that fills the row, with
-// actions after it that show while the pointer is over the row.
-func menuRow(c *ui.Context, chosen bool, body func(), actions func()) ui.Element {
-	t := c.Theme()
-	var b ui.Element
-	row := ui.Row(c).AlignItems(ui.Center).Radius(t.Radius)
-	hovered := row.Hovered()
-	if hovered || chosen {
-		row.Background(t.Surface)
-	}
-	row.Children(func() {
-		b = ui.ButtonBase(c).Grow(1).Shrink(1).Justify(ui.Start).Gap(menuGap).Padding(6, menuInset).Children(body)
-		if actions != nil {
-			bar := ui.Row(c).Gap(2).PaddingEnd(4).Children(actions)
-			if !hovered {
-				bar.Invisible()
-			}
-		}
-	})
-	return b
-}
-
-func iconButton(c *ui.Context, svg *ui.SVG, label string) ui.Element {
-	return ui.Button(c, "").Padding(4, 6).Label(label).Tooltip(label).Children(func() {
-		ui.Icon(c, svg).FontSize(13)
-	})
-}
-
 func (a *app) projectPicker(c *ui.Context) {
 	t := c.Theme()
-	anchor := pickerButton(c, folderIcon, a.repo.Name(), "").Tooltip(a.repo.Root).Label("Project").
-		OnClick(func() { a.projectsOpen = !a.projectsOpen })
+	anchor := pickerButton(c, folderIcon, a.repo.Name(), "", a.projectsOpen).Tooltip(a.repo.Root).Label("Project")
+	if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.projectsOpen {
+		a.toggleProjects()
+	}
+	if a.refocus == "project" {
+		anchor.Focus()
+		a.refocus = ""
+	}
 	ui.Popover(c, anchor, &a.projectsOpen, func() {
+		recent := a.cfg.Recent
+		n := len(recent) + 1
+		choose := func(i int) {
+			a.projectsOpen, a.refocus = false, "project"
+			switch {
+			case i == len(recent):
+				a.chooseRepo()
+			case recent[i] != a.repo.Root:
+				a.openRepo(recent[i])
+			}
+		}
 		ui.Column(c).MinWidth(360).MaxWidth(480).FillWidth().Gap(2).Children(func() {
 			ui.Text(c, "Projects").FontSize(11).Bold().TextColor(t.TextMuted).Padding(4, 8)
-			for _, p := range a.cfg.Recent {
-				current := p == a.repo.Root
-				open := menuRow(c.Key(p), current, func() {
-					ui.Icon(c, folderIcon).TextColor(t.TextMuted)
-					ui.Column(c).Grow(1).Shrink(1).Children(func() {
-						ui.Text(c, filepath.Base(p)).Bold().SingleLine()
-						ui.Text(c, p).FontSize(11).TextColor(t.TextMuted).SingleLine()
-					})
-					if current {
-						ui.Icon(c, checkIcon).TextColor(t.Accent)
-					}
-				}, func() {
-					iconButton(c, trashIcon, "Remove from the list").OnClick(func() { a.confirmRemoveProject(p) })
-				}).Label(filepath.Base(p))
-				if open.Clicked() {
-					a.projectsOpen = false
-					if !current {
-						a.openRepo(p)
+			nav := &a.projectNav
+			l := nav.list(c, "Projects", func() {
+				for i, p := range recent {
+					current := p == a.repo.Root
+					row := nav.row(c.Key(p), func() {
+						ui.Icon(c, folderIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
+						ui.Column(c).Grow(1).Shrink(1).Children(func() {
+							ui.Text(c, filepath.Base(p)).Bold().SingleLine()
+							ui.Text(c, p).FontSize(11).TextColor(t.TextMuted).SingleLine()
+						})
+						if current {
+							ui.Icon(c, checkIcon).TextColor(t.Accent).Label("Open")
+						}
+					}, func() {
+						iconButton(c, trashIcon, "Remove from the list").Tooltip("Remove from the list (Cmd+Backspace)").OnClick(func() { a.confirmRemoveProject(p) })
+					}).Label(filepath.Base(p) + ", " + p)
+					if row.Clicked() {
+						choose(i)
 					}
 				}
+				ui.Divider(c).Margin(4, 0)
+				add := nav.row(c, func() {
+					ui.Icon(c, plusIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
+					ui.Text(c, "Add project…")
+				}, nil).Label("Add project…")
+				if add.Clicked() {
+					choose(len(recent))
+				}
+			}).Focusable().AutoFocus()
+			for _, k := range []ui.Key{ui.KeyDown, ui.KeyUp, ui.KeyPageDown, ui.KeyPageUp} {
+				if l.Shortcut(0, k) {
+					nav.key(k, n)
+				}
 			}
-			ui.Divider(c).Margin(4, 0)
-			add := menuRow(c, false, func() {
-				ui.Icon(c, plusIcon).TextColor(t.TextMuted)
-				ui.Text(c, "Add project…")
-			}, nil)
-			if add.Clicked() {
-				a.projectsOpen = false
-				a.chooseRepo()
+			switch {
+			case l.Shortcut(0, ui.KeyHome):
+				nav.open(0)
+			case l.Shortcut(0, ui.KeyEnd):
+				nav.open(n - 1)
+			case l.Shortcut(0, ui.KeyEnter) || l.Shortcut(0, ui.KeySpace):
+				choose(nav.hi)
+			case l.Shortcut(ui.Cmd, ui.KeyBackspace) || l.Shortcut(0, ui.KeyDelete):
+				if nav.hi < len(recent) {
+					a.confirmRemoveProject(recent[nav.hi])
+				}
+			}
+			if row, ok := nav.active(); ok {
+				l.ActiveDescendant(row)
 			}
 		})
 	})
+}
+
+func (a *app) toggleProjects() {
+	a.projectsOpen = !a.projectsOpen
+	a.projectNav.open(slices.Index(a.cfg.Recent, a.repo.Root))
 }
 
 func (a *app) confirmRemoveProject(path string) {
@@ -148,15 +141,36 @@ func (a *app) branchPicker(c *ui.Context) {
 	label, detail := a.branchLabel()
 	r := t.Radius
 	ui.Row(c).AlignItems(ui.Stretch).Children(func() {
-		anchor := pickerButton(c, branchIcon, label, detail).Radius(r, 0, 0, r).Label("Branch").
-			Tooltip("Branch to review").OnClick(func() {
-			a.branchesOpen = !a.branchesOpen
-			a.branchQuery = ""
-		})
+		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip("Branch to review")
+		if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !a.branchesOpen {
+			a.toggleBranches()
+		}
+		if a.refocus == "branch" {
+			anchor.Focus()
+			a.refocus = ""
+		}
 		iconButton(c, compareIcon, "Compare with another base, or review a custom range").
 			PaddingX(9).Radius(0, r, r, 0).MarginStart(-1).OnClick(a.openCompare)
 		ui.Popover(c, anchor, &a.branchesOpen, func() { a.branchList(c) })
 	})
+}
+
+func (a *app) toggleBranches() {
+	a.branchesOpen = !a.branchesOpen
+	a.branchQuery = ""
+	a.branchNav.open(slices.Index(a.branches, a.headBranch()))
+}
+
+// filteredBranches are the branches whose name holds the filter.
+func (a *app) filteredBranches() []string {
+	q := strings.ToLower(a.branchQuery)
+	var out []string
+	for _, b := range a.branches {
+		if strings.Contains(strings.ToLower(b), q) {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 func (a *app) branchList(c *ui.Context) {
@@ -167,28 +181,48 @@ func (a *app) branchList(c *ui.Context) {
 			trees[w.Branch] = w.Path
 		}
 	}
+	branches := a.filteredBranches()
+	nav := &a.branchNav
+	choose := func(b string) {
+		a.branchesOpen, a.refocus = false, "branch"
+		a.pickBranch(b)
+	}
+	openTree := func(tree string) {
+		a.branchesOpen = false
+		a.openRepo(tree)
+	}
 	ui.Column(c).MinWidth(340).MaxWidth(560).FillWidth().Gap(4).Children(func() {
-		ui.SearchField(c, &a.branchQuery).Padding(6, menuInset-1).Gap(menuGap).Placeholder("Filter branches").Label("Filter branches").AutoFocus()
+		in := searchField(c, &a.branchQuery, "Filter branches", func(k ui.TextKey) bool {
+			switch {
+			case k.Mods == 0 && nav.key(k.Key, len(branches)):
+				return true
+			case k.Key == ui.KeyEnter && nav.hi < len(branches):
+				b := branches[nav.hi]
+				if tree := trees[b]; k.Mods == ui.Cmd && tree != "" {
+					openTree(tree)
+				} else if k.Mods == 0 {
+					choose(b)
+				}
+				return true
+			}
+			return false
+		})
+		if in.Changed() {
+			nav.open(0)
+		}
 		ui.Scroll(c).MaxHeight(380).Children(func() {
-			ui.Column(c).Gap(2).Children(func() {
-				shown := 0
-				for _, b := range a.branches {
-					if !strings.Contains(strings.ToLower(b), strings.ToLower(a.branchQuery)) {
-						continue
-					}
-					shown++
+			nav.list(c, "Branches", func() {
+				for _, b := range branches {
 					chosen := a.rng == nil && b == a.headBranch()
 					tree := trees[b]
 					var actions func()
 					if tree != "" {
 						actions = func() {
-							iconButton(c, worktreeIcon, "Open the worktree "+tree).OnClick(func() {
-								a.branchesOpen = false
-								a.openRepo(tree)
-							})
+							iconButton(c, worktreeIcon, "Open the worktree "+tree).Tooltip("Open the worktree " + tree + " (Cmd+Enter)").OnClick(func() { openTree(tree) })
 						}
 					}
-					row := menuRow(c.Key(b), chosen, func() {
+					label := b
+					row := nav.row(c.Key(b), func() {
 						check := ui.Icon(c, checkIcon).Size(menuIcon, menuIcon).TextColor(t.Accent)
 						if !chosen {
 							check.Invisible()
@@ -196,21 +230,29 @@ func (a *app) branchList(c *ui.Context) {
 						ui.Text(c, b).SingleLine().Shrink(1).Grow(1)
 						switch {
 						case b == a.branch:
+							label += ", checked out"
 							ui.Text(c, "checked out").FontSize(11).TextColor(t.TextMuted)
 						case tree != "":
+							label += ", worktree"
 							ui.Text(c, "worktree").FontSize(11).TextColor(t.TextMuted).Tooltip(tree)
 						}
-					}, actions).Label(b)
+						if chosen {
+							label += ", selected"
+						}
+					}, actions)
+					row.Label(label)
 					if row.Clicked() {
-						a.branchesOpen = false
-						a.pickBranch(b)
+						choose(b)
 					}
 				}
-				if shown == 0 {
-					ui.Text(c, "No branches match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
-				}
 			})
+			if len(branches) == 0 {
+				ui.Text(c, "No branches match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
+			}
 		})
+		if row, ok := nav.active(); ok && len(branches) > 0 {
+			in.ActiveDescendant(row)
+		}
 	})
 }
 
@@ -262,7 +304,7 @@ func (a *app) compareModal(c *ui.Context) {
 			if f.mode == compareBranches {
 				ui.Text(c, "Review the commits of a branch since it left its base. The branch does not have to be checked out.").FontSize(12).TextColor(t.TextMuted)
 				ui.Text(c, "Branch").FontSize(12).Bold()
-				ui.Combobox(c, &f.branch, a.branches).Label("Branch")
+				ui.Combobox(c, &f.branch, a.branches).Label("Branch").AutoFocus()
 				ui.Text(c, "Base").FontSize(12).Bold()
 				ui.Combobox(c, &f.base, a.branches).Label("Base")
 				if f.branch != "" && f.branch == f.base {

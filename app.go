@@ -127,8 +127,13 @@ type app struct {
 	settings     *settingsForm
 	compareForm  *compareForm
 	projectsOpen bool
+	projectNav   pickList
 	branchesOpen bool
 	branchQuery  string
+	branchNav    pickList
+	// refocus names the picker button that takes the focus back once
+	// its list closed after a choice: "project" or "branch".
+	refocus string
 }
 
 func newApp(s store.Store) *app {
