@@ -190,6 +190,9 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
 	}
 	view := editor.DiffView(c, s).FillWidth()
 	if !fit {
+		a.takeFocus(view, "page")
+	}
+	if !fit {
 		view.Grow(1)
 	}
 }

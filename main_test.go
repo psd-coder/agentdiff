@@ -1866,3 +1866,33 @@ func TestReviewGroupOnHover(t *testing.T) {
 		t.Errorf("page %q", a.page)
 	}
 }
+
+// TestFocusPage moves the keyboard focus from the list of files to the
+// page: the overview's scroll, or a file's diff.
+func TestFocusPage(t *testing.T) {
+	a := newTestApp(t)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	run := func(id string) {
+		a.queueCommand(id)
+		tt.Frame()
+		tt.Frame()
+		tt.Frame()
+	}
+	a.goTo("overview")
+	run("focus-files")
+	page := a.page
+	run("focus-page")
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if tt.Focused("Files") || a.page != page {
+		t.Errorf("overview: files focused %v, page %q", tt.Focused("Files"), a.page)
+	}
+
+	a.goTo("file:api/handler.go")
+	run("focus-files")
+	run("focus-page")
+	if tt.Focused("Files") || !tt.Focused("New text") || a.refocus != "" {
+		t.Errorf("file page: files focused %v, diff focused %v, refocus %q", tt.Focused("Files"), tt.Focused("New text"), a.refocus)
+	}
+}

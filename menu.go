@@ -34,6 +34,7 @@ func (a *app) menu() *mygo.Menu {
 			mygo.Separator(),
 			item("focus-changes"),
 			item("focus-files"),
+			item("focus-page"),
 			mygo.Separator(),
 			item("agent-log"),
 			mygo.Separator(),

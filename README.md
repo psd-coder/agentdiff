@@ -101,6 +101,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+1, Cmd+2, Cmd+3 | Overview, Questions & comments, Feedback |
 | Option+Cmd+Down, Option+Cmd+Up | Next and previous file, in review order |
 | Cmd+Shift+C, Cmd+Shift+F | Move the keyboard focus to the list of changes or to the list of files. In the list of files it stays on the open file or group, or opens the first file |
+| Cmd+Shift+M | Moves the keyboard focus to the page: the arrows then scroll it, or move in the diff of a file |
 | Cmd+L | Agent log |
 | Cmd+R | Read the changes again |
 | Cmd+Shift+P | Command palette: type part of a command's name and press Return to run it |

@@ -175,6 +175,7 @@ func (a *app) commands() []*command {
 		{id: "settings", overlay: true, title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { a.openSettings() }},
 		{id: "focus-changes", title: "Focus Changes", keys: "CmdOrCtrl+Shift+C", run: func(*ui.Context, string) { a.refocus = "changes" }},
 		{id: "focus-files", title: "Focus Files", keys: "CmdOrCtrl+Shift+F", run: func(*ui.Context, string) { a.focusFiles() }},
+		{id: "focus-page", title: "Focus Page", keys: "CmdOrCtrl+Shift+M", run: func(*ui.Context, string) { a.refocus = "page" }},
 		{id: "palette", overlay: true, title: "Command Palette…", keys: "CmdOrCtrl+Shift+P", run: func(*ui.Context, string) { a.openPalette() }},
 		{id: "agent-log", title: "Agent Log", keys: "CmdOrCtrl+L", tip: "Every call to the agent: command, prompt, tool calls, tokens",
 			run: func(*ui.Context, string) { a.toggleLog() }},
