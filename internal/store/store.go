@@ -25,6 +25,8 @@ type Config struct {
 	// FlatFiles lists the files in the sidebar by path instead of in
 	// their review groups.
 	FlatFiles bool `json:"flatFiles,omitempty"`
+	// HideViewed leaves the viewed files out of the sidebar.
+	HideViewed bool `json:"hideViewed,omitempty"`
 	// DeeperAhead writes the deeper walkthrough of every overview step
 	// right after the overview.
 	DeeperAhead bool     `json:"deeperAhead"`

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -46,6 +47,12 @@ func (a *app) groupPage(c *ui.Context, i int) {
 					ui.Text(c, g.Summary).TextColor(t.TextMuted)
 				}
 			})
+			viewed := !slices.ContainsFunc(g.Files, func(f string) bool { return !a.rev.Viewed[f] })
+			label := "Mark all as viewed"
+			if viewed {
+				label = "Mark all as not viewed"
+			}
+			ui.Button(c, label).OnClick(func() { a.setViewed(g.Files, !viewed) })
 			a.layoutSwitch(c)
 		})
 		for _, f := range g.Files {

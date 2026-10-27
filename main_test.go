@@ -1190,3 +1190,60 @@ func TestSelectLineRange(t *testing.T) {
 	}
 	check("the header button")
 }
+
+// TestViewedFiles marks a whole group viewed, then hides the viewed
+// files from the sidebar.
+func TestViewedFiles(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
+	}}
+	a.page = "group:0"
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if err := tt.Click("Mark all as viewed"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.rev.Viewed["cache/cache.go"] || !tt.HasText("Mark all as not viewed") {
+		t.Fatalf("viewed = %v", a.rev.Viewed)
+	}
+	if err := tt.Click("Hide viewed files"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("Cache keys · 1") {
+		t.Errorf("open group hidden: %q", tt.Texts())
+	}
+	a.goTo("overview")
+	tt.Frame()
+	snapshot(t, tt, "hide-viewed")
+	if tt.HasText("Cache keys · 1") || !tt.HasText("API · 1") || !a.store.LoadConfig().HideViewed {
+		t.Errorf("hidden: %q", tt.Texts())
+	}
+	if got := a.fileOrder(); !slices.Equal(got, []string{"api/handler.go"}) {
+		t.Errorf("order = %q", got)
+	}
+
+	// The open file stays listed after it is marked viewed.
+	a.goTo("file:api/handler.go")
+	tt.Frame()
+	if err := tt.Click("Viewed"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.rev.Viewed["api/handler.go"] || !tt.HasText("API · 1") {
+		t.Errorf("open file: %q", tt.Texts())
+	}
+	a.goTo("overview")
+	tt.Frame()
+	if tt.HasText("API · 1") || !tt.HasText("All files are viewed.") {
+		t.Errorf("all viewed: %q", tt.Texts())
+	}
+
+	tt.Click("Hide viewed files")
+	tt.Frame()
+	if !tt.HasText("Cache keys · 1") || !tt.HasText("API · 1") {
+		t.Errorf("shown again: %q", tt.Texts())
+	}
+}

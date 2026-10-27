@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -198,23 +199,40 @@ func (a *app) reviewNav(c *ui.Context) {
 				a.saveConfig()
 			}
 		})
+		ui.Row(c).Padding(0, 8, 4, 8).Children(func() {
+			if ui.Checkbox(c, &a.cfg.HideViewed, "Hide viewed files").FontSize(12).Changed() {
+				a.saveConfig()
+			}
+		})
 		if a.cfg.FlatFiles {
 			for _, f := range a.files {
-				a.fileItem(c, f.Path)
+				if a.listed(f.Path) {
+					a.fileItem(c, f.Path)
+				}
 			}
 		}
 		for gi, g := range groups {
 			if a.cfg.FlatFiles {
 				break
 			}
-			ui.SidebarSection(c, fmt.Sprintf("%s · %d", g.Title, len(g.Files)), a.groupOpen(g.Title), func() {
+			files := g.Files
+			if id := fmt.Sprintf("group:%d", gi); a.page != id {
+				files = slices.DeleteFunc(slices.Clone(files), func(f string) bool { return !a.listed(f) })
+			}
+			if len(files) == 0 {
+				continue
+			}
+			ui.SidebarSection(c, fmt.Sprintf("%s · %d", g.Title, len(files)), a.groupOpen(g.Title), func() {
 				if len(g.Files) > 1 {
 					ui.SidebarItem(c, fmt.Sprintf("group:%d", gi), layersIcon, "All files in group")
 				}
-				for _, f := range g.Files {
+				for _, f := range files {
 					a.fileItem(c, f)
 				}
 			})
+		}
+		if len(a.files) > 0 && len(a.fileOrder()) == 0 {
+			ui.Text(c, "All files are viewed.").FontSize(12).TextColor(t.TextMuted).Padding(4, 12)
 		}
 		if a.loading {
 			ui.Row(c).Gap(8).Padding(8, 12).Children(func() {
