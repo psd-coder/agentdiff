@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -96,23 +97,21 @@ func (a *app) toggleLog() {
 // first one from a page that shows no file.
 func (a *app) stepFile(delta int) {
 	files := a.fileOrder()
-	if len(files) == 0 {
-		return
-	}
 	cur, ok := strings.CutPrefix(a.page, "file:")
 	i := -1
-	for j, f := range files {
-		if ok && f == cur {
-			i = j
+	if ok {
+		i = slices.Index(files, cur)
+	}
+	if i < 0 {
+		// From before the first file, the next one is the first listed.
+		delta = 1
+	}
+	// The open file can be hidden, so the step starts from its place in
+	// the full order and skips the files the sidebar hides.
+	for i += delta; i >= 0 && i < len(files); i += delta {
+		if a.listed(files[i]) {
+			a.goTo("file:" + files[i])
+			return
 		}
 	}
-	switch {
-	case i < 0:
-		i = 0
-	case i+delta < 0 || i+delta >= len(files):
-		return
-	default:
-		i += delta
-	}
-	a.goTo("file:" + files[i])
 }

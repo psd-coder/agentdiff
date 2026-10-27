@@ -1219,8 +1219,9 @@ func TestViewedFiles(t *testing.T) {
 	if shows(tt, "Cache keys") || !shows(tt, "API") || !a.store.LoadConfig().HideViewed {
 		t.Errorf("hidden: %q", tt.Texts())
 	}
-	if got := a.fileOrder(); !slices.Equal(got, []string{"api/handler.go"}) {
-		t.Errorf("order = %q", got)
+	a.stepFile(1)
+	if a.page != "file:api/handler.go" {
+		t.Errorf("next file skips the hidden one: %q", a.page)
 	}
 
 	// On a group page, a file marked viewed leaves the sidebar.
@@ -1235,21 +1236,25 @@ func TestViewedFiles(t *testing.T) {
 	}
 	a.rev.Viewed["api/handler.go"] = false
 
-	// The open file stays listed after it is marked viewed.
+	// The open file leaves the sidebar too when it is marked viewed.
 	a.goTo("file:api/handler.go")
 	tt.Frame()
 	if err := tt.Click("Viewed"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.rev.Viewed["api/handler.go"] || !shows(tt, "API") {
+	if !a.rev.Viewed["api/handler.go"] || shows(tt, "API") || !tt.HasText("All files are viewed.") {
 		t.Errorf("open file: %q", tt.Texts())
 	}
-	a.goTo("overview")
-	tt.Frame()
-	if shows(tt, "API") || !tt.HasText("All files are viewed.") {
-		t.Errorf("all viewed: %q", tt.Texts())
+
+	// Previous file steps from the hidden open file.
+	a.rev.Viewed["cache/cache.go"] = false
+	a.stepFile(-1)
+	if a.page != "file:cache/cache.go" {
+		t.Errorf("previous file: %q", a.page)
 	}
+	a.rev.Viewed["cache/cache.go"] = true
+	tt.Frame()
 
 	tt.Click("Hide viewed files")
 	tt.Frame()

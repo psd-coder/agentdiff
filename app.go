@@ -690,21 +690,19 @@ func (a *app) fileNames() []string {
 
 // fileOrder is the order the sidebar lists the files in.
 func (a *app) fileOrder() []string {
-	all := a.fileNames()
-	if !a.cfg.FlatFiles {
-		all = nil
-		for _, g := range a.groups() {
-			all = append(all, g.Files...)
-		}
+	if a.cfg.FlatFiles {
+		return a.fileNames()
 	}
-	return slices.DeleteFunc(all, func(f string) bool { return !a.listed(f) })
+	var files []string
+	for _, g := range a.groups() {
+		files = append(files, g.Files...)
+	}
+	return files
 }
 
-// listed tells whether the sidebar lists the file. The open file stays
-// listed after it is marked viewed, so it does not leave the sidebar
-// under the pointer.
+// listed tells whether the sidebar lists the file.
 func (a *app) listed(file string) bool {
-	return !a.cfg.HideViewed || !a.rev.Viewed[file] || a.page == "file:"+file
+	return !a.cfg.HideViewed || !a.rev.Viewed[file]
 }
 
 // setViewed marks the files viewed, or not viewed.

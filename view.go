@@ -229,7 +229,7 @@ func (a *app) reviewNav(c *ui.Context) {
 				}
 			})
 		}
-		if len(a.files) > 0 && len(a.fileOrder()) == 0 {
+		if len(a.files) > 0 && !slices.ContainsFunc(a.files, func(f gitx.FileChange) bool { return a.listed(f.Path) }) {
 			ui.Text(c, "All files are viewed.").FontSize(12).TextColor(t.TextMuted).Padding(4, 12)
 		}
 		if a.loading {
