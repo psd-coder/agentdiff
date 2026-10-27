@@ -1837,3 +1837,32 @@ func TestOverlayFocus(t *testing.T) {
 		t.Errorf("Down moved the sidebar to %q", a.page)
 	}
 }
+
+// TestReviewGroupOnHover shows a group card's Review group button while
+// the pointer is over the card.
+func TestReviewGroupOnHover(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
+	}}
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	tt.Move(1, 790)
+	tt.Frame()
+	snapshot(t, tt, "groups-hidden")
+	r, ok := tt.Find("Review group")
+	if !ok {
+		t.Fatalf("no button: %q", tt.Texts())
+	}
+	tt.Move(r.X-300, r.Y+r.H/2)
+	tt.Frame()
+	tt.Frame()
+	snapshot(t, tt, "groups-hover")
+	if err := tt.Click("Review group"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.page != "group:0" {
+		t.Errorf("page %q", a.page)
+	}
+}

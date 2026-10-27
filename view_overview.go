@@ -280,10 +280,16 @@ func (a *app) groupCards(c *ui.Context) {
 	}
 	ui.Text(c, title).FontSize(18).Bold().Margin(8, 0, 0, 0)
 	for gi, g := range groups {
-		ui.Column(c.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Padding(14, 18).Radius(10).Border(1, t.Border).Children(func() {
+		card := ui.Column(c.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Padding(14, 18).Radius(10).Border(1, t.Border)
+		card.Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold().Grow(1)
-				ui.Button(c, "Review group").OnClick(func() { a.goTo(fmt.Sprintf("group:%d", gi)) })
+				open := ui.Button(c, "Review group").OnClick(func() { a.goTo(fmt.Sprintf("group:%d", gi)) })
+				// Shown while the pointer is over the card, or the focus in
+				// it; hidden, it keeps its room and its stop of Tab.
+				if !card.Hovered() && !card.FocusWithin() {
+					open.Opacity(0)
+				}
 			})
 			if g.Summary != "" {
 				ui.Text(c, g.Summary).TextColor(t.TextMuted)
