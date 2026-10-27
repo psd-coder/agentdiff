@@ -40,6 +40,10 @@ func (c *Config) AddRecent(repo string) {
 	}
 }
 
+func (c *Config) RemoveRecent(repo string) {
+	c.Recent = slices.DeleteFunc(c.Recent, func(r string) bool { return r == repo })
+}
+
 // Effective is the configuration a review runs with: its own settings
 // over the global ones.
 func (c Config) Effective(s review.Settings) (agent.Config, string) {

@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -71,6 +72,10 @@ func TestRecent(t *testing.T) {
 			t.Errorf("duplicate %q in %v", r, c.Recent)
 		}
 		seen[r] = true
+	}
+	c.RemoveRecent("c")
+	if len(c.Recent) != maxRecent-1 || slices.Contains(c.Recent, "c") {
+		t.Errorf("after remove: %v", c.Recent)
 	}
 }
 

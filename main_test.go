@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -196,7 +197,7 @@ func TestScopeSwitchToCommit(t *testing.T) {
 		t.Fatalf("commits = %+v", a.commits)
 	}
 	tt := ui.NewTester(a.view, 1300, 800)
-	if err := tt.Click(a.commits[0].Short + "  Initial commit"); err != nil {
+	if err := tt.Click("Initial commit"); err != nil {
 		t.Fatal(err)
 	}
 	if a.scope.Commit != a.commits[0].SHA || len(a.files) != 2 {
@@ -380,12 +381,12 @@ func TestCompareBranches(t *testing.T) {
 	a.openRepo(dir)
 
 	tt := ui.NewTester(a.view, 1300, 800)
-	if err := tt.Click("Compare branches…"); err != nil {
+	if err := tt.Click("Branch"); err != nil {
 		t.Fatal(err)
 	}
-	a.compareForm.branch = "agent"
 	tt.Frame()
-	if err := tt.Click("Compare"); err != nil {
+	snapshot(t, tt, "branches")
+	if err := tt.Click("agent"); err != nil {
 		t.Fatal(err)
 	}
 	if a.scope.Head != "agent" || a.scope.Base != "main" {
@@ -398,18 +399,103 @@ func TestCompareBranches(t *testing.T) {
 		t.Errorf("commits = %+v", a.commits)
 	}
 	tt.Frame()
-	if !tt.HasText("agent vs main") || !tt.HasText("Commits on agent") {
+	if !tt.HasText("Commits on agent") || !tt.HasText("All changes") || tt.HasText("Uncommitted changes") {
 		t.Errorf("texts = %q", tt.Texts())
 	}
+	snapshot(t, tt, "branch")
 
 	git(t, dir, "update-ref", "refs/remotes/origin/main", "main")
-	a.compare("main", "origin/main")
+	if err := tt.Click("Compare with another base, or review a custom range"); err != nil {
+		t.Fatal(err)
+	}
+	a.compareForm.branch, a.compareForm.base = "main", "origin/main"
+	tt.Frame()
+	if err := tt.Click("Show changes"); err != nil {
+		t.Fatal(err)
+	}
 	if a.scope.Branch != "main" || a.scope.Base != "origin/main" {
 		t.Fatalf("scope = %+v", a.scope)
 	}
 	tt.Frame()
-	if !tt.HasText("main vs origin/main") {
-		t.Errorf("the compared scope is not in the sidebar: %q", tt.Texts())
+	if !tt.HasText("vs origin/main") || !tt.HasText("Uncommitted changes") {
+		t.Errorf("texts = %q", tt.Texts())
+	}
+
+	a.pickBranch("main")
+	if a.scope.Kind != gitx.ScopeBranch || a.scope.Base != "origin/main" {
+		t.Errorf("picked base is forgotten: scope = %+v", a.scope)
+	}
+	a.base, a.baseSet = "main", false
+	a.pickBranch("main")
+	if a.scope.Kind != gitx.ScopeUncommitted {
+		t.Errorf("main against itself: scope = %+v", a.scope)
+	}
+	a.base = "agent"
+	a.pickBranch("agent")
+	if a.scope.Kind != gitx.ScopeCommit || len(a.commits) == 0 || a.scope.Commit != a.commits[0].SHA {
+		t.Errorf("other branch against itself: scope = %+v", a.scope)
+	}
+}
+
+func TestCustomRange(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "Second")
+	a.openRepo(dir)
+	a.openCompare()
+	a.compareForm.mode, a.compareForm.from, a.compareForm.to = compareRange, "HEAD~1", "HEAD"
+	tt := ui.NewTester(a.view, 1300, 800)
+	if err := tt.Click("Show changes"); err != nil {
+		t.Fatal(err)
+	}
+	if a.scope.Kind != gitx.ScopeRange || len(a.files) != 2 {
+		t.Fatalf("scope = %+v, files = %+v", a.scope, a.files)
+	}
+	if len(a.commits) != 1 || a.commits[0].Subject != "Second" {
+		t.Errorf("commits = %+v", a.commits)
+	}
+	tt.Frame()
+	if !tt.HasText("Commits in HEAD~1..HEAD") || tt.HasText("Uncommitted changes") {
+		t.Errorf("texts = %q", tt.Texts())
+	}
+	a.pickBranch("main")
+	if a.rng != nil || a.scope.Kind != gitx.ScopeUncommitted {
+		t.Errorf("picking a branch kept the range: scope = %+v", a.scope)
+	}
+}
+
+func TestRemoveProject(t *testing.T) {
+	a := newTestApp(t)
+	other := fixtureRepo(t)
+	a.cfg.AddRecent(other)
+	current := a.repo.Root
+	a.openRepo(current)
+	a.projectsOpen = true
+	tt := ui.NewTester(a.view, 1300, 800)
+	snapshot(t, tt, "projects")
+	r, ok := tt.Find(filepath.Base(other))
+	if !ok {
+		t.Fatalf("no row for %s: %q", other, tt.Texts())
+	}
+	tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	tt.Frame()
+	if err := tt.Click("Remove from the list"); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(a.cfg.Recent, other) || a.repo == nil {
+		t.Fatalf("recent = %v, repo = %v", a.cfg.Recent, a.repo)
+	}
+	a.confirmRemoveProject(current)
+	if len(a.cfg.Recent) != 0 || a.repo != nil {
+		t.Fatalf("recent = %v, repo = %v", a.cfg.Recent, a.repo)
+	}
+	if !slices.Equal(a.store.LoadConfig().Recent, a.cfg.Recent) {
+		t.Error("the list is not saved")
+	}
+	tt.Frame()
+	if !tt.HasText("Open repository…") {
+		t.Errorf("no welcome screen: %q", tt.Texts())
 	}
 }
 

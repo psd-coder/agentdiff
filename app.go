@@ -49,10 +49,17 @@ type app struct {
 	branch  string
 	// head is the branch picked to compare with base; empty means the
 	// checked-out one.
-	head     string
-	base     string
-	branches []string
-	commits  []gitx.Commit
+	head string
+	base string
+	// baseSet is true once the user picked the base, which then counts
+	// even as the upstream of the branch.
+	baseSet bool
+	// rng is the custom range under review instead of a branch.
+	rng        *gitx.Scope
+	branches   []string
+	worktrees  []gitx.Worktree
+	commits    []gitx.Commit
+	commitsGen int
 
 	scope    gitx.Scope
 	scopeID  string
@@ -106,9 +113,11 @@ type app struct {
 	extra       map[string]*extraFile
 	reveal      *reveal
 
-	settings    *settingsForm
-	rangeForm   *rangeForm
-	compareForm *compareForm
+	settings     *settingsForm
+	compareForm  *compareForm
+	projectsOpen bool
+	branchesOpen bool
+	branchQuery  string
 }
 
 func newApp(s store.Store) *app {
@@ -165,6 +174,7 @@ func (a *app) openRepo(path string) {
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
 	a.branch, a.head, a.base, a.branches, a.commits = "", "", "", nil, nil
+	a.baseSet, a.rng, a.worktrees = false, nil, nil
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff: " + r.Name())
 	}
@@ -173,15 +183,29 @@ func (a *app) openRepo(path string) {
 		branch, _ := r.CurrentBranch(ctx)
 		base := r.DefaultBase(ctx)
 		branches, _ := r.Branches(ctx)
+		trees, err := r.Worktrees(ctx)
+		if err != nil {
+			log.Printf("worktrees: %v", err)
+		}
 		a.update(func() {
 			if a.repo != r {
 				return
 			}
-			a.branch, a.base, a.branches = branch, base, branches
-			a.loadCommits()
+			a.branch, a.base, a.branches, a.worktrees = branch, base, branches, trees
+			a.loadCommits(nil)
 		})
 	})
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+}
+
+// closeRepo goes back to the welcome screen.
+func (a *app) closeRepo() {
+	a.repo = nil
+	a.gen++
+	a.projectsOpen = false
+	if a.win != nil {
+		a.win.SetTitle("AgentDiff")
+	}
 }
 
 // headBranch is the branch under review: the picked one, or the one
@@ -192,10 +216,70 @@ func (a *app) headBranch() string { return cmp.Or(a.head, a.branch) }
 // branch the commits not on the base yet, else the latest commits.
 func (a *app) commitBase() string {
 	head := a.headBranch()
-	if a.base == "" || head == "" || a.base == head || strings.HasSuffix(a.base, "/"+head) {
+	if a.base == "" || head == "" || a.base == head || !a.baseSet && strings.HasSuffix(a.base, "/"+head) {
 		return ""
 	}
 	return a.base
+}
+
+// listRange is the base and the head of the commit list.
+func (a *app) listRange() (string, string) {
+	if a.rng != nil {
+		return a.rng.From, a.rng.To
+	}
+	return a.commitBase(), a.head
+}
+
+// allScope is every change of the commit list at once: the custom range,
+// or the branch since its base.
+func (a *app) allScope() (gitx.Scope, bool) {
+	if a.rng != nil {
+		return *a.rng, true
+	}
+	return a.branchScope()
+}
+
+// uncommittedShown reports whether the sidebar lists the uncommitted
+// changes, which belong to the checked-out branch.
+func (a *app) uncommittedShown() bool { return a.rng == nil && a.head == "" }
+
+// compare reviews branch against base, as picked in the Compare dialog.
+func (a *app) compare(branch, base string) {
+	a.base, a.baseSet = base, true
+	a.pickBranch(branch)
+}
+
+// pickBranch lists the commits of branch and opens all its changes.
+// Without a base to compare with, it opens the uncommitted changes of
+// the checked-out branch, or the newest commit of another one.
+func (a *app) pickBranch(branch string) {
+	a.head, a.rng = branch, nil
+	if branch == a.branch {
+		a.head = ""
+	}
+	if s, ok := a.allScope(); ok {
+		a.loadCommits(nil)
+		a.setScope(s)
+		return
+	}
+	if a.head == "" {
+		a.loadCommits(nil)
+		a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+		return
+	}
+	a.loadCommits(func() {
+		if len(a.commits) > 0 {
+			a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits[0].SHA})
+		}
+	})
+}
+
+// setRange reviews the changes between two revisions.
+func (a *app) setRange(from, to string) {
+	s := gitx.Scope{Kind: gitx.ScopeRange, From: from, To: to}
+	a.rng = &s
+	a.loadCommits(nil)
+	a.setScope(s)
 }
 
 // branchScope is the changes of the branch under review since its base.
@@ -231,9 +315,16 @@ func (a *app) syncBranch() {
 			return
 		}
 		branches, _ := r.Branches(ctx)
+		trees, _ := r.Worktrees(ctx)
 		a.update(func() {
-			if a.repo == r && branch != a.branch {
+			if a.repo != r {
+				return
+			}
+			a.worktrees = trees
+			if branch != a.branch {
 				a.checkedOut(branch, branches)
+			} else {
+				a.branches = branches
 			}
 		})
 	})
@@ -254,25 +345,35 @@ func (a *app) checkedOut(branch string, branches []string) {
 	} else if a.head == branch {
 		a.head = ""
 	}
-	a.loadCommits()
+	a.loadCommits(nil)
 	a.reload()
 }
 
 func (a *app) refresh() {
+	if a.repo == nil {
+		return
+	}
 	a.reload()
 	a.syncBranch()
 }
 
-func (a *app) loadCommits() {
-	r, base, head := a.repo, a.commitBase(), a.head
+// loadCommits reads the commit list again, then runs then, if given.
+func (a *app) loadCommits(then func()) {
+	a.commitsGen++
+	r, gen := a.repo, a.commitsGen
+	base, head := a.listRange()
 	a.async(func() {
 		commits, err := r.Commits(context.Background(), base, head, commitsShown)
 		if err != nil {
 			log.Printf("commits: %v", err)
 		}
 		a.update(func() {
-			if a.repo == r {
-				a.commits = commits
+			if a.repo != r || gen != a.commitsGen {
+				return
+			}
+			a.commits = commits
+			if then != nil {
+				then()
 			}
 		})
 	})

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -46,32 +47,7 @@ func (a *app) view(c *ui.Context) {
 		}).Grow(1).FillWidth()
 	}).Background(t.Background)
 	a.settingsModal(c)
-	a.rangeModal(c)
 	a.compareModal(c)
-}
-
-func (a *app) toolbar(c *ui.Context) {
-	t := c.Theme()
-	ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		ui.Text(c, a.repo.Name()).Bold().SingleLine()
-		if head := a.headBranch(); head != "" {
-			ui.Button(c, head).Tooltip("Compare another branch").OnClick(a.openCompare)
-		}
-		ui.Text(c, a.scopeLabel()).TextColor(t.TextMuted).SingleLine().Shrink(1)
-		ui.Spacer(c)
-		cfg, _ := a.cfg.Effective(a.rev.Settings)
-		label := providerName(cfg.Provider)
-		if cfg.Model != "" {
-			label += " · " + cfg.Model
-		}
-		ui.Text(c, label).FontSize(12).TextColor(t.TextMuted).SingleLine()
-		ui.Button(c, "Agent log").Tooltip("Every call to the agent: command, prompt, tool calls, tokens (Cmd+L)").OnClick(a.toggleLog)
-		ui.Button(c, "Refresh").Tooltip("Read the changes again (Cmd+R)").OnClick(a.refresh)
-		ui.Button(c, "Settings").Tooltip("Cmd+,").OnClick(a.openSettings)
-		ui.Button(c, "Open…").Tooltip("Open another repository").OnClick(a.chooseRepo)
-		n := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
-		ui.PrimaryButton(c, fmt.Sprintf("Feedback (%d)", n)).OnClick(func() { a.goTo("feedback") })
-	})
 }
 
 func (a *app) sidebar(c *ui.Context) {
@@ -82,49 +58,50 @@ func (a *app) sidebar(c *ui.Context) {
 		})
 	}, func() {
 		ui.Column(c).Fill().Background(t.Surface).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
+			a.scopeHeader(c)
 			a.reviewNav(c)
 		})
 	}).Fill()
 }
 
-func (a *app) scopeList(c *ui.Context) {
-	choice := a.scopeID
-	commitsOpen := true
-	changed := ui.Sidebar(c, &choice, func() {
-		ui.SidebarSection(c, "Changes", nil, func() {
-			ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeUncommitted}), nil, "Uncommitted")
-			if s, ok := a.branchScope(); ok {
-				ui.SidebarItem(c, scopeID(s), nil, s.Label())
-			}
-			if _, listed := a.scopeFromID(a.scopeID); !listed {
-				ui.SidebarItem(c, a.scopeID, nil, a.scope.Label())
-			}
-			ui.SidebarItem(c, "compare", nil, "Compare branches…")
-			ui.SidebarItem(c, "range", nil, "Custom range…")
-		})
-		title := "Recent commits"
-		if a.commitBase() != "" {
-			title = "Commits on " + a.headBranch()
+// sidebarHeading names a part of a sidebar, above its sections.
+func sidebarHeading(c *ui.Context, title, detail string) {
+	t := c.Theme()
+	ui.Row(c).Gap(6).Padding(10, 8, 4, 8).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, strings.ToUpper(title)).FontSize(10).Bold().LetterSpacing(0.6).TextColor(t.TextMuted).Grow(1).SingleLine()
+		if detail != "" {
+			ui.Text(c, detail).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		}
-		ui.SidebarSection(c, title, &commitsOpen, func() {
+	})
+}
+
+func (a *app) scopeList(c *ui.Context) {
+	t := c.Theme()
+	choice := a.scopeID
+	changed := ui.Sidebar(c, &choice, func() {
+		sidebarHeading(c, "Changes", "")
+		if a.uncommittedShown() {
+			ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeUncommitted}), editIcon, "Uncommitted changes")
+		}
+		ui.SidebarSection(c, a.commitsTitle(), nil, func() {
+			if s, ok := a.allScope(); ok && len(a.commits) > 0 {
+				ui.SidebarItem(c, scopeID(s), layersIcon, "All changes").Tooltip(s.Label()).Children(func() {
+					ui.Badge(c, fmt.Sprint(len(a.commits)))
+				})
+			}
 			for _, cm := range a.commits {
-				ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeCommit, Commit: cm.SHA}), nil, cm.Short+"  "+cm.Subject).
-					Tooltip(cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04"))
+				ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeCommit, Commit: cm.SHA}), commitIcon, cm.Subject).
+					Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04")).
+					Children(func() {
+						ui.Text(c, age(cm.Time)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+					})
 			}
 			if len(a.commits) == 0 {
-				ui.Text(c, "No commits").FontSize(12).TextColor(c.Theme().TextMuted).Padding(4, 12)
+				ui.Text(c, "No commits").FontSize(12).TextColor(t.TextMuted).Padding(4, 8)
 			}
 		})
-	}).Fill().Label("Scope").Changed()
+	}).Fill().Label("Changes").Changed()
 	if !changed || choice == a.scopeID {
-		return
-	}
-	switch choice {
-	case "range":
-		a.openRange()
-		return
-	case "compare":
-		a.openCompare()
 		return
 	}
 	if s, ok := a.scopeFromID(choice); ok {
@@ -132,9 +109,20 @@ func (a *app) scopeList(c *ui.Context) {
 	}
 }
 
+// commitsTitle names the commit list.
+func (a *app) commitsTitle() string {
+	switch {
+	case a.rng != nil:
+		return "Commits in " + a.rng.Label()
+	case a.commitBase() != "":
+		return "Commits on " + a.headBranch()
+	}
+	return "Recent commits on " + a.headBranch()
+}
+
 func (a *app) scopeFromID(id string) (gitx.Scope, bool) {
 	candidates := []gitx.Scope{{Kind: gitx.ScopeUncommitted}}
-	if s, ok := a.branchScope(); ok {
+	if s, ok := a.allScope(); ok {
 		candidates = append(candidates, s)
 	}
 	for _, cm := range a.commits {
@@ -148,30 +136,65 @@ func (a *app) scopeFromID(id string) (gitx.Scope, bool) {
 	return gitx.Scope{}, false
 }
 
+// scopeHeader names the changes under review, above their review.
+func (a *app) scopeHeader(c *ui.Context) {
+	t := c.Theme()
+	add, del := 0, 0
+	for _, f := range a.files {
+		add += f.Additions
+		del += f.Deletions
+	}
+	ui.Column(c).Gap(2).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+		ui.Text(c, a.scopeLabel()).Bold().SingleLine().Tooltip(a.scopeLabel())
+		if len(a.files) == 0 {
+			return
+		}
+		ui.Row(c).Gap(8).Children(func() {
+			ui.Text(c, plural(len(a.files), "file")).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, fmt.Sprintf("+%d", add)).FontSize(11).TextColor(t.Success)
+			ui.Text(c, fmt.Sprintf("−%d", del)).FontSize(11).TextColor(t.Danger)
+		})
+	})
+}
+
 func (a *app) reviewNav(c *ui.Context) {
 	t := c.Theme()
 	page := a.page
 	groups := a.groups()
 	changed := ui.Sidebar(c, &page, func() {
-		ui.SidebarSection(c, "Review", nil, func() {
-			ov := ui.SidebarItem(c, "overview", nil, "Overview")
-			if a.overviewRunning() != nil {
-				ov.Children(func() { ui.Spinner(c).Size(12, 12) })
+		sidebarHeading(c, "Review", "")
+		ov := ui.SidebarItem(c, "overview", overviewIcon, "Overview")
+		if a.overviewRunning() != nil {
+			ov.Children(func() { ui.Spinner(c).Size(12, 12) })
+		}
+		a.walkItems(c, "", 1)
+		threads := len(a.rev.Threads)
+		ui.SidebarItem(c, "threads", messageIcon, "Questions & comments").Children(func() {
+			if threads > 0 {
+				ui.Badge(c, fmt.Sprint(threads))
 			}
-			a.walkItems(c, "", 1)
-			threads := len(a.rev.Threads)
-			ui.SidebarItem(c, "threads", nil, "Questions & comments").Children(func() {
-				if threads > 0 {
-					ui.Badge(c, fmt.Sprint(threads))
-				}
-			})
-			ui.SidebarItem(c, "feedback", nil, "Feedback")
 		})
+		feedback := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
+		ui.SidebarItem(c, "feedback", sendIcon, "Feedback").Children(func() {
+			if feedback > 0 {
+				ui.Badge(c, fmt.Sprint(feedback))
+			}
+		})
+		viewed := 0
+		for _, f := range a.files {
+			if a.rev.Viewed[f.Path] {
+				viewed++
+			}
+		}
+		detail := ""
+		if len(a.files) > 0 {
+			detail = fmt.Sprintf("%d of %d viewed", viewed, len(a.files))
+		}
+		sidebarHeading(c, "Files", detail)
 		for gi, g := range groups {
-			open := a.groupOpen(g.Title)
-			ui.SidebarSection(c, g.Title, open, func() {
+			ui.SidebarSection(c, fmt.Sprintf("%s · %d", g.Title, len(g.Files)), a.groupOpen(g.Title), func() {
 				if len(g.Files) > 1 {
-					ui.SidebarItem(c, fmt.Sprintf("group:%d", gi), nil, fmt.Sprintf("All %d files", len(g.Files)))
+					ui.SidebarItem(c, fmt.Sprintf("group:%d", gi), layersIcon, "All files in group")
 				}
 				for _, f := range g.Files {
 					a.fileItem(c, f)
@@ -219,28 +242,30 @@ func (a *app) groupOpen(title string) *bool {
 
 func (a *app) fileItem(c *ui.Context, file string) {
 	t := c.Theme()
-	label := path.Base(file)
-	if a.rev.Viewed[file] {
-		label = "✓ " + label
+	viewed := a.rev.Viewed[file]
+	item := ui.SidebarItem(c, "file:"+file, nil, path.Base(file)).Tooltip(file)
+	if viewed && a.page != "file:"+file {
+		item.TextColor(t.TextMuted)
 	}
-	item := ui.SidebarItem(c, "file:"+file, nil, label).Tooltip(file)
 	d := a.diffs[file]
-	if d == nil {
-		return
-	}
 	n := len(a.rev.ThreadsOn(file))
 	item.Children(func() {
 		if n > 0 {
 			ui.Badge(c, fmt.Sprint(n))
 		}
-		ui.Row(c).Gap(4).Children(func() {
-			if d.change.Additions > 0 {
-				ui.Text(c, fmt.Sprintf("+%d", d.change.Additions)).FontSize(11).TextColor(t.Success)
-			}
-			if d.change.Deletions > 0 {
-				ui.Text(c, fmt.Sprintf("−%d", d.change.Deletions)).FontSize(11).TextColor(t.Danger)
-			}
-		})
+		if d != nil {
+			ui.Row(c).Gap(4).Children(func() {
+				if d.change.Additions > 0 {
+					ui.Text(c, fmt.Sprintf("+%d", d.change.Additions)).FontSize(11).TextColor(t.Success)
+				}
+				if d.change.Deletions > 0 {
+					ui.Text(c, fmt.Sprintf("−%d", d.change.Deletions)).FontSize(11).TextColor(t.Danger)
+				}
+			})
+		}
+		if viewed {
+			ui.Icon(c, checkIcon).FontSize(12).TextColor(t.Success).Label("Viewed")
+		}
 	})
 }
 
@@ -286,4 +311,29 @@ func (a *app) emptyState(c *ui.Context, title, detail string) {
 		ui.Text(c, title).FontSize(16).Bold()
 		ui.Text(c, detail).TextColor(t.TextMuted).MaxWidth(520).TextAlign(ui.Center)
 	})
+}
+
+// age is how long ago t was, in a few characters.
+func age(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	case d < 365*24*time.Hour:
+		return t.Format("Jan 2")
+	}
+	return t.Format("Jan 2006")
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }

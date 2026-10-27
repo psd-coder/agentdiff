@@ -7,7 +7,7 @@ A native macOS app for reviewing the code your coding agent wrote. You read a sh
 - **Questions in the side panel**: a question about a step or a page opens a conversation next to the walkthrough, so you keep your place. The answers are short walkthroughs with snippets, follow-up questions go on in the same agent session, and every conversation stays listed under its step and on the Questions & comments page.
 - **Checklist**: the walkthrough also answers your checklist in a sentence or two per question: data changes, UI changes, API changes, and the changes that are not beautiful and why.
 - **Files grouped by intent**: the agent puts every changed file into a group, in the order you should read them. Without an explanation, files are grouped by directory.
-- **Any scope**: uncommitted changes (untracked files included), any branch against any base without a checkout, a single commit from the history list, or a custom `from..to` range. The branch picker also opens other worktrees of the repository.
+- **Any scope**: uncommitted changes (untracked files included), any branch against any base without a checkout, a single commit of that branch, or a custom `from..to` range. The branch picker also opens other worktrees of the repository.
 - **Comments anywhere**: click `+` in the gutter, select line numbers, comment on a whole file or on one part of the explanation.
 - **Separate discussion threads**: the first question of a thread forks the agent session that wrote the explanation, so it starts with that context. Later questions go on in the thread's own session, and threads never mix.
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
@@ -61,7 +61,7 @@ It fits when you:
 
 ## Reviewing a change
 
-1. Pick a scope in the top part of the sidebar. Uncommitted is the default. Compare branches, or a click on the branch name in the toolbar, picks a branch and its base. A branch review belongs to the branch: it stays the same after a checkout, and Compare branches opens it too when the branch is not checked out. The app reads the checked-out branch again when its window gets focus and on Refresh. Uncommitted changes have one review per repository, because they stay in the working tree when you check out another branch.
+1. Pick a project and a branch in the toolbar. The project picker lists the repositories you opened before, adds a new one, and removes one from the list after you confirm (its saved reviews stay). The branch picker lists the local and remote branches, and opens the worktree of a branch that is checked out in another worktree. The button next to it opens Compare, which picks another base for the branch or a custom range. Then pick a scope in the top part of the sidebar: Uncommitted changes (only for the checked-out branch), All changes of the branch since its base, or one of its commits. A branch review belongs to the branch: it stays the same after a checkout, and it opens too when you pick the branch while another one is checked out. The app reads the checked-out branch again when its window gets focus and on Refresh. Uncommitted changes have one review per repository, because they stay in the working tree when you check out another branch.
 2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
 3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step opens a deeper walkthrough on its own page. Ask about this step opens a conversation in the side panel, with the questions asked about that step before. Open as page shows a conversation full width. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back above the page (Cmd+[) returns to where you were, at the same scroll place.
 4. Open a group with Review group to read all its files one after the other, or open one file. Mark a file Viewed when you are done with it.
@@ -101,7 +101,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Option+Cmd+Down, Option+Cmd+Up | Next and previous file, in review order |
 | Cmd+L | Agent log |
 | Cmd+R | Read the changes again |
-| Cmd+Shift+B | Compare branches |
+| Cmd+Shift+B | Compare |
 | Cmd+, | Settings |
 | Cmd+Enter | Sends the question or comment you are typing |
 

@@ -11,7 +11,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/psdcoder/agentdiff/internal/agent"
-	"github.com/psdcoder/agentdiff/internal/gitx"
 	"github.com/psdcoder/agentdiff/internal/review"
 )
 
@@ -204,52 +203,6 @@ func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider
 			ui.Button(c, "Reset").OnClick(func() { f.questions = review.DefaultQuestions })
 		})
 	})
-}
-
-type rangeForm struct {
-	open     bool
-	from, to string
-}
-
-func (a *app) openRange() {
-	f := &rangeForm{open: true, to: "HEAD"}
-	if a.scope.Kind == gitx.ScopeRange {
-		f.from, f.to = a.scope.From, a.scope.To
-	} else if base := a.commitBase(); base != "" {
-		f.from = base
-	}
-	a.rangeForm = f
-}
-
-func (a *app) rangeModal(c *ui.Context) {
-	f := a.rangeForm
-	if f == nil {
-		return
-	}
-	t := c.Theme()
-	apply := func() {
-		from, to := strings.TrimSpace(f.from), strings.TrimSpace(f.to)
-		if from == "" || to == "" {
-			return
-		}
-		f.open = false
-		a.setScope(gitx.Scope{Kind: gitx.ScopeRange, From: from, To: to})
-	}
-	ui.Modal(c, &f.open, func() {
-		ui.Column(c).Width(420).Gap(12).Children(func() {
-			ui.Text(c, "Custom range").FontSize(18).Bold()
-			ui.Text(c, "Review the changes between two commits, branches or tags, as git diff from..to shows them.").FontSize(12).TextColor(t.TextMuted)
-			ui.TextInput(c, &f.from).Placeholder("From, e.g. main or abc1234").Label("From").AutoFocus().OnSubmit(apply)
-			ui.TextInput(c, &f.to).Placeholder("To, e.g. HEAD").Label("To").OnSubmit(apply)
-			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				ui.Button(c, "Cancel").OnClick(func() { f.open = false })
-				ui.PrimaryButton(c, "Review").OnClick(apply)
-			})
-		})
-	})
-	if !f.open {
-		a.rangeForm = nil
-	}
 }
 
 func (a *app) chooseRepo() {

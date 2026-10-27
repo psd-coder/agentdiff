@@ -110,7 +110,7 @@ func (a *app) summaryLine(c *ui.Context) {
 		del += f.Deletions
 	}
 	ui.Row(c).Gap(12).Children(func() {
-		ui.Text(c, fmt.Sprintf("%d files", len(a.files))).TextColor(t.TextMuted)
+		ui.Text(c, plural(len(a.files), "file")).TextColor(t.TextMuted)
 		ui.Text(c, fmt.Sprintf("+%d", add)).TextColor(t.Success)
 		ui.Text(c, fmt.Sprintf("−%d", del)).TextColor(t.Danger)
 		viewed := 0
