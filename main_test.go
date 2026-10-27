@@ -805,7 +805,8 @@ func TestDeeperAhead(t *testing.T) {
 	tt := ui.NewTester(a.view, 1400, 900)
 	a.showLog("")
 	tt.Frame()
-	if !tt.HasText("130k tokens processed") {
+	// The deeper runs fork the overview's session and add nothing to it.
+	if !tt.HasText("24k tokens of context") {
 		t.Errorf("log lacks the total; texts %q", tt.Texts())
 	}
 	if !tt.HasText("· 24k tokens") {
@@ -1052,5 +1053,34 @@ func TestPickListScrollKeepsHighlight(t *testing.T) {
 	}
 	if got := a.branches[a.branchNav.hi]; got != "b05" {
 		t.Errorf("highlight on %q, want b05", got)
+	}
+}
+
+func TestSpentContext(t *testing.T) {
+	at := time.Date(2026, 10, 27, 1, 0, 0, 0, time.UTC)
+	run := func(sec int, session, resumed string, context int) *logRun {
+		return &logRun{info: store.RunInfo{Started: at.Add(time.Duration(sec) * time.Second), Resumed: resumed, Target: session,
+			Usage: &agent.Usage{Session: session, Context: context}}}
+	}
+	overview := run(0, "ov", "", 42160)
+	runs := []*logRun{
+		run(60, "f3", "ov", 74040), run(41, "f2", "ov", 73164), run(40, "f1", "ov", 73401),
+		run(90, "t1", "", 10000), run(120, "t1", "t1", 15000), run(150, "t1", "t1", 18000),
+		overview,
+	}
+	all := func(*logRun) bool { return true }
+	want := 42160 + (73401 - 42160) + (73164 - 42160) + (74040 - 42160) + 18000
+	if got, ok := spentContext(runs, all); !ok || got != want {
+		t.Errorf("spent %d, %v; want %d", got, ok, want)
+	}
+	if got, _ := spentContext(runs, func(r *logRun) bool { return r.info.Target == "f1" }); got != 73401-42160 {
+		t.Errorf("one fork: %d", got)
+	}
+	orphan := []*logRun{run(10, "x", "gone", 5000)}
+	if got, ok := spentContext(orphan, all); !ok || got != 5000 {
+		t.Errorf("resumed a run out of the log: %d, %v", got, ok)
+	}
+	if _, ok := spentContext([]*logRun{{info: store.RunInfo{Usage: &agent.Usage{Input: 5}}}}, all); ok {
+		t.Error("a total without any context size")
 	}
 }

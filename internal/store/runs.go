@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -34,6 +35,9 @@ type RunInfo struct {
 	Model   string         `json:"model,omitempty"`
 	Effort  string         `json:"effort,omitempty"`
 	Started time.Time      `json:"started"`
+	// Resumed is the session the run resumed or forked, empty for a new
+	// session.
+	Resumed string `json:"resumed,omitempty"`
 	// Usage is what the run spent, known once it ended. It lives in a
 	// file next to the log, so listing runs does not read whole logs.
 	Usage *agent.Usage `json:"-"`
@@ -148,13 +152,30 @@ func readRunInfo(path string) (RunInfo, error) {
 		return info, err
 	}
 	defer f.Close()
-	line, err := bufio.NewReader(f).ReadBytes('\n')
+	r := bufio.NewReader(f)
+	line, err := r.ReadBytes('\n')
 	if err != nil && err != io.EOF {
 		return info, err
 	}
-	err = json.Unmarshal(line, &info)
-	return info, err
+	if err := json.Unmarshal(line, &info); err != nil {
+		return info, err
+	}
+	if info.Resumed == "" {
+		// A run logged before Resumed was kept names the session in its
+		// command, the entry after the header.
+		var cmd agent.LogEntry
+		if line, err := r.ReadBytes('\n'); err == nil && json.Unmarshal(line, &cmd) == nil && cmd.Kind == agent.LogCommand {
+			if m := resumeArg.FindStringSubmatch(cmd.Text); m != nil {
+				info.Resumed = m[1]
+			}
+		}
+	}
+	return info, nil
 }
+
+// resumeArg finds the session in a command that resumes or forks one:
+// Claude's --resume, Codex's resume and fork.
+var resumeArg = regexp.MustCompile(`(?:--resume|\bresume|\bfork) ([0-9a-f]{8}-[0-9a-f-]{27})`)
 
 // ReadRun returns the log entries of a run. A line cut off by a crash is
 // skipped.

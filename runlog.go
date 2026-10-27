@@ -143,7 +143,7 @@ func (a *app) loadRun(rev *review.Review, r *logRun) {
 // The returned writer is nil when the file could not be created; the run
 // then only lives in memory.
 func (a *app) startRun(rev *review.Review, info store.RunInfo) (*logRun, *store.RunWriter) {
-	run := &logRun{info: info, loaded: true, running: true, open: true}
+	run := &logRun{info: info, loaded: true, running: true}
 	runs := append([]*logRun{run}, a.runsOf(rev)...)
 	a.runs[rev] = runs[:min(len(runs), store.MaxRuns)]
 	w, err := a.store.CreateRun(rev.Repo, rev.Scope, info)

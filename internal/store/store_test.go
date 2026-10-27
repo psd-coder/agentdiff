@@ -319,3 +319,20 @@ func TestArchiveReview(t *testing.T) {
 		t.Error("the oldest archived review is still there")
 	}
 }
+
+func TestRunResumedFromCommand(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	w, err := s.CreateRun("/repo", scope, RunInfo{ID: "old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Write(agent.LogEntry{Kind: agent.LogCommand, Text: "claude -p --resume 2b02f0c1-3491-4bdd-9e05-ee7282cd2510 --fork-session"}); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	runs := s.Runs("/repo", scope)
+	if len(runs) != 1 || runs[0].Resumed != "2b02f0c1-3491-4bdd-9e05-ee7282cd2510" {
+		t.Errorf("runs = %+v", runs)
+	}
+}

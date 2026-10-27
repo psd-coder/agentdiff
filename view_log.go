@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo"
@@ -12,12 +11,9 @@ import (
 	"github.com/psdcoder/agentdiff/internal/store"
 )
 
-const (
-	logDetailLines = 6
-	// logDetailMax keeps a huge tool output from slowing every frame; the
-	// file holds all of it.
-	logDetailMax = 20000
-)
+// logDetailMax keeps a huge tool output from slowing every frame; the
+// file holds all of it.
+const logDetailMax = 20000
 
 func (a *app) logTargetLabel() string {
 	switch a.logTarget {
@@ -43,7 +39,12 @@ func (a *app) logPanel(c *ui.Context) {
 			ui.Text(c, "Agent log").Bold()
 			ui.Text(c, a.logTargetLabel()).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1).Grow(1)
 			if total, ok := a.logUsage(); ok {
-				ui.Text(c, agent.Count(total.Total())+" tokens processed").FontSize(12).TextColor(t.TextMuted).Tooltip(total.String())
+				label, tip := agent.Count(total.Total())+" tokens processed", total.String()
+				if n, ok := spentContext(a.runsOf(rev), a.inLog); ok {
+					label = agent.Count(n) + " tokens of context"
+					tip = "The context the runs built up. A run that resumes or forks an earlier session starts with its context, so it counts only what it added.\n" + tip
+				}
+				ui.Text(c, label).FontSize(12).TextColor(t.TextMuted).Tooltip(tip)
 			}
 			if a.logTarget != "" {
 				ui.Button(c, "Show all").OnClick(func() { a.logTarget = "" })
@@ -75,13 +76,53 @@ func (a *app) logUsage() (agent.Usage, bool) {
 	var total agent.Usage
 	known := false
 	for _, r := range a.runsOf(a.rev) {
-		if r.info.Usage != nil && (a.logTarget == "" || r.info.Target == a.logTarget) {
+		if r.info.Usage != nil && a.inLog(r) {
 			total.Add(*r.info.Usage)
 			known = true
 		}
 	}
 	total.Context, total.Session, total.SessionCost = 0, "", 0
 	return total, known
+}
+
+// inLog reports whether the log panel shows run r.
+func (a *app) inLog(r *logRun) bool { return a.logTarget == "" || r.info.Target == a.logTarget }
+
+// spentContext adds up the context the runs that keep reports built. A run
+// that resumed or forked a session starts with the context of the run
+// that ended in it, so it counts only what it added. It reports false when
+// none of those runs knows its context size.
+func spentContext(runs []*logRun, keep func(*logRun) bool) (int, bool) {
+	total, known := 0, false
+	for _, r := range runs {
+		u := r.info.Usage
+		if !keep(r) || u == nil || u.Context == 0 {
+			continue
+		}
+		known = true
+		base := 0
+		if p := resumedRun(runs, r); p != nil {
+			base = p.info.Usage.Context
+		}
+		total += max(0, u.Context-base)
+	}
+	return total, known
+}
+
+// resumedRun is the run that ended in the session r resumed or forked:
+// the latest of them that started before r.
+func resumedRun(runs []*logRun, r *logRun) *logRun {
+	var found *logRun
+	for _, p := range runs {
+		u := p.info.Usage
+		if p == r || u == nil || r.info.Resumed == "" || u.Session != r.info.Resumed || !p.info.Started.Before(r.info.Started) {
+			continue
+		}
+		if found == nil || p.info.Started.After(found.info.Started) {
+			found = p
+		}
+	}
+	return found
 }
 
 func (a *app) runView(c *ui.Context, r *logRun) {
@@ -127,36 +168,39 @@ func (a *app) runView(c *ui.Context, r *logRun) {
 	})
 }
 
+// logItemView shows an entry of a run as its title, which opens its
+// detail.
 func (a *app) logItemView(c *ui.Context, it *logItem) {
 	t := c.Theme()
 	ui.Column(c).Gap(2).Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		head := ui.ButtonBase(c).Gap(8).Padding(2, 4).Radius(4).Justify(ui.Start).Expanded(it.expanded).Label(it.Title)
+		if it.Detail == "" {
+			head = ui.Row(c).Gap(8).Padding(2, 4).AlignItems(ui.Center)
+		} else if head.Hovered() {
+			head.Background(t.SurfaceHover)
+		}
+		head.Children(func() {
+			arrow := ui.Icon(c, chevronIcon).Size(10, 10).TextColor(t.TextMuted)
+			switch {
+			case it.Detail == "":
+				arrow.Invisible()
+			case !it.expanded:
+				arrow.Rotate(-90)
+			}
 			ui.Text(c, it.time.Format("15:04:05")).Font("monospace").FontSize(11).TextColor(t.TextMuted)
 			title := ui.Text(c, it.Title).FontSize(12).Bold().SingleLine().Shrink(1).Grow(1)
 			if it.Failed {
 				title.TextColor(t.Danger)
 			}
-			if long(it.Detail) {
-				label := "More"
-				if it.expanded {
-					label = "Less"
-				}
-				ui.Button(c, label).OnClick(func() { it.expanded = !it.expanded })
-			}
 		})
-		if it.Detail == "" {
-			return
+		if it.Detail != "" && head.Clicked() {
+			it.expanded = !it.expanded
 		}
-		detail := ui.Text(c, clip(it.Detail)).Font("monospace").FontSize(11).Selectable().
-			Padding(6, 8).Radius(6).Background(t.Surface)
-		if !it.expanded {
-			detail.MaxLines(logDetailLines)
+		if it.Detail != "" && it.expanded {
+			ui.Text(c, clip(it.Detail)).Font("monospace").FontSize(11).Selectable().
+				Padding(6, 8).Radius(6).Background(t.Surface)
 		}
 	})
-}
-
-func long(s string) bool {
-	return strings.Count(s, "\n") >= logDetailLines || len(s) > 600
 }
 
 func clip(s string) string {

@@ -22,6 +22,7 @@ const streamFlush = 40 * time.Millisecond
 // text deltas joined into one event per streamFlush. It records the run in
 // the log of rev, in memory and in the run's file.
 func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, rev *review.Review, info store.RunInfo, fn func(agent.Event)) {
+	info.Resumed = req.ResumeID
 	run, w := a.startRun(rev, info)
 	var mu sync.Mutex
 	var logged []logItem
