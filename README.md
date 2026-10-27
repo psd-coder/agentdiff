@@ -37,7 +37,7 @@ It worked when `build/darwin-<arch>/` holds `AgentDiff.app` and a `.dmg`, with `
 open -n build/darwin-arm64/AgentDiff.app --args "$PWD"
 ```
 
-During development, `go run . /path/to/repo` starts the app on a repository. Without an argument the app opens the current directory when that is a git repository, and shows a welcome screen otherwise.
+During development, `go run . /path/to/repo` starts the app on a repository. Without an argument the app opens the current directory when that is a git repository, and shows a welcome screen otherwise. The welcome screen lists the recent projects, which you open with Up, Down and Return, as in the project list.
 
 ## Core concepts
 

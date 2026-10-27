@@ -43,7 +43,6 @@ func (a *app) projectPicker(c *ui.Context) {
 	}
 	ui.Popover(c, anchor, &a.projectsOpen, func() {
 		recent := a.cfg.Recent
-		n := len(recent) + 1
 		choose := func(i int) {
 			a.projectsOpen, a.refocus = false, "project"
 			switch {
@@ -55,57 +54,73 @@ func (a *app) projectPicker(c *ui.Context) {
 		}
 		ui.Column(c).MinWidth(360).MaxWidth(480).FillWidth().Gap(2).Children(func() {
 			ui.Text(c, "Projects").FontSize(11).Bold().TextColor(t.TextMuted).Padding(4, 8)
-			nav := &a.projectNav
-			l := nav.list(c, "Projects", func() {
-				for i, p := range recent {
-					current := p == a.repo.Root
-					row := nav.row(c.Key(p), func() {
-						ui.Icon(c, folderIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
-						ui.Column(c).Grow(1).Shrink(1).Children(func() {
-							ui.Text(c, filepath.Base(p)).Bold().SingleLine()
-							ui.Text(c, p).FontSize(11).TextColor(t.TextMuted).SingleLine()
-						})
-						if current {
-							ui.Icon(c, checkIcon).TextColor(t.Accent).Label("Open")
-						}
-					}, func() {
-						iconButton(c, trashIcon, "Remove from the list").Tooltip("Remove from the list (Cmd+Backspace)").OnClick(func() { a.confirmRemoveProject(p) })
-					}).Label(filepath.Base(p) + ", " + p)
-					if row.Clicked() {
-						choose(i)
-					}
-				}
-				ui.Divider(c).Margin(4, 0)
-				add := nav.row(c, func() {
-					ui.Icon(c, plusIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
-					ui.Text(c, "Add project…")
-				}, nil).Label("Add project…")
-				if add.Clicked() {
-					choose(len(recent))
-				}
-			}).Focusable().AutoFocus()
-			for _, k := range []ui.Key{ui.KeyDown, ui.KeyUp, ui.KeyPageDown, ui.KeyPageUp} {
-				if l.Shortcut(0, k) {
-					nav.key(k, n)
-				}
-			}
-			switch {
-			case l.Shortcut(0, ui.KeyHome):
-				nav.open(0)
-			case l.Shortcut(0, ui.KeyEnd):
-				nav.open(n - 1)
-			case l.Shortcut(0, ui.KeyEnter) || l.Shortcut(0, ui.KeySpace):
-				choose(nav.hi)
-			case l.Shortcut(ui.Cmd, ui.KeyBackspace) || l.Shortcut(0, ui.KeyDelete):
-				if nav.hi < len(recent) {
-					a.confirmRemoveProject(recent[nav.hi])
-				}
-			}
-			if row, ok := nav.active(); ok {
-				l.ActiveDescendant(row)
-			}
+			a.projectList(c, &a.projectNav, a.repo.Root, true, choose)
 		})
 	})
+}
+
+// projectList lists the recent projects, open marked as open, and with
+// add, a last row to add one. Up, Down, Home and End move the highlight,
+// Return or Space calls choose with its index, len(cfg.Recent) for the
+// add row, and Cmd+Backspace or Delete removes the highlighted project.
+func (a *app) projectList(c *ui.Context, nav *pickList, open string, add bool, choose func(i int)) {
+	t := c.Theme()
+	recent := a.cfg.Recent
+	n := len(recent)
+	if add {
+		n++
+	}
+	l := nav.list(c, "Projects", func() {
+		for i, p := range recent {
+			row := nav.row(c.Key(p), func() {
+				ui.Icon(c, folderIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
+				ui.Column(c).Grow(1).Shrink(1).Children(func() {
+					ui.Text(c, filepath.Base(p)).Bold().SingleLine()
+					ui.Text(c, p).FontSize(11).TextColor(t.TextMuted).SingleLine()
+				})
+				if p == open {
+					ui.Icon(c, checkIcon).TextColor(t.Accent).Label("Open")
+				}
+			}, func() {
+				iconButton(c, trashIcon, "Remove from the list").Tooltip("Remove from the list (Cmd+Backspace)").OnClick(func() { a.confirmRemoveProject(p) })
+			}).Label(filepath.Base(p) + ", " + p)
+			if row.Clicked() {
+				choose(i)
+			}
+		}
+		if add {
+			ui.Divider(c).Margin(4, 0)
+			row := nav.row(c, func() {
+				ui.Icon(c, plusIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
+				ui.Text(c, "Add project…")
+			}, nil).Label("Add project…")
+			if row.Clicked() {
+				choose(len(recent))
+			}
+		}
+	}).Focusable().AutoFocus()
+	for _, k := range []ui.Key{ui.KeyDown, ui.KeyUp, ui.KeyPageDown, ui.KeyPageUp} {
+		if l.Shortcut(0, k) {
+			nav.key(k, n)
+		}
+	}
+	switch {
+	case l.Shortcut(0, ui.KeyHome):
+		nav.open(0)
+	case l.Shortcut(0, ui.KeyEnd):
+		nav.open(n - 1)
+	case l.Shortcut(0, ui.KeyEnter) || l.Shortcut(0, ui.KeySpace):
+		if nav.hi < n {
+			choose(nav.hi)
+		}
+	case l.Shortcut(ui.Cmd, ui.KeyBackspace) || l.Shortcut(0, ui.KeyDelete):
+		if nav.hi < len(recent) {
+			a.confirmRemoveProject(recent[nav.hi])
+		}
+	}
+	if row, ok := nav.active(); ok {
+		l.ActiveDescendant(row)
+	}
 }
 
 func (a *app) toggleProjects() {

@@ -262,10 +262,8 @@ func (a *app) welcome(c *ui.Context) {
 		}
 		if len(a.cfg.Recent) > 0 {
 			ui.Column(c).Gap(4).Width(420).Margin(12, 0, 0, 0).Children(func() {
-				ui.Text(c, "Recent").FontSize(12).Bold().TextColor(t.TextMuted)
-				for _, r := range a.cfg.Recent {
-					ui.Button(c.Key(r), r).OnClick(func() { a.openRepo(r) })
-				}
+				ui.Text(c, "Recent").FontSize(12).Bold().TextColor(t.TextMuted).Padding(0, 8)
+				a.projectList(c, &a.projectNav, "", false, func(i int) { a.openRepo(a.cfg.Recent[i]) })
 			})
 		}
 	})

@@ -1500,3 +1500,26 @@ func TestCommandPalette(t *testing.T) {
 		t.Errorf("overview commands = %q", got)
 	}
 }
+
+// TestWelcomeList opens a recent project from the welcome screen with the
+// keyboard.
+func TestWelcomeList(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.AddRecent(fixtureRepo(t))
+	a.closeRepo()
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	tt.Frame()
+	snapshot(t, tt, "welcome")
+	if !tt.Focused("Projects") {
+		t.Fatal("the list has no focus")
+	}
+	want := a.cfg.Recent[1]
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if a.repo == nil || a.repo.Root != want {
+		t.Fatalf("opened %v, want %s", a.repo, want)
+	}
+}
