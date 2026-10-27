@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -67,14 +68,11 @@ func accelerator(mods ui.Modifiers, key ui.Key) string {
 // with its modifiers in another order.
 func parseAccelerator(acc string) (ui.Modifiers, ui.Key, bool) {
 	parts := strings.Split(acc, "+")
-	if strings.HasSuffix(acc, "++") {
-		parts = append(parts[:len(parts)-2], "+")
-	}
 	var mods ui.Modifiers
 	for _, p := range parts[:len(parts)-1] {
 		found := false
 		for _, m := range modNames {
-			if strings.EqualFold(p, m.name) || containsFold(m.alias, p) {
+			if strings.EqualFold(p, m.name) || slices.ContainsFunc(m.alias, func(a string) bool { return strings.EqualFold(a, p) }) {
 				mods |= m.mod
 				found = true
 			}
@@ -98,15 +96,6 @@ func parseAccelerator(acc string) (ui.Modifiers, ui.Key, bool) {
 		}
 	}
 	return 0, 0, false
-}
-
-func containsFold(list []string, s string) bool {
-	for _, x := range list {
-		if strings.EqualFold(x, s) {
-			return true
-		}
-	}
-	return false
 }
 
 // sameKeys tells whether two accelerators name the same keys.
@@ -216,12 +205,22 @@ func (a *app) resetKeys(ids ...string) {
 	a.keysChanged()
 }
 
-// keysChanged saves the keys and puts them in the menu bar.
+// keysChanged saves the keys, and has the next frame put them in the
+// menu bar: a change can come from a click on the menu bar itself.
 func (a *app) keysChanged() {
 	a.saveConfig()
+	a.menuDirty = true
 	if a.win != nil {
+		a.win.Invalidate()
+	}
+}
+
+// updateMenu puts the keys changed since the last frame in the menu bar.
+func (a *app) updateMenu() {
+	if a.menuDirty && a.win != nil {
 		mygo.App.SetMenu(a.menu())
 	}
+	a.menuDirty = false
 }
 
 // commandKeys runs, by their keys, the commands the menu bar does not

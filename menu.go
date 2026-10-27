@@ -59,6 +59,9 @@ func (a *app) menu() *mygo.Menu {
 
 // menuIDs are the commands the menu bar holds.
 func (a *app) menuIDs() map[string]bool {
+	if a.inMenu != nil {
+		return a.inMenu
+	}
 	ids := map[string]bool{}
 	var walk func(items []*mygo.MenuItem)
 	walk = func(items []*mygo.MenuItem) {
@@ -70,6 +73,7 @@ func (a *app) menuIDs() map[string]bool {
 		}
 	}
 	walk(a.menu().Items())
+	a.inMenu = ids
 	return ids
 }
 

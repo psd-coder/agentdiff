@@ -15,6 +15,7 @@ import (
 
 func (a *app) view(c *ui.Context) {
 	a.runQueued(c)
+	a.updateMenu()
 	if a.repo == nil {
 		a.welcome(c)
 		return

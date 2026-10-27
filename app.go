@@ -138,6 +138,8 @@ type app struct {
 	shortcutsOpen bool
 
 	cmds         map[string]*command
+	inMenu       map[string]bool
+	menuDirty    bool
 	pending      string // the command the menu bar queued
 	paletteOpen  bool
 	paletteQuery string
