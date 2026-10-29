@@ -21,6 +21,14 @@ type Ref struct {
 	Start int    `json:"start"`
 	End   int    `json:"end"`
 	Why   string `json:"why,omitempty"`
+	// Code is the lines of the reference as they were while the review
+	// was written for the changes, saved for when those changes are gone.
+	Code []CodeLine `json:"code,omitempty"`
+}
+
+type CodeLine struct {
+	Text    string `json:"text"`
+	Changed bool   `json:"changed,omitempty"`
 }
 
 type Step struct {
@@ -115,6 +123,34 @@ func (r *Review) WalksOn(parent string, step int) []*Walk {
 		}
 	}
 	return out
+}
+
+// EachRef calls fn with every reference of the review's walkthroughs.
+func (r *Review) EachRef(fn func(*Ref)) {
+	walkthrough := func(w *Walkthrough) {
+		if w == nil {
+			return
+		}
+		for i := range w.Steps {
+			for j := range w.Steps[i].Refs {
+				fn(&w.Steps[i].Refs[j])
+			}
+		}
+		for i := range w.Checklist {
+			for j := range w.Checklist[i].Refs {
+				fn(&w.Checklist[i].Refs[j])
+			}
+		}
+	}
+	if r.Overview != nil {
+		walkthrough(r.Overview.Walk)
+	}
+	for _, w := range r.Walks {
+		walkthrough(w.Content)
+		for _, t := range w.More {
+			walkthrough(t.Content)
+		}
+	}
 }
 
 // WalkPath returns a walk and its ancestors, the overview's child first.
@@ -250,6 +286,7 @@ func cleanRefs(refs []Ref) []Ref {
 			r.Side = SideNew
 		}
 		r.End = min(max(r.End, r.Start), r.Start+maxRefLines-1)
+		r.Code = nil
 		out = append(out, r)
 	}
 	return out

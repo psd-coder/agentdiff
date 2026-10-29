@@ -265,7 +265,7 @@ func TestFindMoveCopyReview(t *testing.T) {
 func TestArchiveReview(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	uncommitted := gitx.Scope{Kind: gitx.ScopeUncommitted}
-	if _, ok := s.LatestArchive("/repo"); ok {
+	if len(s.Archived("/repo")) != 0 {
 		t.Error("an archive without reviews")
 	}
 	for i := range maxArchived + 2 {
@@ -282,12 +282,12 @@ func TestArchiveReview(t *testing.T) {
 	if s.LoadReview("/repo", uncommitted).Overview != nil {
 		t.Error("the review stayed")
 	}
-	latest, ok := s.LatestArchive("/repo")
-	if !ok || latest.Overview.PatchID != fmt.Sprint("p", maxArchived+1) || latest.Scope.Kind != gitx.ScopeArchived {
-		t.Fatalf("latest = %+v, %v", latest, ok)
+	archived := s.Archived("/repo")
+	if n := len(archived); n != maxArchived {
+		t.Fatalf("kept %d archived reviews, want %d", n, maxArchived)
 	}
-	if n := len(s.archived("/repo")); n != maxArchived {
-		t.Errorf("kept %d archived reviews, want %d", n, maxArchived)
+	if latest := archived[0]; latest.Overview.PatchID != fmt.Sprint("p", maxArchived+1) || latest.Scope.Kind != gitx.ScopeArchived {
+		t.Errorf("latest = %+v", latest)
 	}
 	if src, ok := s.FindReview("/repo", uncommitted, "p5"); !ok || src.Kind != gitx.ScopeArchived {
 		t.Errorf("found %+v, %v", src, ok)

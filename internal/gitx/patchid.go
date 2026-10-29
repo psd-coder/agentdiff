@@ -196,17 +196,19 @@ func (r *Repo) patchIDs(ctx context.Context, patch []byte) ([][2]string, error) 
 	return ids, nil
 }
 
-// CommitWithFiles returns the newest of the latest limit commits that
-// changes all of files, or "" when none does. A merge commit counts as its
+// CommitsWithFiles returns, for each set of files, the newest of the
+// latest limit commits that changes all of them. A set that no commit
+// changes, and an empty set, are left out. A merge commit counts as its
 // changes against the first parent.
-func (r *Repo) CommitWithFiles(ctx context.Context, files []string, limit int) (string, error) {
-	if len(files) == 0 || !r.HasHead(ctx) {
-		return "", nil
+func (r *Repo) CommitsWithFiles(ctx context.Context, sets map[string][]string, limit int) (map[string]string, error) {
+	found := map[string]string{}
+	if len(sets) == 0 || !r.HasHead(ctx) {
+		return found, nil
 	}
 	out, err := r.output(ctx, "log", "-z", "--name-only", "--no-show-signature", "--diff-merges=first-parent", "--format=%x01%H",
 		"-n", strconv.Itoa(cmp.Or(limit, defaultCommitLimit)), "HEAD", "--")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	for record := range strings.SplitSeq(string(out), "\x01") {
 		fields := strings.Split(record, "\x00")
@@ -214,9 +216,14 @@ func (r *Repo) CommitWithFiles(ctx context.Context, files []string, limit int) (
 		for _, f := range fields[1:] {
 			changed[strings.TrimPrefix(f, "\n")] = true
 		}
-		if sha != "" && !slices.ContainsFunc(files, func(f string) bool { return !changed[f] }) {
-			return sha, nil
+		if sha == "" {
+			continue
+		}
+		for key, files := range sets {
+			if _, ok := found[key]; !ok && len(files) > 0 && !slices.ContainsFunc(files, func(f string) bool { return !changed[f] }) {
+				found[key] = sha
+			}
 		}
 	}
-	return "", nil
+	return found, nil
 }

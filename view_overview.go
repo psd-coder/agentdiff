@@ -61,49 +61,66 @@ func isAre(n int) string {
 	return "are"
 }
 
-// archivedCard offers the latest archived review on the uncommitted
-// scope, while it has no review of its own.
-func (a *app) archivedShown() bool {
-	return a.archived != nil && a.scope.Kind == gitx.ScopeUncommitted && a.rev.Empty() && !a.loading
-}
-
-func (a *app) archivedCard(c *ui.Context) {
-	arch := a.archived
-	if !a.archivedShown() {
+// earlierList lists the archived reviews of the uncommitted changes.
+// Each one opens on its own page.
+func (a *app) earlierList(c *ui.Context) {
+	if a.scope.Kind != gitx.ScopeUncommitted || len(a.archived) == 0 || a.loading {
 		return
 	}
 	t := c.Theme()
-	ov := arch.Overview
-	ui.Column(c).Gap(10).Padding(14, 16).Radius(8).Background(t.Surface).Border(1, t.Border).Children(func() {
-		meta := []string{ov.Generated.Format("Jan 2 15:04")}
-		if ov.Walk != nil {
-			meta = append(meta, plural(len(ov.Walk.Steps), "step"))
-		}
-		if n := len(arch.Threads); n > 0 {
-			meta = append(meta, plural(n, "comment"))
-		}
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Earlier review").Bold()
-			ui.Text(c, strings.Join(meta, " · ")).FontSize(12).TextColor(t.TextMuted)
+	ui.Text(c, "Earlier reviews").FontSize(18).Bold().Margin(8, 0, 0, 0)
+	ui.Text(c, "Reviews of uncommitted changes that are no longer in the working tree. A review comes back here by itself when its changes do.").
+		FontSize(12).TextColor(t.TextMuted)
+	for _, e := range a.archived {
+		row := ui.Row(c.Key("earlier-"+e.id())).Gap(8).Padding(0, 10, 0, 0).Radius(8).Border(1, t.Border).AlignItems(ui.Center)
+		row.Children(func() {
+			open := ui.ButtonBase(c).Grow(1).Shrink(1).Padding(10, 14).Gap(4).Column().AlignItems(ui.Stretch)
+			// The whole row shows the hover of its open area, so Delete
+			// keeps its own.
+			if open.Hovered() {
+				row.Background(t.SurfaceHover)
+			}
+			open.Children(func() {
+				ui.Text(c, earlierTitle(e.rev)).Bold().MaxLines(2)
+				ui.Text(c, strings.Join(a.earlierMeta(e), " · ")).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			})
+			if open.Clicked() {
+				a.goTo("archived:" + e.id())
+			}
+			a.cmdButton(c, "delete-archived", e.id(), "Delete")
 		})
-		text := "It was written for uncommitted changes that are no longer in the working tree. It comes back here by itself when those changes do."
-		switch {
-		case a.movedTo != "":
-			text = "It was written for changes that are now commit " + shortSHA(a.movedTo) + ". The review moves there when you open it."
-		case a.probably != "":
-			text = "Its files were probably committed in " + a.commitName(a.probably) + ", which changes all of them. The commit has other changes too, so the review does not move there by itself."
-		}
-		ui.Text(c, text).FontSize(12).TextColor(t.TextMuted)
-		if ov.Walk != nil && ov.Walk.Summary != "" {
-			ui.Text(c, ov.Walk.Summary).MaxLines(2)
-		}
-		ui.Row(c).Gap(8).Children(func() {
-			a.cmdPrimaryButton(c, "open-moved-commit", "", "Open commit")
-			a.cmdPrimaryButton(c, "move-archived", "", "Move review to the commit")
-			a.cmdButton(c, "restore-archived", "", "Restore")
-			a.cmdButton(c, "delete-archived", "", "Delete")
-		})
-	})
+	}
+}
+
+// earlierTitle is what an archived review is about: the summary of its
+// overview, or the start of an overview from before walkthroughs.
+func earlierTitle(rev *review.Review) string {
+	ov := rev.Overview
+	if ov.Walk != nil && ov.Walk.Summary != "" {
+		return ov.Walk.Summary
+	}
+	if ov.Markdown != "" {
+		return excerpt(ov.Markdown, 160)
+	}
+	return "Review without an overview"
+}
+
+func (a *app) earlierMeta(e *earlier) []string {
+	ov := e.rev.Overview
+	meta := []string{ov.Generated.Format("Jan 2 15:04")}
+	if ov.Walk != nil {
+		meta = append(meta, plural(len(ov.Walk.Steps), "step"))
+	}
+	if n := len(e.rev.Threads); n > 0 {
+		meta = append(meta, plural(n, "comment"))
+	}
+	switch {
+	case e.movedTo != "":
+		meta = append(meta, "now commit "+shortSHA(e.movedTo))
+	case e.probably != "":
+		meta = append(meta, "probably in commit "+shortSHA(e.probably))
+	}
+	return meta
 }
 
 func shortSHA(sha string) string { return sha[:min(len(sha), 7)] }
@@ -168,12 +185,12 @@ func (a *app) overviewPage(c *ui.Context) {
 					ui.Text(c, ov.Err).FontSize(12).Font("monospace").Selectable()
 				})
 			}
-			a.archivedCard(c)
 			if len(a.files) > 0 && !a.loading {
 				a.groupCards(c)
 				a.askWalk(c, "")
 				a.generalThreads(c)
 			}
+			a.earlierList(c)
 		})
 	})
 }

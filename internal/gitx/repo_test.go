@@ -294,14 +294,13 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 		t.Errorf("commit ids = %v, err %v", ids, err)
 	}
 	tr.write("a.txt", "again\n")
-	tr.commit("again")
-	for _, tc := range []struct {
-		files []string
-		want  string
-	}{{[]string{"a.txt", "dir/new file.txt"}, sha}, {[]string{"old.txt"}, sha}, {[]string{"a.txt", "nope"}, ""}, {nil, ""}} {
-		if got, err := r.CommitWithFiles(ctx, tc.files, 10); err != nil || got != tc.want {
-			t.Errorf("commit with %v = %q, want %q, err %v", tc.files, got, tc.want, err)
-		}
+	again := tr.commit("again")
+	got, err := r.CommitsWithFiles(ctx, map[string][]string{
+		"both": {"a.txt", "dir/new file.txt"}, "old": {"old.txt"}, "a": {"a.txt"}, "nope": {"a.txt", "nope"}, "empty": nil,
+	}, 10)
+	want := map[string]string{"both": sha, "old": sha, "a": again}
+	if err != nil || !maps.Equal(got, want) {
+		t.Errorf("commits with files = %v, want %v, err %v", got, want, err)
 	}
 }
 

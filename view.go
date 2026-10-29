@@ -381,6 +381,8 @@ func (a *app) main(c *ui.Context) {
 			a.feedbackPage(c)
 		case a.page == "all":
 			a.allPage(c)
+		case strings.HasPrefix(a.page, "archived:"):
+			a.archivedPage(c, strings.TrimPrefix(a.page, "archived:"))
 		case strings.HasPrefix(a.page, "file:"):
 			a.filePage(c, strings.TrimPrefix(a.page, "file:"))
 		case strings.HasPrefix(a.page, "walk:"):

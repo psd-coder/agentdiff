@@ -193,7 +193,7 @@ func (s Store) ArchiveReview(repo, id string) (gitx.Scope, error) {
 	if err := s.SaveReview(s.LoadReview(repo, to)); err != nil {
 		return to, err
 	}
-	archived := s.archived(repo)
+	archived := s.Archived(repo)
 	var errs []error
 	for _, r := range archived[min(len(archived), maxArchived):] {
 		errs = append(errs, s.DeleteReview(repo, r.Scope))
@@ -201,23 +201,15 @@ func (s Store) ArchiveReview(repo, id string) (gitx.Scope, error) {
 	return to, errors.Join(errs...)
 }
 
-// LatestArchive returns the archived review that was updated last.
-func (s Store) LatestArchive(repo string) (*review.Review, bool) {
-	archived := s.archived(repo)
-	if len(archived) == 0 {
-		return nil, false
-	}
-	return archived[0], true
-}
-
-// archived returns the archived reviews of repo, the newest first.
-func (s Store) archived(repo string) []*review.Review {
+// Archived returns the archived reviews of repo that have an overview,
+// the newest first.
+func (s Store) Archived(repo string) []*review.Review {
 	pattern := filepath.Join(filepath.Dir(s.reviewPath(repo, gitx.Scope{})), "archived-*.json")
 	paths, _ := filepath.Glob(pattern)
 	var out []*review.Review
 	for _, path := range paths {
 		r := &review.Review{}
-		if readJSON(path, r) == nil && r.Scope.Kind == gitx.ScopeArchived {
+		if readJSON(path, r) == nil && r.Scope.Kind == gitx.ScopeArchived && r.Overview != nil {
 			out = append(out, s.LoadReview(repo, r.Scope))
 		}
 	}

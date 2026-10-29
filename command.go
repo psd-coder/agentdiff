@@ -142,15 +142,22 @@ func (a *app) commands() []*command {
 			run: func(*ui.Context, string) { a.confirmStartOver() }},
 
 		{id: "open-moved-commit", title: "Open Commit That Holds These Changes",
-			can: func(string) bool { return a.movedTo != "" && (a.archivedShown() || a.stale()) },
+			can: func(string) bool { return a.movedTo != "" && a.stale() },
 			run: func(*ui.Context, string) { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.movedTo}) }},
+		{id: "open-archived-commit", title: "Open Commit of the Earlier Review", target: a.targetArchived,
+			can: func(id string) bool { return a.earlierReview(id).movedTo != "" },
+			run: func(_ *ui.Context, id string) {
+				a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.earlierReview(id).movedTo})
+			}},
 		{id: "move-archived", title: "Move Earlier Review to the Commit", target: a.targetArchived,
-			can: func(string) bool { return a.movedTo == "" && a.probably != "" },
-			run: func(*ui.Context, string) { a.moveArchived(a.probably) }},
-		{id: "restore-archived", title: "Restore Earlier Review", tip: "Bring the review back here, with a warning that it was written for other changes",
-			target: a.targetArchived, run: func(*ui.Context, string) { a.restoreArchived() }},
-		{id: "delete-archived", title: "Delete Earlier Review", target: a.targetArchived, run: func(*ui.Context, string) {
-			a.confirm("Delete the earlier review?", "Its overview, walkthroughs and comments are deleted.", "Delete", a.deleteArchived)
+			can: func(id string) bool { e := a.earlierReview(id); return e.movedTo == "" && e.probably != "" },
+			run: func(_ *ui.Context, id string) { a.moveArchived(a.earlierReview(id)) }},
+		{id: "restore-archived", title: "Restore Earlier Review", tip: "Bring the review back to the uncommitted changes, with a warning that it was written for other changes",
+			target: a.targetArchived, can: func(string) bool { return a.rev.Empty() },
+			run: func(_ *ui.Context, id string) { a.restoreArchived(a.earlierReview(id)) }},
+		{id: "delete-archived", title: "Delete Earlier Review", target: a.targetArchived, run: func(_ *ui.Context, id string) {
+			e := a.earlierReview(id)
+			a.confirm("Delete the earlier review?", "Its overview, walkthroughs and comments are deleted.", "Delete", func() { a.deleteArchived(e) })
 		}},
 
 		// How the window shows the changes.
@@ -424,7 +431,10 @@ func (a *app) targetFeedback() (string, bool) { return "", a.page == "feedback" 
 
 func (a *app) targetAll() (string, bool) { return "", a.page == "all" && len(a.files) > 0 }
 
-func (a *app) targetArchived() (string, bool) { return "", a.page == "overview" && a.archivedShown() }
+func (a *app) targetArchived() (string, bool) {
+	id, ok := strings.CutPrefix(a.page, "archived:")
+	return id, ok && a.earlierReview(id) != nil
+}
 
 func (a *app) hasFeedback(string) bool {
 	return len(review.ExportedThreads(a.rev, a.exportOptions())) > 0

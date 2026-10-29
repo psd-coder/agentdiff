@@ -145,9 +145,19 @@ type snippet struct {
 }
 
 func (a *app) snippetOf(r review.Ref) snippet {
+	if a.diffs[r.File] == nil {
+		a.extraOf(r.File)
+	}
+	s, _ := a.loadedSnippet(r)
+	return s
+}
+
+// loadedSnippet is the snippet of a reference from the files read so
+// far. It reports false when its file is not read yet.
+func (a *app) loadedSnippet(r review.Ref) (snippet, bool) {
 	if d := a.diffs[r.File]; d != nil {
 		if d.state == nil {
-			return snippet{loading: d.loading, missing: d.err}
+			return snippet{loading: d.loading, missing: d.err}, true
 		}
 		buf := d.state.New
 		if r.Side == review.SideOld {
@@ -165,13 +175,30 @@ func (a *app) snippetOf(r review.Ref) snippet {
 				s.changed[i] = inHunk(hunks, r.Side, r.Start-1+i)
 			}
 		}
-		return s
+		return s, true
 	}
-	f := a.extraOf(r.File)
+	f := a.extra[r.File]
+	if f == nil {
+		return snippet{}, false
+	}
 	if f.loading || f.err != "" {
-		return snippet{loading: f.loading, missing: f.err}
+		return snippet{loading: f.loading, missing: f.err}, true
 	}
-	return cut(len(f.lines), func(i int) string { return f.lines[i] }, r)
+	return cut(len(f.lines), func(i int) string { return f.lines[i] }, r), true
+}
+
+// savedSnippet is the snippet of a reference from the code the review
+// saved, for a review whose changes are gone.
+func savedSnippet(r review.Ref) snippet {
+	if len(r.Code) == 0 {
+		return snippet{missing: "The code of this snippet was not saved with the review."}
+	}
+	var s snippet
+	for _, l := range r.Code {
+		s.lines = append(s.lines, l.Text)
+		s.changed = append(s.changed, l.Changed)
+	}
+	return s
 }
 
 func cut(count int, line func(int) string, r review.Ref) snippet {
@@ -210,8 +237,12 @@ func (a *app) extraOf(path string) *extraFile {
 	a.async(func() {
 		_, text, err := r.Contents(context.Background(), s, gitx.FileChange{Path: path, Status: gitx.StatusAdded})
 		a.update(func() {
-			if gen == a.gen {
-				*f = *newExtraFile(text, err)
+			if gen != a.gen {
+				return
+			}
+			*f = *newExtraFile(text, err)
+			if a.keepSnippets() {
+				a.saveReview()
 			}
 		})
 	})
@@ -228,8 +259,13 @@ func newExtraFile(text string, err error) *extraFile {
 }
 
 func (a *app) refView(c *ui.Context, r review.Ref) {
+	a.snippetView(c, r, a.snippetOf(r))
+}
+
+// snippetView shows the lines of a reference under its label. The label
+// opens the diff when the lines are in it.
+func (a *app) snippetView(c *ui.Context, r review.Ref, s snippet) {
 	t := c.Theme()
-	s := a.snippetOf(r)
 	ui.Column(c).Radius(8).Border(1, t.Border).Clip().Children(func() {
 		ui.Row(c).Gap(10).Padding(6, 10).AlignItems(ui.Center).Background(t.Surface).Children(func() {
 			if s.inDiff {

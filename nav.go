@@ -64,6 +64,9 @@ func (a *app) pageExists(page string) bool {
 	if f, ok := strings.CutPrefix(page, "file:"); ok {
 		return a.diffs[f] != nil
 	}
+	if id, ok := strings.CutPrefix(page, "archived:"); ok {
+		return a.earlierReview(id) != nil
+	}
 	return page != a.page
 }
 
@@ -123,6 +126,8 @@ func (a *app) pageLabel(page string) string {
 		return "Feedback"
 	case page == "all":
 		return "All files diff"
+	case strings.HasPrefix(page, "archived:"):
+		return "Earlier review"
 	case strings.HasPrefix(page, "walk:"):
 		if w := a.rev.Walk(strings.TrimPrefix(page, "walk:")); w != nil {
 			return excerpt(a.rev.WalkTitle(w), 48)

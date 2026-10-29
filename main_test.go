@@ -289,12 +289,17 @@ func TestReviewFollowsCommit(t *testing.T) {
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
 	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
+	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].movedTo != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if a.movedTo != sha || a.archived == nil || !a.rev.Empty() || !tt.HasText("Earlier review") || !tt.HasText("Open commit") {
-		t.Fatalf("moved to %q, want %q; texts %q", a.movedTo, sha, tt.Texts())
+	if len(a.archived) != 1 || a.archived[0].movedTo != sha || !a.rev.Empty() || !tt.HasText("Earlier reviews") {
+		t.Fatalf("archived %v, want moved to %q; texts %q", a.archived, sha, tt.Texts())
 	}
 
+	if err := tt.Click("s"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	if err := tt.Click("Open commit"); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +313,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	}
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	pump(t, a, "the uncommitted changes", func() bool { return !a.loading && !a.switching })
-	if !a.rev.Empty() || a.archived != nil {
+	if !a.rev.Empty() || len(a.archived) != 0 {
 		t.Errorf("the uncommitted scope kept the review: %+v, archived %+v", a.rev, a.archived)
 	}
 }
@@ -335,11 +340,16 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
 	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
+	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].probably != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if a.archived == nil || a.movedTo != "" || a.probably != sha {
-		t.Fatalf("archived %v, moved to %q, probably %q, want %q", a.archived != nil, a.movedTo, a.probably, sha)
+	if len(a.archived) != 1 || a.archived[0].movedTo != "" || a.archived[0].probably != sha {
+		t.Fatalf("archived %v, want probably in %q", a.archived, sha)
 	}
+	if err := tt.Click("s"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	if err := tt.Click("Move review to the commit"); err != nil {
 		t.Fatal(err)
 	}
@@ -385,8 +395,8 @@ func TestArchiveUncommitted(t *testing.T) {
 	}
 	delete(a.overviews, a.rev)
 	tt := reload("the other changes")
-	if !a.rev.Empty() || a.archived == nil || !tt.HasText("Earlier review") || !tt.HasText("Lower-case keys.") {
-		t.Fatalf("review %+v, archived %v; texts %q", a.rev, a.archived != nil, tt.Texts())
+	if !a.rev.Empty() || len(a.archived) != 1 || !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") {
+		t.Fatalf("review %+v, archived %v; texts %q", a.rev, a.archived, tt.Texts())
 	}
 	snapshot(t, tt, "archived")
 
@@ -395,19 +405,19 @@ func TestArchiveUncommitted(t *testing.T) {
 	}
 	git(t, dir, "stash", "pop", "-q")
 	tt = reload("the changes back")
-	if a.rev.Overview == nil || a.stale() || a.archived != nil || !tt.HasText("Moved here from earlier uncommitted changes") {
+	if a.rev.Overview == nil || a.stale() || len(a.archived) != 0 || !tt.HasText("Moved here from earlier uncommitted changes") {
 		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
 	}
 
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	reload("the other changes again")
-	if a.archived == nil {
-		t.Fatal("not archived")
+	if len(a.archived) != 1 {
+		t.Fatalf("not archived: %d", len(a.archived))
 	}
-	a.restoreArchived()
+	a.restoreArchived(a.archived[0])
 	tt = reload("the restored review")
-	if a.rev.Overview == nil || a.archived != nil || !a.stale() || !tt.HasText("This overview was written for 2 files. Since then, 2 are no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
+	if a.rev.Overview == nil || len(a.archived) != 0 || !a.stale() || !tt.HasText("This overview was written for 2 files. Since then, 2 are no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
 		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
 	}
 
@@ -1897,6 +1907,8 @@ func TestFocusPage(t *testing.T) {
 	}
 }
 
+// TestAllFiles opens the diffs of every file on one page, under the titles
+// of their groups, and marks them all viewed.
 func TestAllFiles(t *testing.T) {
 	a := newTestApp(t)
 	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
@@ -1935,5 +1947,105 @@ func TestAllFiles(t *testing.T) {
 	tt.Frame()
 	if tt.HasText("1. Cache keys") || !tt.HasText("api/handler.go") || !tt.HasText("cache/cache.go") {
 		t.Errorf("flat page texts %q", tt.Texts())
+	}
+}
+
+// TestEarlierReviewPage archives a review and opens it on its own page,
+// next to the review of the changes that replaced it. The page shows the
+// code the snippets had while the review was current.
+func TestEarlierReviewPage(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	answer := "```json\n" + `{"summary": "Lower-case keys.", "steps": [{"title": "Keys", "text": "a", "refs": [{"file": "cache/cache.go", "side": "new", "start": 5, "end": 7, "why": "the call"}]}], "groups": []}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	a.cfg.DeeperAhead = false
+	a.queue = make(chan func(), 64)
+	a.generateOverview()
+	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	code := a.rev.Overview.Walk.Steps[0].Refs[0].Code
+	if len(code) != 3 || code[1].Text != "\treturn strings.ToLower(key)" || !code[1].Changed || code[0].Changed {
+		t.Fatalf("saved code %+v", code)
+	}
+
+	git(t, dir, "stash", "-u", "-q")
+	write(t, dir, "output.json", "{}\n")
+	a.refresh()
+	pump(t, a, "the other changes", func() bool { return !a.loading && !a.switching })
+	a.cfg.Agent.Binary = fakeClaude(t, "s2", "```json\n"+`{"summary": "Other change.", "steps": [{"title": "B", "text": "b"}], "groups": []}`+"\n```")
+	a.generateOverview()
+	pump(t, a, "the second overview", func() bool { return a.overviewRunning() == nil })
+	tt := ui.NewTester(a.view, 1300, 900)
+	tt.Frame()
+	if len(a.archived) != 1 || !tt.HasText("Other change.") || !tt.HasText("Earlier reviews") {
+		t.Fatalf("archived %v; texts %q", a.archived, tt.Texts())
+	}
+
+	if r, ok := tt.Find("Lower-case keys."); ok {
+		tt.Move(r.X, r.Y+r.H/2)
+		tt.Frame()
+		snapshot(t, tt, "earlier-hover")
+	}
+	if r, ok := tt.Find("Delete"); ok {
+		tt.Move(r.X+r.W/2, r.Y+r.H/2)
+		tt.Frame()
+		snapshot(t, tt, "earlier-hover-delete")
+	}
+	if err := tt.Click("Lower-case keys."); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "earlier-review")
+	if a.page != "archived:"+a.archived[0].id() || !tt.HasText("    return strings.ToLower(key)") {
+		t.Fatalf("page %q; texts %q", a.page, tt.Texts())
+	}
+	if a.applies(a.cmd("restore-archived"), a.archived[0].id()) {
+		t.Error("restore offered over the review of the current changes")
+	}
+
+	a.goBack()
+	tt.Frame()
+	if err := tt.Click("Delete"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.archived) != 0 || a.page != "overview" || len(a.store.Archived(dir)) != 0 {
+		t.Errorf("after delete: archived %v, page %q", a.archived, a.page)
+	}
+}
+
+// TestEarlierReviewInFull shows an archived review with its deeper
+// walkthroughs, its questions with their follow-ups, and its comments.
+func TestEarlierReviewInFull(t *testing.T) {
+	a := newTestApp(t)
+	rev := review.New(a.repo.Root, gitx.Scope{Kind: gitx.ScopeArchived, From: "p1"})
+	rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "Root summary.",
+		Steps: []review.Step{{Title: "Root step", Refs: []review.Ref{
+			{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7},
+		}}},
+	}}
+	rev.Walks = []*review.Walk{
+		{ID: "d1", Parent: "", Step: 0, Content: &review.Walkthrough{Steps: []review.Step{{Title: "Deeper step"}}}},
+		{ID: "q1", Parent: "", Step: -1, Question: "Why lower case?", Markdown: "Callers compare keys.", More: []review.Turn{
+			{Question: "Which callers?", Content: &review.Walkthrough{Steps: []review.Step{{Title: "Follow-up step"}}}},
+		}},
+	}
+	th := rev.AddThread(review.Anchor{Kind: review.AnchorLines, File: "cache/cache.go", Side: review.SideNew, Start: 6, End: 6, Quote: "\treturn strings.ToLower(key)"})
+	th.Messages = []review.Message{{Role: review.RoleUser, Text: "Keep keys as they are."}}
+	a.archived = []*earlier{{rev: rev}}
+	a.goTo("archived:p1")
+	tt := ui.NewTester(a.view, 1300, 2400)
+	tt.Frame()
+	for _, want := range []string{
+		"Root summary.", "Deeper: Root step", "1. Deeper step", "Question: Why lower case?", "Callers compare keys.",
+		"Question: Which callers?", "1. Follow-up step", "The code of this snippet was not saved with the review.",
+		"    return strings.ToLower(key)", "Keep keys as they are.",
+	} {
+		if !tt.HasText(want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if n := slices.Index(tt.Texts(), "1. Root step"); n < 0 || slices.Contains(tt.Texts()[n+1:], "1. Root step") {
+		t.Errorf("the root step shows %v times; texts %q", n, tt.Texts())
 	}
 }
