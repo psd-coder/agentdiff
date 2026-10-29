@@ -96,6 +96,9 @@ func (a *app) fileCards(c *ui.Context, files []string) {
 		}
 		ui.Column(c.Key(f)).Margin(12, 16).Radius(8).Border(1, t.Border).Clip().Children(func() {
 			a.fileHeader(c, d, false)
+			if a.isFolded(f) {
+				return
+			}
 			a.fileThreads(c, f)
 			a.diffBody(c, d, true)
 		})
@@ -117,7 +120,14 @@ func statusLabel(f gitx.FileChange) string {
 func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 	t := c.Theme()
 	f := d.change
-	ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+	head := ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface)
+	if page || !a.isFolded(f.Path) {
+		head.BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
+	}
+	head.Children(func() {
+		if !page {
+			a.foldButton(c, f.Path)
+		}
 		if page {
 			ui.Text(c, f.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
 		} else if textLink(c, f.Path, func(e ui.Element) { e.Font("monospace").Bold().TextColor(t.Text) }).Tooltip("Open the file on its own page").Clicked() {
@@ -147,6 +157,29 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 		}
 		a.cmdCheckbox(c, "mark-viewed", "mark-not-viewed", f.Path, "Viewed")
 	})
+}
+
+// foldButton folds the card of the file to its header, or unfolds it.
+func (a *app) foldButton(c *ui.Context, file string) {
+	t := c.Theme()
+	folded := a.isFolded(file)
+	tip, label := "Fold the diff", "Fold"
+	if folded {
+		tip, label = "Unfold the diff", "Unfold"
+	}
+	btn := ui.ButtonBase(c.Key("fold")).Padding(4).Radius(4).Expanded(!folded).Label(label).Tooltip(tip)
+	if btn.Hovered() {
+		btn.Background(t.SurfaceHover)
+	}
+	btn.Children(func() {
+		arrow := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(t.TextMuted)
+		if folded {
+			arrow.Rotate(-90)
+		}
+	})
+	if btn.Clicked() {
+		a.folded[file] = !folded
+	}
 }
 
 // layoutSwitch picks split or unified diffs, for every diff in the app.

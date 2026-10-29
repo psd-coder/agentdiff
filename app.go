@@ -74,7 +74,10 @@ type app struct {
 	switching    bool
 	loadingScope *scopeLoad
 	diffs        map[string]*fileDiff
-	gen          int
+	// folded holds the files the reviewer folded or unfolded in this
+	// scope. The others are folded while they are viewed.
+	folded map[string]bool
+	gen    int
 	// patch identifies the changes of the scope once patchKnown, see
 	// gitx.Repo.PatchID.
 	patch      string
@@ -159,6 +162,7 @@ func newApp(s store.Store) *app {
 		store:       s,
 		cfg:         s.LoadConfig(),
 		diffs:       map[string]*fileDiff{},
+		folded:      map[string]bool{},
 		reviews:     map[string]*review.Review{},
 		runs:        map[*review.Review][]*logRun{},
 		logPct:      50,
@@ -456,6 +460,7 @@ type scopeLoad struct {
 func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 	a.scope, a.rev = s, rev
 	a.resetNav()
+	a.folded = map[string]bool{}
 	a.thread = ""
 	a.exportDone, a.savedPath = false, ""
 	a.adoptedFrom = nil
@@ -940,12 +945,22 @@ func (a *app) listed(file string) bool {
 	return !a.cfg.HideViewed || !a.rev.Viewed[file]
 }
 
-// setViewed marks the files viewed, or not viewed.
+// setViewed marks the files viewed and folds them, or marks them not
+// viewed and unfolds them.
 func (a *app) setViewed(files []string, viewed bool) {
 	for _, f := range files {
+		delete(a.folded, f)
 		a.rev.Viewed[f] = viewed
 	}
 	a.saveReview()
+}
+
+// isFolded reports whether the card of the file shows only its header.
+func (a *app) isFolded(file string) bool {
+	if f, ok := a.folded[file]; ok {
+		return f
+	}
+	return a.rev.Viewed[file]
 }
 
 func (a *app) groups() []review.Group {

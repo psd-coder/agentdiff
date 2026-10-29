@@ -1950,6 +1950,44 @@ func TestAllFiles(t *testing.T) {
 	}
 }
 
+// TestFoldFileCards folds a card when its file is marked viewed, unfolds
+// it when the mark goes, and folds it on a click.
+func TestFoldFileCards(t *testing.T) {
+	a := newTestApp(t)
+	a.goTo("all")
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Advance(time.Second)
+	diffs := func() int { return strings.Count(strings.Join(tt.Texts(), "\n"), "Old text") }
+	if diffs() != 2 {
+		t.Fatalf("unfolded texts %q", tt.Texts())
+	}
+	click := func(s string) {
+		t.Helper()
+		if err := tt.Click(s); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+	}
+	click("Viewed")
+	if !a.rev.Viewed[a.fileNames()[0]] || diffs() != 1 {
+		t.Fatalf("viewed card not folded; texts %q", tt.Texts())
+	}
+	snapshot(t, tt, "folded-card")
+	a.cmd("mark-not-viewed").run(nil, a.fileNames()[0])
+	tt.Frame()
+	if a.rev.Viewed[a.fileNames()[0]] || diffs() != 2 {
+		t.Fatalf("not viewed card folded; texts %q", tt.Texts())
+	}
+	click("Fold")
+	if diffs() != 1 {
+		t.Fatalf("card not folded; texts %q", tt.Texts())
+	}
+	click("Unfold")
+	if diffs() != 2 {
+		t.Fatalf("card not unfolded; texts %q", tt.Texts())
+	}
+}
+
 // TestEarlierReviewPage archives a review and opens it on its own page,
 // next to the review of the changes that replaced it. The page shows the
 // code the snippets had while the review was current.
