@@ -186,6 +186,7 @@ func (a *app) reviewNav(c *ui.Context) {
 			ov.Children(func() { ui.Spinner(c).Size(12, 12) })
 		}
 		a.walkItems(c, "", 1)
+		ui.SidebarItem(c, "all", filesIcon, "All files diff")
 		threads := len(a.rev.Threads)
 		ui.SidebarItem(c, "threads", messageIcon, "Questions & comments").Children(func() {
 			if threads > 0 {
@@ -378,6 +379,8 @@ func (a *app) main(c *ui.Context) {
 			a.threadsPage(c)
 		case a.page == "feedback":
 			a.feedbackPage(c)
+		case a.page == "all":
+			a.allPage(c)
 		case strings.HasPrefix(a.page, "file:"):
 			a.filePage(c, strings.TrimPrefix(a.page, "file:"))
 		case strings.HasPrefix(a.page, "walk:"):

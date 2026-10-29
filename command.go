@@ -62,6 +62,12 @@ func (a *app) commands() []*command {
 		{id: "mark-group-not-viewed", title: "Mark All Files of the Group as Not Viewed", target: a.targetGroup,
 			can: a.groupViewed,
 			run: func(_ *ui.Context, g string) { a.setViewed(a.groupFiles(g), false) }},
+		{id: "mark-all-viewed", title: "Mark All Files as Viewed", target: a.targetAll,
+			can: func(string) bool { return !a.allViewed() },
+			run: func(*ui.Context, string) { a.setViewed(a.fileNames(), true) }},
+		{id: "mark-all-not-viewed", title: "Mark All Files as Not Viewed", target: a.targetAll,
+			can: func(string) bool { return a.allViewed() },
+			run: func(*ui.Context, string) { a.setViewed(a.fileNames(), false) }},
 
 		{id: "close-thread", title: "Close Thread", tip: "Escape", target: a.targetThread, run: func(*ui.Context, string) { a.closeThread() }},
 		{id: "resolve-thread", title: "Resolve Thread", target: a.targetThread,
@@ -184,6 +190,7 @@ func (a *app) commands() []*command {
 		{id: "go-overview", title: "Overview", keys: "CmdOrCtrl+1", run: func(*ui.Context, string) { a.openPage("overview") }},
 		{id: "go-threads", title: "Questions & Comments", keys: "CmdOrCtrl+2", run: func(*ui.Context, string) { a.openPage("threads") }},
 		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { a.openPage("feedback") }},
+		{id: "go-all", title: "All Files Diff", keys: "CmdOrCtrl+4", run: func(*ui.Context, string) { a.openPage("all") }},
 		{id: "next-file", title: "Next File", keys: "Alt+CmdOrCtrl+Down", run: func(*ui.Context, string) { a.stepFile(1) }},
 		{id: "previous-file", title: "Previous File", keys: "Alt+CmdOrCtrl+Up", run: func(*ui.Context, string) { a.stepFile(-1) }},
 		{id: "shortcuts", overlay: true, title: "Keyboard Shortcuts", keys: "CmdOrCtrl+/", run: func(*ui.Context, string) { a.shortcutsOpen = true }},
@@ -415,6 +422,8 @@ func (a *app) targetQuestionWalk() (string, bool) {
 
 func (a *app) targetFeedback() (string, bool) { return "", a.page == "feedback" }
 
+func (a *app) targetAll() (string, bool) { return "", a.page == "all" && len(a.files) > 0 }
+
 func (a *app) targetArchived() (string, bool) { return "", a.page == "overview" && a.archivedShown() }
 
 func (a *app) hasFeedback(string) bool {
@@ -434,6 +443,15 @@ func (a *app) groupFiles(g string) []string {
 func (a *app) groupViewed(g string) bool {
 	for _, f := range a.groupFiles(g) {
 		if !a.rev.Viewed[f] {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *app) allViewed() bool {
+	for _, f := range a.files {
+		if !a.rev.Viewed[f.Path] {
 			return false
 		}
 	}

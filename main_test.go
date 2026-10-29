@@ -1896,3 +1896,44 @@ func TestFocusPage(t *testing.T) {
 		t.Errorf("file page: files focused %v, diff focused %v, refocus %q", tt.Focused("Files"), tt.Focused("New text"), a.refocus)
 	}
 }
+
+func TestAllFiles(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
+	}}
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if err := tt.Click("All files diff"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	if a.page != "all" {
+		t.Fatalf("page %q", a.page)
+	}
+	snapshot(t, tt, "all-files")
+	var ys []float32
+	for _, want := range []string{"1. Cache keys", "cache/cache.go", "2. API", "api/handler.go"} {
+		r, ok := tt.Find(want)
+		if !ok {
+			t.Fatalf("page lacks %q; texts %q", want, tt.Texts())
+		}
+		ys = append(ys, r.Y)
+	}
+	if !slices.IsSorted(ys) {
+		t.Errorf("not in review order: %v", ys)
+	}
+	if err := tt.Click("Mark all as viewed"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !a.rev.Viewed["cache/cache.go"] || !a.rev.Viewed["api/handler.go"] {
+		t.Errorf("viewed %v", a.rev.Viewed)
+	}
+
+	a.cfg.FlatFiles = true
+	tt.Frame()
+	if tt.HasText("1. Cache keys") || !tt.HasText("api/handler.go") || !tt.HasText("cache/cache.go") {
+		t.Errorf("flat page texts %q", tt.Texts())
+	}
+}

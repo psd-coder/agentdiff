@@ -22,5 +22,6 @@ var (
 	overviewIcon = icon(`<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>`)
 	messageIcon  = icon(`<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`)
 	sendIcon     = icon(`<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>`)
+	filesIcon    = icon(`<path d="M15 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M15 2v5h5"/><path d="M2 8v12a2 2 0 0 0 2 2h10"/>`)
 	worktreeIcon = icon(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>`)
 )

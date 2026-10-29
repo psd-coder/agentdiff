@@ -47,6 +47,7 @@ func (a *app) menu() *mygo.Menu {
 			item("go-overview"),
 			item("go-threads"),
 			item("go-feedback"),
+			item("go-all"),
 			mygo.Separator(),
 			item("next-file"),
 			item("previous-file"),

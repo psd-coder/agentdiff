@@ -121,6 +121,8 @@ func (a *app) pageLabel(page string) string {
 		return "Comments"
 	case page == "feedback":
 		return "Feedback"
+	case page == "all":
+		return "All files diff"
 	case strings.HasPrefix(page, "walk:"):
 		if w := a.rev.Walk(strings.TrimPrefix(page, "walk:")); w != nil {
 			return excerpt(a.rev.WalkTitle(w), 48)

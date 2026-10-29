@@ -51,18 +51,55 @@ func (a *app) groupPage(c *ui.Context, i int) {
 			a.cmdButton(c, "mark-group-not-viewed", strconv.Itoa(i), "Mark all as not viewed")
 			a.layoutSwitch(c)
 		})
-		for _, f := range g.Files {
-			d := a.diffs[f]
-			if d == nil {
-				continue
-			}
-			ui.Column(c.Key(f)).Margin(12, 16).Radius(8).Border(1, t.Border).Clip().Children(func() {
-				a.fileHeader(c, d, false)
-				a.fileThreads(c, f)
-				a.diffBody(c, d, true)
-			})
+		a.fileCards(c, g.Files)
+	})
+}
+
+// allPage shows the diff of every file of the scope, in the order the
+// sidebar lists them.
+func (a *app) allPage(c *ui.Context) {
+	t := c.Theme()
+	add, del := 0, 0
+	for _, f := range a.files {
+		add += f.Additions
+		del += f.Deletions
+	}
+	a.pageScroll(c, "all").Grow(1).FillWidth().Children(func() {
+		ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+			ui.Text(c, "All files diff").FontSize(18).Bold()
+			ui.Text(c, fmt.Sprintf("%d files", len(a.files))).TextColor(t.TextMuted)
+			ui.Text(c, fmt.Sprintf("+%d", add)).TextColor(t.Success)
+			ui.Text(c, fmt.Sprintf("−%d", del)).TextColor(t.Danger)
+			ui.Spacer(c)
+			a.cmdButton(c, "mark-all-viewed", "", "Mark all as viewed")
+			a.cmdButton(c, "mark-all-not-viewed", "", "Mark all as not viewed")
+			a.layoutSwitch(c)
+		})
+		if a.cfg.FlatFiles {
+			a.fileCards(c, a.fileNames())
+			return
+		}
+		for i, g := range a.groups() {
+			ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(16).Bold().Margin(16, 20, 0, 20)
+			a.fileCards(c, g.Files)
 		}
 	})
+}
+
+// fileCards shows the diffs of the files one after the other.
+func (a *app) fileCards(c *ui.Context, files []string) {
+	t := c.Theme()
+	for _, f := range files {
+		d := a.diffs[f]
+		if d == nil {
+			continue
+		}
+		ui.Column(c.Key(f)).Margin(12, 16).Radius(8).Border(1, t.Border).Clip().Children(func() {
+			a.fileHeader(c, d, false)
+			a.fileThreads(c, f)
+			a.diffBody(c, d, true)
+		})
+	}
 }
 
 func statusLabel(f gitx.FileChange) string {
