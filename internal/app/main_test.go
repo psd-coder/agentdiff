@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -478,7 +478,7 @@ func TestStaleOverviewAndStartOver(t *testing.T) {
 // reads the run's log in a new app, as after a restart.
 func TestAgentLog(t *testing.T) {
 	a := newTestApp(t)
-	fixture, err := filepath.Abs("internal/agent/testdata/claude_tool.jsonl")
+	fixture, err := filepath.Abs("../agent/testdata/claude_tool.jsonl")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -191,21 +191,22 @@ An overview remembers which changes it was written for, as a `git patch-id` of t
 | `go tool mygo dev` | Builds a development app and restarts it on every change. It opens the `agentdiff` repository itself |
 | `go tool mygo build` | Builds `AgentDiff.app` and a `.dmg` into `build/darwin-arm64/` |
 | `go test ./...` | Runs all tests, with no network and no agent calls |
-| `AGENTDIFF_SNAPSHOTS=/tmp/snaps go test .` | Also writes PNG screenshots of the main screens, rendered without a window, into an existing directory |
-| `AGENTDIFF_E2E=claude go test -run TestEndToEnd -v .` | Asks a real agent (`claude` or `codex`) to explain this repository's last commit, then asks a question in a forked session. It uses your subscription. `AGENTDIFF_E2E_MODEL` sets the model |
+| `AGENTDIFF_SNAPSHOTS=/tmp/snaps go test ./internal/app` | Also writes PNG screenshots of the main screens, rendered without a window, into an existing directory |
+| `AGENTDIFF_E2E=claude go test -run TestEndToEnd -v ./internal/app` | Asks a real agent (`claude` or `codex`) to explain this repository's last commit, then asks a question in a forked session. It uses your subscription. `AGENTDIFF_E2E_MODEL` sets the model |
 
 ## Project layout
 
 ```
-main.go, app.go, run.go   window, app state, agent runs and streaming
-view*.go                  one file per screen: overview, files, thread panel, feedback, settings
+main.go                   picks the repository to open and starts the app
+internal/app              window, app state, agent runs and streaming
+internal/app/view*.go     one file per screen: overview, files, thread panel, feedback, settings
 internal/gitx             git CLI wrapper: scopes, changed files, file contents, commits
 internal/agent            claude and codex CLI runner: arguments, stream parsing, login-shell PATH
 internal/review           review model, explanation prompt and parsing, feedback export
 internal/store            JSON files for settings and reviews
 ```
 
-Only the packages under `internal/` and the views talk to git and the CLIs. Views never block: git and agent work runs on goroutines and reaches the view through `Window.Update`.
+Only the packages under `internal/` talk to git and the CLIs. Views never block: git and agent work runs on goroutines and reaches the view through `Window.Update`.
 
 ## FAQ
 
