@@ -251,12 +251,39 @@ func TestSettings(t *testing.T) {
 		t.Errorf("room under the short list: Reset all at %v, Done at %v", reset, done)
 	}
 
+	if err := tt.Click("Appearance"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Dark"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if got := a.store.LoadConfig().Theme; got != "dark" {
+		t.Errorf("theme = %q, want dark", got)
+	}
+	if err := tt.Click("System"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if got := a.store.LoadConfig().Theme; got != "" {
+		t.Errorf("theme = %q, want the system one", got)
+	}
+
 	if err := tt.Click("Done"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	if a.settings != nil {
 		t.Error("Done left the settings open")
+	}
+}
+
+func TestThemeIndex(t *testing.T) {
+	for saved, want := range map[string]int{"": 0, "light": 1, "dark": 2, "sepia": 0} {
+		if got := themeIndex(saved); got != want {
+			t.Errorf("themeIndex(%q) = %d, want %d", saved, got, want)
+		}
 	}
 }
 

@@ -122,7 +122,7 @@ The command palette lists the commands that apply where you are: the menu bar's 
 
 ## Configuration
 
-Settings has two tabs, Agent and Shortcuts. Every change is saved as you make it, and Done or Escape closes the dialog.
+Settings has three tabs: Appearance, Agent and Shortcuts. Every change is saved as you make it, and Done or Escape closes the dialog.
 
 Shortcuts lists every command with its shortcut. Click a shortcut and press the new keys, which must include Command or Control. Escape cancels. When another command has those keys, they move to the command you record, and the tab says which command lost them. The standard shortcuts of macOS, as Copy and Quit, and Cmd+Return and Cmd+Backspace stay as they are. A command outside the menu bar runs by its shortcut where it applies, also while you type in a field. A field keeps the keys it edits with: Command with A, C, X, V, Z or Y, with or without Shift, and Control with the letters that move the caret, as A, E and K. Reset gives one command its default back, and Reset all shortcuts gives all of them theirs. `config.json` keeps only the shortcuts you changed, so new defaults still reach you.
 
@@ -141,11 +141,13 @@ Automatic runs are the runs the app starts by itself: the overview and the deepe
 
 The app wraps your questions in the scope, the diffstat, the list of changed files, the walkthrough format and the grouping request, because it parses the answer. Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. A thread's session belongs to one agent. After you switch agents, the next question in an old thread goes to a new session of the new agent, with the thread's anchor and its earlier messages.
 
+Appearance sets the theme: System follows the light or dark appearance of macOS, and Light or Dark keeps the app in one of them.
+
 The app saves everything under `~/Library/Application Support/AgentDiff/`.
 
 | File | Holds |
 | --- | --- |
-| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette, the shortcuts you changed |
+| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette, the shortcuts you changed, the theme |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, and viewed files of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
 | `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. `<run>.usage.json` next to it holds the tokens the run spent. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 

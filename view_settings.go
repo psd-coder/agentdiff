@@ -79,13 +79,28 @@ type settingsForm struct {
 type settingsValues struct {
 	agent agentForm
 	ahead bool
+	theme int
 }
 
 // The tabs of the settings.
 const (
-	agentTab = iota
+	appearanceTab = iota
+	agentTab
 	shortcutsTab
 )
+
+var themes = []mygo.ThemeSource{mygo.ThemeSystem, mygo.ThemeLight, mygo.ThemeDark}
+
+// themeIndex is the place of the saved theme in themes, the system one
+// when the config holds none or one the app does not know.
+func themeIndex(saved string) int {
+	return max(0, slices.Index(themes, mygo.ThemeSource(saved)))
+}
+
+// applyTheme gives the window the saved theme.
+func (a *app) applyTheme() {
+	mygo.Theme.SetSource(themes[themeIndex(a.cfg.Theme)])
+}
 
 func (a *app) openSettings() {
 	f := &settingsForm{
@@ -94,6 +109,7 @@ func (a *app) openSettings() {
 		settingsValues: settingsValues{
 			agent: newAgentForm(a.cfg.Agent, a.cfg.Questions),
 			ahead: a.cfg.DeeperAhead,
+			theme: themeIndex(a.cfg.Theme),
 		},
 	}
 	f.saved = f.settingsValues
@@ -117,9 +133,17 @@ func (a *app) openSettings() {
 // saveSettings saves what the settings form holds, as the user changes it.
 func (a *app) saveSettings() {
 	f := a.settings
+	themeChanged := f.theme != f.saved.theme
 	f.saved = f.settingsValues
 	a.cfg.Agent, a.cfg.Questions, a.cfg.DeeperAhead = f.agent.config(), f.agent.questions, f.ahead
+	a.cfg.Theme = ""
+	if f.theme > 0 {
+		a.cfg.Theme = string(themes[f.theme])
+	}
 	a.saveConfig()
+	if themeChanged && a.win != nil {
+		a.applyTheme()
+	}
 }
 
 func (a *app) settingsModal(c *ui.Context) {
@@ -138,7 +162,7 @@ func (a *app) settingsModal(c *ui.Context) {
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
 		ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
 			ui.Text(c, "Settings").FontSize(18).Bold()
-			a.takeFocus(ui.Tabs(c, &f.tab, "Agent", "Shortcuts").Label("Settings"), "settings")
+			a.takeFocus(ui.Tabs(c, &f.tab, "Appearance", "Agent", "Shortcuts").Label("Settings"), "settings")
 		})
 		ui.Column(c).Gap(14).Shrink(1).MinHeight(0).Children(func() {
 			switch f.tab {
@@ -155,6 +179,8 @@ func (a *app) settingsModal(c *ui.Context) {
 				})
 			case shortcutsTab:
 				a.shortcutsTab(c)
+			case appearanceTab:
+				a.appearanceTab(c, f)
 			}
 		})
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
@@ -172,6 +198,13 @@ func (a *app) settingsModal(c *ui.Context) {
 	if !f.open {
 		a.settings = nil
 	}
+}
+
+func (a *app) appearanceTab(c *ui.Context, f *settingsForm) {
+	ui.Column(c).Gap(4).Children(func() {
+		ui.Text(c, "Theme").FontSize(12).Bold()
+		ui.Segmented(c, &f.theme, "System", "Light", "Dark").Label("Theme")
+	})
 }
 
 func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider]string) {

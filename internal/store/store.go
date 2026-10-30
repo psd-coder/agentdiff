@@ -35,8 +35,10 @@ type Config struct {
 	Keys map[string]string `json:"keys,omitempty"`
 	// DeeperAhead writes the deeper walkthrough of every overview step
 	// right after the overview.
-	DeeperAhead bool     `json:"deeperAhead"`
-	Recent      []string `json:"recent,omitempty"`
+	DeeperAhead bool `json:"deeperAhead"`
+	// Theme is "light" or "dark", or empty to follow the system.
+	Theme  string   `json:"theme,omitempty"`
+	Recent []string `json:"recent,omitempty"`
 }
 
 func DefaultConfig() Config {

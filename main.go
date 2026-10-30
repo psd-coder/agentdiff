@@ -39,6 +39,7 @@ func main() {
 			log.Fatal(err)
 		}
 		a = newApp(store.Store{Dir: dir})
+		a.applyTheme()
 		mygo.App.SetMenu(a.menu())
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "AgentDiff",
