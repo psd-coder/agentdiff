@@ -2027,6 +2027,59 @@ func TestFoldFileCards(t *testing.T) {
 	}
 }
 
+// TestStickyFileHeader scrolls the page of all files into a long diff:
+// the header of its card stays at the top of the page.
+func TestStickyFileHeader(t *testing.T) {
+	dir := fixtureRepo(t)
+	var long strings.Builder
+	for i := range 300 {
+		fmt.Fprintf(&long, "line %d\n", i)
+	}
+	write(t, dir, "long.txt", long.String())
+	a := newApp(store.Store{Dir: t.TempDir()})
+	a.openRepo(dir)
+	a.goTo("all")
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Advance(time.Second)
+	// The badge shows in the header of long.txt alone.
+	header := func() ui.Rect {
+		t.Helper()
+		r, ok := tt.Find("new, untracked")
+		if !ok {
+			t.Fatalf("texts %q", tt.Texts())
+		}
+		return r
+	}
+	start := header()
+	for _, dy := range []float32{1000, 500} {
+		tt.Wheel(650, 400, 0, dy)
+		tt.Advance(time.Second)
+		// A label scrolled out of the page reports the part of it that shows.
+		if r := header(); r.Y >= start.Y || r.H != start.H {
+			t.Errorf("header of long.txt at %v after scrolling by %v, at %v before", r, dy, start)
+		}
+	}
+	snapshot(t, tt, "sticky-header")
+}
+
+func TestStickyTop(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		card ui.Rect
+		want float32
+	}{
+		{"card below the top", ui.Rect{Y: 300, H: 1000}, 0},
+		{"card across the top", ui.Rect{Y: -200, H: 1000}, 299},
+		{"end of the card at the top", ui.Rect{Y: -900, H: 1000}, 953},
+		{"folded card", ui.Rect{Y: -20, H: 47}, 0},
+		{"card not laid out yet", ui.Rect{}, 0},
+	} {
+		if got := stickyTop(100, tc.card); got != tc.want {
+			t.Errorf("%s: stickyTop = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 // TestEarlierReviewPage archives a review and opens it on its own page,
 // next to the review of the changes that replaced it. The page shows the
 // code the snippets had while the review was current.

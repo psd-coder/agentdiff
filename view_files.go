@@ -12,7 +12,12 @@ import (
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
-const threadCardHeight = 58
+const (
+	threadCardHeight = 58
+	fileHeaderHeight = 45
+	cardBorder       = 1
+	cardRadius       = 8
+)
 
 func (a *app) filePage(c *ui.Context, file string) {
 	d := a.diffs[file]
@@ -39,8 +44,9 @@ func (a *app) groupPage(c *ui.Context, i int) {
 		return
 	}
 	g := groups[i]
-	a.pageScroll(c, fmt.Sprintf("group:%d", i)).Grow(1).FillWidth().Children(func() {
-		ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Start).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+	page := fmt.Sprintf("group:%d", i)
+	a.pageScroll(c, page).Grow(1).FillWidth().Children(func() {
+		title := ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Start).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Column(c).Gap(6).Grow(1).Shrink(1).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
 				if g.Summary != "" {
@@ -51,7 +57,7 @@ func (a *app) groupPage(c *ui.Context, i int) {
 			a.cmdButton(c, "mark-group-not-viewed", strconv.Itoa(i), "Mark all as not viewed")
 			a.layoutSwitch(c)
 		})
-		a.fileCards(c, g.Files)
+		a.fileCards(c, g.Files, a.pagePin(title, page))
 	})
 }
 
@@ -65,7 +71,7 @@ func (a *app) allPage(c *ui.Context) {
 		del += f.Deletions
 	}
 	a.pageScroll(c, "all").Grow(1).FillWidth().Children(func() {
-		ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+		title := ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 			ui.Text(c, "All files diff").FontSize(18).Bold()
 			ui.Text(c, fmt.Sprintf("%d files", len(a.files))).TextColor(t.TextMuted)
 			ui.Text(c, fmt.Sprintf("+%d", add)).TextColor(t.Success)
@@ -75,34 +81,67 @@ func (a *app) allPage(c *ui.Context) {
 			a.cmdButton(c, "mark-all-not-viewed", "", "Mark all as not viewed")
 			a.layoutSwitch(c)
 		})
+		pin := a.pagePin(title, "all")
 		if a.cfg.FlatFiles {
-			a.fileCards(c, a.fileNames())
+			a.fileCards(c, a.fileNames(), pin)
 			return
 		}
 		for i, g := range a.groups() {
 			ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(16).Bold().Margin(16, 20, 0, 20)
-			a.fileCards(c, g.Files)
+			a.fileCards(c, g.Files, pin)
 		}
 	})
 }
 
-// fileCards shows the diffs of the files one after the other.
-func (a *app) fileCards(c *ui.Context, files []string) {
+// pagePin is where the top of the page shows, in the window as the
+// previous frame laid it out, title being the first row of the page. The
+// layout of this frame puts the content at the scroll offset of now, so
+// the pin follows the offset from that frame to this one.
+func (a *app) pagePin(title ui.Element, page string) float32 {
+	return title.LayoutBounds().Y + a.scrollOf(page).Y
+}
+
+// fileCards shows the diffs of the files one after the other. The header
+// of a card stays at pin, the top of the page, while the diff under it
+// scrolls.
+func (a *app) fileCards(c *ui.Context, files []string, pin float32) {
 	t := c.Theme()
 	for _, f := range files {
 		d := a.diffs[f]
 		if d == nil {
 			continue
 		}
-		ui.Column(c.Key(f)).Margin(12, 16).Radius(8).Border(1, t.Border).Clip().Children(func() {
-			a.fileHeader(c, d, false)
-			if a.isFolded(f) {
-				return
+		card := ui.Column(c.Key(f)).Margin(12, 16).Padding(fileHeaderHeight, 0, 0, 0).Radius(cardRadius).Border(cardBorder, t.Border)
+		card.Children(func() {
+			// An absolute header paints over the diff that scrolls under it.
+			a.fileHeader(c, d, false).Absolute().Left(0).Right(0).Top(stickyTop(pin, card.LayoutBounds())).Height(fileHeaderHeight)
+			if !a.isFolded(f) {
+				a.fileThreads(c, f)
+				a.diffBody(c, d, true)
 			}
-			a.fileThreads(c, f)
-			a.diffBody(c, d, true)
+			a.cardCorners(c)
 		})
 	}
+}
+
+// cardCorners paints the rounded corners of a card over its content. The
+// GPU renderer rounds the innermost clip alone, and the diff clips its own
+// content, so a card that clipped its content would clip it to a square.
+// A ring in the color of the page covers the content outside the corners,
+// and the border goes over the content.
+func (a *app) cardCorners(c *ui.Context) {
+	t := c.Theme()
+	const ring float32 = cardBorder + cardRadius
+	ui.Box(c).Absolute().Left(-ring).Top(-ring).Right(-ring).Bottom(-ring).
+		Radius(2*cardRadius).Border(cardRadius, t.Background).PassThrough()
+	ui.Box(c).Absolute().Left(-cardBorder).Top(-cardBorder).Right(-cardBorder).Bottom(-cardBorder).
+		Radius(cardRadius).Border(cardBorder, t.Border).PassThrough()
+}
+
+// stickyTop is how far the header of a card goes down from the top of the
+// card to stay at pin, and to stay in the card.
+func stickyTop(pin float32, card ui.Rect) float32 {
+	return max(0, min(pin-card.Y-cardBorder, card.H-2*cardBorder-fileHeaderHeight))
 }
 
 func statusLabel(f gitx.FileChange) string {
@@ -117,7 +156,7 @@ func statusLabel(f gitx.FileChange) string {
 	return string(f.Status)
 }
 
-func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
+func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) ui.Element {
 	t := c.Theme()
 	f := d.change
 	head := ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface)
@@ -157,6 +196,7 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) {
 		}
 		a.cmdCheckbox(c, "mark-viewed", "mark-not-viewed", f.Path, "Viewed")
 	})
+	return head
 }
 
 // foldButton folds the card of the file to its header, or unfolds it.
