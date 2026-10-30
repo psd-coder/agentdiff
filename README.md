@@ -143,11 +143,13 @@ The app wraps your questions in the scope, the diffstat, the list of changed fil
 
 Appearance sets the theme: System follows the light or dark appearance of macOS, and Light or Dark keeps the app in one of them.
 
+Code theme colors code in diffs and in answers. You can choose GitHub, the default, or a popular VS Code theme: VS Code, One, Catppuccin, Solarized, Gruvbox, Rosé Pine, Night Owl, Ayu, Vitesse, Dracula, Monokai, Nord or Tokyo Night. A theme with light and dark colors follows the theme of the app and changes only the colors of the code. Dracula, Monokai, Nord and Tokyo Night have only dark colors, so they also paint the background of the code in their own color. The colors come from the VS Code themes, and the app has fewer kinds of tokens than VS Code, so the code can look a little different from VS Code.
+
 The app saves everything under `~/Library/Application Support/AgentDiff/`.
 
 | File | Holds |
 | --- | --- |
-| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette, the shortcuts you changed, the theme |
+| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette, the shortcuts you changed, the theme and the code theme |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, and viewed files of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
 | `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. `<run>.usage.json` next to it holds the tokens the run spent. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 

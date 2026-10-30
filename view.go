@@ -14,6 +14,7 @@ import (
 )
 
 func (a *app) view(c *ui.Context) {
+	a.syncCodeTheme(c)
 	a.runQueued(c)
 	a.updateMenu()
 	if a.repo == nil {

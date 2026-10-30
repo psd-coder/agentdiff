@@ -258,6 +258,7 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
 		}
 		ui.Column(c).Padding(4, 12).Children(func() { a.threadCard(c, th) })
 	}
+	s.Theme = a.codeColors
 	view := editor.DiffView(c, s).FillWidth()
 	if !fit {
 		a.takeFocus(view, "page")

@@ -120,6 +120,8 @@ type app struct {
 	mainPct     float32
 	groupsOpen  map[string]*bool
 	md          markdown.Options
+	codeKey     codeThemeKey
+	codeColors  *editor.Theme
 	exportAgent bool
 	exportDone  bool
 	savedPath   string

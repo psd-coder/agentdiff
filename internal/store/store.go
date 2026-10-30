@@ -37,8 +37,11 @@ type Config struct {
 	// right after the overview.
 	DeeperAhead bool `json:"deeperAhead"`
 	// Theme is "light" or "dark", or empty to follow the system.
-	Theme  string   `json:"theme,omitempty"`
-	Recent []string `json:"recent,omitempty"`
+	Theme string `json:"theme,omitempty"`
+	// CodeTheme is the name of the theme that colors code, empty for the
+	// default one.
+	CodeTheme string   `json:"codeTheme,omitempty"`
+	Recent    []string `json:"recent,omitempty"`
 }
 
 func DefaultConfig() Config {

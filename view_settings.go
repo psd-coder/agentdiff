@@ -9,6 +9,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/markdown"
 
 	"github.com/psdcoder/agentdiff/internal/agent"
 	"github.com/psdcoder/agentdiff/internal/review"
@@ -77,9 +78,10 @@ type settingsForm struct {
 
 // settingsValues are the fields of the settings form.
 type settingsValues struct {
-	agent agentForm
-	ahead bool
-	theme int
+	agent     agentForm
+	ahead     bool
+	theme     int
+	codeTheme string
 }
 
 // The tabs of the settings.
@@ -107,9 +109,10 @@ func (a *app) openSettings() {
 		open:   true,
 		status: map[agent.Provider]string{},
 		settingsValues: settingsValues{
-			agent: newAgentForm(a.cfg.Agent, a.cfg.Questions),
-			ahead: a.cfg.DeeperAhead,
-			theme: themeIndex(a.cfg.Theme),
+			agent:     newAgentForm(a.cfg.Agent, a.cfg.Questions),
+			ahead:     a.cfg.DeeperAhead,
+			theme:     themeIndex(a.cfg.Theme),
+			codeTheme: codeThemeNamed(a.cfg.CodeTheme).name,
 		},
 	}
 	f.saved = f.settingsValues
@@ -139,6 +142,10 @@ func (a *app) saveSettings() {
 	a.cfg.Theme = ""
 	if f.theme > 0 {
 		a.cfg.Theme = string(themes[f.theme])
+	}
+	a.cfg.CodeTheme = ""
+	if f.codeTheme != codeThemes[0].name {
+		a.cfg.CodeTheme = f.codeTheme
 	}
 	a.saveConfig()
 	if themeChanged && a.win != nil {
@@ -200,10 +207,23 @@ func (a *app) settingsModal(c *ui.Context) {
 	}
 }
 
+// codePreview is the code the Appearance tab shows in the chosen code
+// theme.
+const codePreview = "```go\n// greet says hello to each name.\nfunc greet(names []string) int {\n\tfor i, n := range names {\n\t\tfmt.Printf(\"%d: hello, %s\\n\", i, n)\n\t}\n\treturn len(names)\n}\n```"
+
 func (a *app) appearanceTab(c *ui.Context, f *settingsForm) {
-	ui.Column(c).Gap(4).Children(func() {
-		ui.Text(c, "Theme").FontSize(12).Bold()
-		ui.Segmented(c, &f.theme, "System", "Light", "Dark").Label("Theme")
+	t := c.Theme()
+	ui.Column(c).Gap(14).Children(func() {
+		ui.Column(c).Gap(4).Children(func() {
+			ui.Text(c, "Theme").FontSize(12).Bold()
+			ui.Segmented(c, &f.theme, "System", "Light", "Dark").Label("Theme")
+		})
+		ui.Column(c).Gap(4).Children(func() {
+			ui.Text(c, "Code theme").FontSize(12).Bold()
+			ui.Select(c, &f.codeTheme, codeThemeNames()).Label("Code theme")
+			ui.Text(c, "Colors code in diffs and in answers. A theme with only dark colors, as Dracula, also brings its own background.").FontSize(11).TextColor(t.TextMuted)
+			markdown.View(c, codePreview, &a.md)
+		})
 	})
 }
 
