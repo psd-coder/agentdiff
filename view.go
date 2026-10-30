@@ -9,8 +9,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/psdcoder/agentdiff/internal/gitx"
-	"github.com/psdcoder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/review"
 )
 
 func (a *app) view(c *ui.Context) {

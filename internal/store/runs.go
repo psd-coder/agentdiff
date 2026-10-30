@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/psdcoder/agentdiff/internal/agent"
-	"github.com/psdcoder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/gitx"
 )
 
 // MaxRuns is how many agent runs a review keeps logs of. Older logs go

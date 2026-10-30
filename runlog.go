@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/psdcoder/agentdiff/internal/agent"
-	"github.com/psdcoder/agentdiff/internal/review"
-	"github.com/psdcoder/agentdiff/internal/store"
+	"github.com/psd-coder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 // logRun is one agent run in the log panel. Items of a past run are read

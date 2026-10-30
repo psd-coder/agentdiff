@@ -8,8 +8,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"github.com/psdcoder/agentdiff/internal/gitx"
-	"github.com/psdcoder/agentdiff/internal/store"
+	"github.com/psd-coder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 // startPath is the repository to open: the first argument, or the working

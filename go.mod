@@ -1,4 +1,4 @@
-module github.com/psdcoder/agentdiff
+module github.com/psd-coder/agentdiff
 
 go 1.27.3
 

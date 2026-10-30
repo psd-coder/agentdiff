@@ -17,10 +17,10 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
-	"github.com/psdcoder/agentdiff/internal/agent"
-	"github.com/psdcoder/agentdiff/internal/gitx"
-	"github.com/psdcoder/agentdiff/internal/review"
-	"github.com/psdcoder/agentdiff/internal/store"
+	"github.com/psd-coder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 func git(t *testing.T, dir string, args ...string) {

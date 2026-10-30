@@ -7,7 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 
-	"github.com/psdcoder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/review"
 )
 
 // archivedPage shows an archived review as it was written, read-only:

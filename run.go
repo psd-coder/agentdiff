@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/psdcoder/agentdiff/internal/agent"
-	"github.com/psdcoder/agentdiff/internal/review"
-	"github.com/psdcoder/agentdiff/internal/store"
+	"github.com/psd-coder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 // streamFlush is how often streamed text reaches the view: tokens come

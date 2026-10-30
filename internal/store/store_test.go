@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/psdcoder/agentdiff/internal/agent"
-	"github.com/psdcoder/agentdiff/internal/gitx"
-	"github.com/psdcoder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/review"
 )
 
 func TestConfigRoundTrip(t *testing.T) {

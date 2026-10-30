@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/psdcoder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/gitx"
 )
 
 func TestParseWalkthrough(t *testing.T) {

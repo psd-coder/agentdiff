@@ -8,7 +8,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/psdcoder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/review"
 )
 
 func (a *app) toolbar(c *ui.Context) {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/psdcoder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/gitx"
 )
 
 func TestParseOverview(t *testing.T) {

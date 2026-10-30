@@ -14,9 +14,9 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 	"github.com/egoist/mygo/ui/markdown"
 
-	"github.com/psdcoder/agentdiff/internal/gitx"
-	"github.com/psdcoder/agentdiff/internal/review"
-	"github.com/psdcoder/agentdiff/internal/store"
+	"github.com/psd-coder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 const commitsShown = 50

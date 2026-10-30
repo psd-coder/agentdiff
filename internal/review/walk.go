@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/psdcoder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/agent"
 )
 
 // maxRefLines is the longest snippet a reference shows.
