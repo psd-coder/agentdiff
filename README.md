@@ -2,6 +2,8 @@
 
 A native macOS app for reviewing the code your coding agent wrote. You read a short walkthrough of the changes first and go deeper wherever you need to. Then you read the diff grouped by intent and hand a feedback file back to the agent.
 
+![AgentDiff shows a walkthrough of a branch: the steps of the change with code snippets, and the changed files in the sidebar](docs/screenshot.png)
+
 ## Install
 
 You need macOS 12 or later, on Apple silicon or Intel. You also need at least one of the agent CLIs, installed and signed in:
