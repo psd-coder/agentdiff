@@ -727,6 +727,18 @@ func TestReviewFollowsBranch(t *testing.T) {
 	}
 }
 
+func TestRefreshListsNewCommits(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	before := len(a.commits)
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "Commit the work")
+	a.refresh()
+	if len(a.commits) != before+1 || a.commits[0].Subject != "Commit the work" {
+		t.Fatalf("commits after refresh = %+v", a.commits)
+	}
+}
+
 // fakeClaude is a claude CLI that answers every prompt with answer, in
 // session id.
 func fakeClaude(t *testing.T, id, answer string) string {

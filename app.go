@@ -396,6 +396,7 @@ func (a *app) refresh() {
 		return
 	}
 	a.reload()
+	a.loadCommits(nil)
 	a.syncBranch()
 }
 
