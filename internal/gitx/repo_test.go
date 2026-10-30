@@ -192,6 +192,48 @@ func TestGitDir(t *testing.T) {
 	}
 }
 
+func TestCommonDirOfLinkedWorktree(t *testing.T) {
+	ctx := context.Background()
+	tr := newTestRepo(t)
+	tr.commit("first")
+	other := filepath.Join(t.TempDir(), "wt")
+	tr.git("worktree", "add", "-q", "-b", "agent", other)
+	r, err := Open(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	common, err := r.CommonDir(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(mustEval(t, tr.dir), ".git"); mustEval(t, common) != want {
+		t.Errorf("CommonDir = %q, want %q", common, want)
+	}
+	gitDir, err := r.GitDir(ctx)
+	if err != nil || mustEval(t, gitDir) == mustEval(t, common) {
+		t.Errorf("GitDir = %q, %v: same as the common dir", gitDir, err)
+	}
+}
+
+func TestIgnored(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.write(".gitignore", "dist/\n*.log\n")
+	tr.write("dist/sub/out.js", "x\n")
+	tr.write("src/a.go", "package a\n")
+	got, err := tr.open().Ignored(context.Background(), []string{".", "dist", "dist/sub", "src", "src/debug.log"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"dist": true, "dist/sub": true, "src/debug.log": true}
+	if !maps.Equal(got, want) {
+		t.Errorf("Ignored = %v, want %v", got, want)
+	}
+	got, err = tr.open().Ignored(context.Background(), []string{"src"})
+	if err != nil || len(got) != 0 {
+		t.Errorf("Ignored(src) = %v, %v", got, err)
+	}
+}
+
 func TestOtherBranch(t *testing.T) {
 	ctx := context.Background()
 	tr := newTestRepo(t)

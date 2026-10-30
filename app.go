@@ -44,6 +44,11 @@ type app struct {
 	store store.Store
 	cfg   store.Config
 
+	// watchFiles starts the watches that follow the open project, none
+	// when nil.
+	watchFiles watchFunc
+	stopWatch  context.CancelFunc
+
 	repo    *gitx.Repo
 	repoErr string
 	branch  string
@@ -212,6 +217,7 @@ func (a *app) openRepo(path string) {
 		return
 	}
 	a.repo, a.repoErr = r, ""
+	a.watch(r)
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
 	a.branch, a.head, a.base, a.branches, a.commits = "", "", "", nil, nil
@@ -243,6 +249,7 @@ func (a *app) openRepo(path string) {
 // closeRepo goes back to the welcome screen.
 func (a *app) closeRepo() {
 	a.repo = nil
+	a.unwatch()
 	a.gen++
 	a.projectsOpen, a.shown = false, false
 	if a.win != nil {

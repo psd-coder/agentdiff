@@ -183,6 +183,31 @@ func (r *Repo) GitDir(ctx context.Context) (string, error) {
 	return r.line(ctx, "rev-parse", "--absolute-git-dir")
 }
 
+// CommonDir is the git directory that every working tree of the
+// repository shares, with the refs. It is GitDir in the main working tree.
+func (r *Repo) CommonDir(ctx context.Context) (string, error) {
+	return r.line(ctx, "rev-parse", "--path-format=absolute", "--git-common-dir")
+}
+
+// Ignored reports which of paths, relative to the root, the gitignore
+// rules leave out.
+func (r *Repo) Ignored(ctx context.Context, paths []string) (map[string]bool, error) {
+	var in, out bytes.Buffer
+	for _, p := range paths {
+		in.WriteString(p)
+		in.WriteByte(0)
+	}
+	err := runIn(ctx, r.Root, &in, &out, "check-ignore", "--stdin", "-z")
+	if err != nil && exitCode(err) != 1 {
+		return nil, err
+	}
+	ignored := map[string]bool{}
+	for _, p := range splitNUL(out.Bytes()) {
+		ignored[p] = true
+	}
+	return ignored, nil
+}
+
 type Worktree struct {
 	Path   string
 	Branch string
