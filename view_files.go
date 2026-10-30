@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -14,9 +15,14 @@ import (
 
 const (
 	threadCardHeight = 58
-	fileHeaderHeight = 45
 	cardBorder       = 1
 	cardRadius       = 8
+	cardGap          = 24
+	// pageInset is how far the content of a page is from its sides.
+	pageInset = 12
+	// bigFileLines is how many changed lines fold a card from the start:
+	// an open card lays out all its lines in each frame.
+	bigFileLines = 1000
 )
 
 func (a *app) filePage(c *ui.Context, file string) {
@@ -44,9 +50,9 @@ func (a *app) groupPage(c *ui.Context, i int) {
 		return
 	}
 	g := groups[i]
-	page := fmt.Sprintf("group:%d", i)
-	a.pageScroll(c, page).Grow(1).FillWidth().Children(func() {
-		title := ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Start).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+	rows := a.cardRows([]pageRow{{kind: titleRow}}, g.Files)
+	a.cardList(c, fmt.Sprintf("group:%d", i), rows, func(pageRow) {
+		pageTitle(c).AlignItems(ui.Start).Children(func() {
 			ui.Column(c).Gap(6).Grow(1).Shrink(1).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
 				if g.Summary != "" {
@@ -57,7 +63,6 @@ func (a *app) groupPage(c *ui.Context, i int) {
 			a.cmdButton(c, "mark-group-not-viewed", strconv.Itoa(i), "Mark all as not viewed")
 			a.layoutSwitch(c)
 		})
-		a.fileCards(c, g.Files, a.pagePin(title, page))
 	})
 }
 
@@ -70,8 +75,22 @@ func (a *app) allPage(c *ui.Context) {
 		add += f.Additions
 		del += f.Deletions
 	}
-	a.pageScroll(c, "all").Grow(1).FillWidth().Children(func() {
-		title := ui.Row(c).Gap(12).Padding(16, 20).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+	rows := []pageRow{{kind: titleRow}}
+	groups := a.groups()
+	if a.cfg.FlatFiles {
+		rows = a.cardRows(rows, a.fileNames())
+	} else {
+		for i, g := range groups {
+			rows = a.cardRows(append(rows, pageRow{kind: groupRow, group: i}), g.Files)
+		}
+	}
+	a.cardList(c, "all", rows, func(r pageRow) {
+		if r.kind == groupRow {
+			g := groups[r.group]
+			ui.Text(c, fmt.Sprintf("%d. %s", r.group+1, g.Title)).FontSize(16).Bold().Padding(4, 20, cardGap/2, 20)
+			return
+		}
+		pageTitle(c).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "All files diff").FontSize(18).Bold()
 			ui.Text(c, fmt.Sprintf("%d files", len(a.files))).TextColor(t.TextMuted)
 			ui.Text(c, fmt.Sprintf("+%d", add)).TextColor(t.Success)
@@ -81,67 +100,135 @@ func (a *app) allPage(c *ui.Context) {
 			a.cmdButton(c, "mark-all-not-viewed", "", "Mark all as not viewed")
 			a.layoutSwitch(c)
 		})
-		pin := a.pagePin(title, "all")
-		if a.cfg.FlatFiles {
-			a.fileCards(c, a.fileNames(), pin)
-			return
-		}
-		for i, g := range a.groups() {
-			ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(16).Bold().Margin(16, 20, 0, 20)
-			a.fileCards(c, g.Files, pin)
-		}
 	})
 }
 
-// pagePin is where the top of the page shows, in the window as the
-// previous frame laid it out, title being the first row of the page. The
-// layout of this frame puts the content at the scroll offset of now, so
-// the pin follows the offset from that frame to this one.
-func (a *app) pagePin(title ui.Element, page string) float32 {
-	return title.LayoutBounds().Y + a.scrollOf(page).Y
+func pageTitle(c *ui.Context) ui.Element {
+	return ui.Row(c).Gap(12).Padding(16, 20).Margin(0, 0, cardGap/2, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
 }
 
-// fileCards shows the diffs of the files one after the other. The header
-// of a card stays at pin, the top of the page, while the diff under it
-// scrolls.
-func (a *app) fileCards(c *ui.Context, files []string, pin float32) {
-	t := c.Theme()
+type rowKind uint8
+
+const (
+	titleRow rowKind = iota
+	groupRow
+	headRow
+	bodyRow
+	gapRow
+)
+
+// pageRow is a row of a page of file cards. A card is two rows, its header
+// and its diff, so that the list can pin the header while the diff
+// scrolls under it. A gap row after each card is a header as well, so
+// that it pushes the pinned header away at the end of its card.
+type pageRow struct {
+	kind  rowKind
+	group int
+	file  string
+}
+
+// cardRows adds the rows of the cards of the files to rows: a header, the
+// diff of a file not folded, and a gap.
+func (a *app) cardRows(rows []pageRow, files []string) []pageRow {
 	for _, f := range files {
-		d := a.diffs[f]
-		if d == nil {
+		if a.diffs[f] == nil {
 			continue
 		}
-		card := ui.Column(c.Key(f)).Margin(12, 16).Padding(fileHeaderHeight, 0, 0, 0).Radius(cardRadius).Border(cardBorder, t.Border)
-		card.Children(func() {
-			// An absolute header paints over the diff that scrolls under it.
-			a.fileHeader(c, d, false).Absolute().Left(0).Right(0).Top(stickyTop(pin, card.LayoutBounds())).Height(fileHeaderHeight)
-			if !a.isFolded(f) {
-				a.fileThreads(c, f)
-				a.diffBody(c, d, true)
-			}
-			a.cardCorners(c)
-		})
+		rows = append(rows, pageRow{kind: headRow, file: f})
+		if !a.isFolded(f) {
+			rows = append(rows, pageRow{kind: bodyRow, file: f})
+		}
+		rows = append(rows, pageRow{kind: gapRow, file: f})
 	}
+	return rows
 }
 
-// cardCorners paints the rounded corners of a card over its content. The
-// GPU renderer rounds the innermost clip alone, and the diff clips its own
-// content, so a card that clipped its content would clip it to a square.
-// A ring in the color of the page covers the content outside the corners,
-// and the border goes over the content.
+// cardPage is the place of a page of file cards, and the file whose open
+// card has its header pinned at the top.
+type cardPage struct {
+	list   ui.ListState
+	pinned string
+}
+
+// cardList shows the cards of a page, building only the rows in view, as
+// a page with thousands of changed lines lays out slowly. other builds the
+// rows that are not cards.
+func (a *app) cardList(c *ui.Context, page string, rows []pageRow, other func(pageRow)) {
+	t := c.Theme()
+	p := a.cardsOf(page)
+	s := &p.list
+	// A card folded under its pinned header would leave the page where
+	// its diff ended: the folded card goes to the top instead.
+	if f := p.pinned; f != "" && a.isFolded(f) {
+		if i := slices.Index(rows, pageRow{kind: headRow, file: f}); i >= 0 {
+			s.ScrollTo(i, ui.Start)
+		}
+	}
+	p.pinned = ""
+	s.Key = func(i int) any { return rows[i] }
+	s.Header = func(i int) bool { return rows[i].kind == headRow || rows[i].kind == gapRow }
+	list := ui.List(c.Key("page-"+page), s, len(rows)).Grow(1).FillWidth().Focusable().FocusRing(false)
+	top := list.LayoutBounds().Y
+	list.Rows(func(lr ui.ListRow) {
+		r := rows[lr.Index]
+		d := a.diffs[r.file]
+		switch r.kind {
+		case headRow:
+			folded := a.isFolded(r.file)
+			row := ui.Column(c.Key("head:"+r.file)).Padding(0, pageInset)
+			// The list pins a header at its top, where it is square, and
+			// pushes it up at the end of its card, where it rounds its
+			// bottom as the card does.
+			at := row.LayoutBounds()
+			pinned := at.H > 0 && at.Y <= top
+			pushed := pinned && at.Y < top
+			if pinned && !folded {
+				p.pinned = r.file
+			}
+			row.Children(func() {
+				head := a.fileHeader(c, d, false).Border(cardBorder, t.Border)
+				switch {
+				case pinned:
+					// The line under the page's top bar is its top border.
+					head.BorderWidth(0, cardBorder, cardBorder, cardBorder).Padding(8+cardBorder, 12, 8, 12)
+					if pushed {
+						head.Radius(0, 0, cardRadius, cardRadius)
+					}
+				case folded:
+					head.Radius(cardRadius)
+				default:
+					head.Radius(cardRadius, cardRadius, 0, 0)
+				}
+			})
+		case bodyRow:
+			ui.Column(c.Key("body:"+r.file)).Padding(0, pageInset).Children(func() {
+				ui.Column(c).BorderWidth(0, cardBorder, cardBorder, cardBorder).BorderColor(t.Border).Radius(0, 0, cardRadius, cardRadius).Children(func() {
+					a.fileThreads(c, r.file)
+					a.diffBody(c, d, true)
+					a.cardCorners(c)
+				})
+			})
+		case gapRow:
+			ui.Box(c.Key("gap:" + r.file)).Height(cardGap)
+		default:
+			ui.Column(c).Children(func() { other(r) })
+		}
+	})
+	a.takeFocus(list, "page")
+}
+
+// cardCorners paints the rounded bottom corners of a card over its diff.
+// The GPU renderer rounds the innermost clip alone, and the diff clips its
+// own content, so a card that clipped its content would clip it to a
+// square. A ring in the color of the page covers the content outside the
+// corners, and the border goes over the content.
 func (a *app) cardCorners(c *ui.Context) {
 	t := c.Theme()
 	const ring float32 = cardBorder + cardRadius
-	ui.Box(c).Absolute().Left(-ring).Top(-ring).Right(-ring).Bottom(-ring).
-		Radius(2*cardRadius).Border(cardRadius, t.Background).PassThrough()
-	ui.Box(c).Absolute().Left(-cardBorder).Top(-cardBorder).Right(-cardBorder).Bottom(-cardBorder).
-		Radius(cardRadius).Border(cardBorder, t.Border).PassThrough()
-}
-
-// stickyTop is how far the header of a card goes down from the top of the
-// card to stay at pin, and to stay in the card.
-func stickyTop(pin float32, card ui.Rect) float32 {
-	return max(0, min(pin-card.Y-cardBorder, card.H-2*cardBorder-fileHeaderHeight))
+	ui.Box(c).Absolute().Left(-ring).Top(0).Right(-ring).Bottom(-ring).
+		Radius(0, 0, 2*cardRadius, 2*cardRadius).BorderWidth(0, cardRadius, cardRadius, cardRadius).BorderColor(t.Background).PassThrough()
+	ui.Box(c).Absolute().Left(-cardBorder).Top(0).Right(-cardBorder).Bottom(-cardBorder).
+		Radius(0, 0, cardRadius, cardRadius).BorderWidth(0, cardBorder, cardBorder, cardBorder).BorderColor(t.Border).PassThrough()
 }
 
 func statusLabel(f gitx.FileChange) string {
@@ -160,7 +247,7 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) ui.Element {
 	t := c.Theme()
 	f := d.change
 	head := ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface)
-	if page || !a.isFolded(f.Path) {
+	if page {
 		head.BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
 	}
 	head.Children(func() {

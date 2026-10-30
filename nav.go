@@ -74,6 +74,7 @@ func (a *app) pageExists(page string) bool {
 func (a *app) resetNav() {
 	a.page, a.history, a.forward = "overview", nil, nil
 	a.scrolls = map[string]*ui.ScrollState{}
+	a.lists = map[string]*cardPage{}
 }
 
 // takeFocus gives e the keyboard focus while a.refocus names it, until it
@@ -116,6 +117,17 @@ func (a *app) scrollOf(page string) *ui.ScrollState {
 	return s
 }
 
+// cardsOf is the place of a page of file cards, as scrollOf is of a page
+// that scrolls.
+func (a *app) cardsOf(page string) *cardPage {
+	p := a.lists[page]
+	if p == nil {
+		p = &cardPage{}
+		a.lists[page] = p
+	}
+	return p
+}
+
 func (a *app) pageLabel(page string) string {
 	switch {
 	case page == "overview":
@@ -151,7 +163,7 @@ func (a *app) backBar(c *ui.Context) {
 		return
 	}
 	prev := a.history[len(a.history)-1]
-	ui.Row(c).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+	ui.Row(c).Gap(8).Padding(8, pageInset).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 		a.cmdButton(c, "back", "", "‹ Back to "+a.pageLabel(prev))
 	})
 }

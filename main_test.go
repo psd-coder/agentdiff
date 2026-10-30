@@ -2027,29 +2027,83 @@ func TestFoldFileCards(t *testing.T) {
 	}
 }
 
-// TestStickyFileHeader scrolls the page of all files into a long diff:
-// the header of its card stays at the top of the page.
-func TestStickyFileHeader(t *testing.T) {
+// TestBigFileStartsFolded folds the card of a file with more than 1000
+// changed lines until the reviewer unfolds it.
+func TestBigFileStartsFolded(t *testing.T) {
+	dir := fixtureRepo(t)
+	lines := func(n int) string {
+		var b strings.Builder
+		for i := range n {
+			fmt.Fprintf(&b, "line %d\n", i)
+		}
+		return b.String()
+	}
+	write(t, dir, "big.txt", lines(1001))
+	write(t, dir, "edge.txt", lines(1000))
+	a := newApp(store.Store{Dir: t.TempDir()})
+	a.openRepo(dir)
+	a.goTo("all")
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Advance(time.Second)
+	// Each card has a fold button: Unfold on a folded card, Fold on one open.
+	folds := func() []string {
+		var out []string
+		for _, s := range tt.Texts() {
+			if s == "Fold" || s == "Unfold" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	if got := folds(); len(got) < 2 || !slices.Equal(got[:2], []string{"Unfold", "Fold"}) {
+		t.Fatalf("fold buttons of big.txt and edge.txt: %q", got)
+	}
+	if err := tt.Click("Unfold"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	if got := folds(); len(got) < 2 || !slices.Equal(got[:2], []string{"Fold", "Fold"}) {
+		t.Fatalf("big.txt not unfolded; fold buttons %q", got)
+	}
+}
+
+// longFilePage opens the page of all files, with the deleted long.txt
+// first and the modified more.txt after it. header finds the header of
+// long.txt, as its badge shows there alone.
+func longFilePage(t *testing.T) (a *app, tt *ui.Tester, header func() ui.Rect) {
 	dir := fixtureRepo(t)
 	var long strings.Builder
 	for i := range 300 {
 		fmt.Fprintf(&long, "line %d\n", i)
 	}
 	write(t, dir, "long.txt", long.String())
-	a := newApp(store.Store{Dir: t.TempDir()})
+	write(t, dir, "more.txt", long.String())
+	git(t, dir, "add", "long.txt", "more.txt")
+	git(t, dir, "commit", "-q", "-m", "Add long.txt")
+	if err := os.Remove(filepath.Join(dir, "long.txt")); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "more.txt", long.String()+long.String())
+	a = newApp(store.Store{Dir: t.TempDir()})
 	a.openRepo(dir)
 	a.goTo("all")
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt = ui.NewTester(a.view, 1300, 800)
 	tt.Advance(time.Second)
-	// The badge shows in the header of long.txt alone.
-	header := func() ui.Rect {
+	header = func() ui.Rect {
 		t.Helper()
-		r, ok := tt.Find("new, untracked")
+		r, ok := tt.Find("deleted")
 		if !ok {
 			t.Fatalf("texts %q", tt.Texts())
 		}
 		return r
 	}
+	return a, tt, header
+}
+
+// TestStickyFileHeader scrolls the page of all files into a long diff:
+// the header of its card stays at the top of the page.
+func TestStickyFileHeader(t *testing.T) {
+	_, tt, header := longFilePage(t)
 	start := header()
 	for _, dy := range []float32{1000, 500} {
 		tt.Wheel(650, 400, 0, dy)
@@ -2062,21 +2116,51 @@ func TestStickyFileHeader(t *testing.T) {
 	snapshot(t, tt, "sticky-header")
 }
 
-func TestStickyTop(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		card ui.Rect
-		want float32
-	}{
-		{"card below the top", ui.Rect{Y: 300, H: 1000}, 0},
-		{"card across the top", ui.Rect{Y: -200, H: 1000}, 299},
-		{"end of the card at the top", ui.Rect{Y: -900, H: 1000}, 953},
-		{"folded card", ui.Rect{Y: -20, H: 47}, 0},
-		{"card not laid out yet", ui.Rect{}, 0},
-	} {
-		if got := stickyTop(100, tc.card); got != tc.want {
-			t.Errorf("%s: stickyTop = %v, want %v", tc.name, got, tc.want)
+// TestPushPinnedHeader scrolls past the end of a card: the next card
+// pushes its pinned header away, with the gap between the cards kept.
+func TestPushPinnedHeader(t *testing.T) {
+	_, tt, header := longFilePage(t)
+	full := header()
+	tt.Wheel(650, 400, 0, 5500)
+	tt.Advance(time.Second)
+	pushed := false
+	for range 100 {
+		tt.Wheel(650, 400, 0, 20)
+		tt.Advance(100 * time.Millisecond)
+		r, ok := tt.Find("deleted")
+		next, nok := tt.Find("modified")
+		if !ok || !nok || r.H != full.H || next.H != full.H {
+			continue
 		}
+		// A header is about 46 high, with a gap of 24 after its card.
+		if d := next.Y - r.Y; d < 46+24 {
+			t.Fatalf("header of more.txt %v below the header of long.txt, at %v", d, r)
+		}
+		if next.Y < r.Y+200 {
+			pushed = true
+		}
+	}
+	if !pushed {
+		t.Error("never scrolled to where more.txt pushes the header of long.txt")
+	}
+}
+
+// TestFoldPinnedCard folds a card while its header is pinned: the folded
+// card stays at the top of the page, with the next card under it.
+func TestFoldPinnedCard(t *testing.T) {
+	a, tt, header := longFilePage(t)
+	tt.Wheel(650, 400, 0, 1000)
+	tt.Advance(time.Second)
+	pinned := header()
+	a.cmd("mark-viewed").run(nil, "long.txt")
+	tt.Frame()
+	tt.Advance(time.Second)
+	if r := header(); r != pinned {
+		t.Errorf("header of long.txt at %v after folding, at %v before", r, pinned)
+	}
+	next, ok := tt.Find("modified")
+	if !ok || next.Y < pinned.Y || next.Y > pinned.Y+120 {
+		t.Errorf("header of more.txt at %v, %v; header of long.txt at %v", next, ok, pinned)
 	}
 }
 

@@ -80,7 +80,7 @@ type app struct {
 	loadingScope *scopeLoad
 	diffs        map[string]*fileDiff
 	// folded holds the files the reviewer folded or unfolded in this
-	// scope. The others are folded while they are viewed.
+	// scope. The others are folded while they are viewed or big.
 	folded map[string]bool
 	gen    int
 	// patch identifies the changes of the scope once patchKnown, see
@@ -113,6 +113,7 @@ type app struct {
 	history   []string
 	forward   []string
 	scrolls   map[string]*ui.ScrollState
+	lists     map[string]*cardPage
 	thread    string
 	drafts    map[string]string
 	overviews map[*review.Review]*overviewRun
@@ -185,6 +186,7 @@ func newApp(s store.Store) *app {
 		mainPct:     62,
 		page:        "overview",
 		scrolls:     map[string]*ui.ScrollState{},
+		lists:       map[string]*cardPage{},
 		exportAgent: true,
 	}
 }
@@ -956,7 +958,7 @@ func (a *app) listed(file string) bool {
 }
 
 // setViewed marks the files viewed and folds them, or marks them not
-// viewed and unfolds them.
+// viewed and unfolds them, except big files, which stay folded.
 func (a *app) setViewed(files []string, viewed bool) {
 	for _, f := range files {
 		delete(a.folded, f)
@@ -969,6 +971,9 @@ func (a *app) setViewed(files []string, viewed bool) {
 func (a *app) isFolded(file string) bool {
 	if f, ok := a.folded[file]; ok {
 		return f
+	}
+	if d := a.diffs[file]; d != nil && d.change.Additions+d.change.Deletions > bigFileLines {
+		return true
 	}
 	return a.rev.Viewed[file]
 }
