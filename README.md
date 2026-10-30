@@ -2,6 +2,38 @@
 
 A native macOS app for reviewing the code your coding agent wrote. You read a short walkthrough of the changes first and go deeper wherever you need to. Then you read the diff grouped by intent and hand a feedback file back to the agent.
 
+## Install
+
+You need macOS 12 or later, on Apple silicon or Intel. You also need at least one of the agent CLIs, installed and signed in:
+
+- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), tested with 2.1.310
+- [Codex](https://github.com/openai/codex) (`codex`), tested with 0.162.1
+
+1. Download `AgentDiff.dmg` from the [latest release](https://github.com/psd-coder/agentdiff/releases/latest).
+2. Open the disk image and drag AgentDiff to Applications.
+3. Open AgentDiff. The app is not notarized by Apple yet, so the first time macOS says that it cannot check the app. Close the message.
+4. Open System Settings, go to Privacy & Security, and click Open Anyway next to AgentDiff. macOS remembers the choice, so later starts open the app at once.
+
+To update, download the new release and replace the app in Applications. macOS asks again for each new version, so repeat steps 3 and 4.
+
+If you prefer a terminal, this command installs or updates the app without the macOS warning, because `curl` does not mark the file as downloaded from the internet:
+
+```bash
+curl -fL -o /tmp/AgentDiff.dmg https://github.com/psd-coder/agentdiff/releases/latest/download/AgentDiff.dmg \
+  && hdiutil attach -nobrowse -quiet -mountpoint /tmp/AgentDiff /tmp/AgentDiff.dmg \
+  && rm -rf /Applications/AgentDiff.app \
+  && cp -R /tmp/AgentDiff/AgentDiff.app /Applications/
+hdiutil detach -quiet /tmp/AgentDiff
+```
+
+The app reads the `PATH` of your login shell (`$SHELL -l -i`), so it finds the CLIs when you start it from the Dock too. Settings shows the version of each CLI it found, or why it found none. Open a repository from the app with Cmd+O, or start the app on the repository you are in from a terminal:
+
+```bash
+open -n /Applications/AgentDiff.app --args "$PWD"
+```
+
+## Features
+
 - **Walkthrough by your own agent**: Claude Code or Codex reads the changes through its CLI on your subscription. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
 - **Go deeper into any step**: Go deeper opens a new walkthrough of the step, one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down. When the overview is done, the app writes the deeper walkthrough of every step, 3 at a time, so Go deeper usually opens at once. Settings can turn this off.
 - **Questions in the side panel**: a question about a step or a page opens a conversation next to the walkthrough, so you keep your place. The answers are short walkthroughs with snippets, follow-up questions go on in the same agent session, and every conversation stays listed under its step and on the Questions & comments page.
@@ -17,26 +49,21 @@ A native macOS app for reviewing the code your coding agent wrote. You read a sh
 - **Your own shortcuts**: any command can get a shortcut in Settings, also the ones outside the menu bar, as Mark File as Viewed.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
 
-## Getting started
+## Building from source
 
-You need macOS 12 or later, Go 1.27.3 or later and git. You also need at least one of the agent CLIs, installed and signed in:
-
-- [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), tested with 2.1.310
-- [Codex](https://github.com/openai/codex) (`codex`), tested with 0.162.1
-
-The app reads the `PATH` of your login shell (`$SHELL -l -i`), so it finds the CLIs when you start it from the Dock too. Settings shows the version of each CLI it found, or why it found none.
-
-Build the app. The first build downloads MyGo through the `tool` line in `go.mod`.
+You need Go 1.27.3 or later and git, and the requirements from [Install](#install). The first build downloads MyGo through the `tool` line in `go.mod`.
 
 ```bash
 go tool mygo build
 ```
 
-It worked when `build/darwin-<arch>/` holds `AgentDiff.app` and a `.dmg`, with `arm64` or `amd64` for `<arch>`. Open a repository from the app with Cmd+O, or start it on the repository you are in from a terminal:
+It worked when `build/darwin-<arch>/` holds `AgentDiff.app` and a `.dmg`, with `arm64` or `amd64` for `<arch>`. Start the app on the repository you are in:
 
 ```bash
 open -n build/darwin-arm64/AgentDiff.app --args "$PWD"
 ```
+
+To release a version, set `version` in `mygo.json`, commit, and push a tag with the same version, as `v0.2.0`. The Release workflow builds one app for Apple silicon and Intel on a macOS runner. It fails when the tag and `version` differ. Then it publishes a GitHub release with `AgentDiff.dmg`.
 
 During development, `go run . /path/to/repo` starts the app on a repository. Without an argument the app opens the current directory when that is a git repository, and shows a welcome screen otherwise. The welcome screen lists the recent projects, which you open with Up, Down and Return, as in the project list.
 
