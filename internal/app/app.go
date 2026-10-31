@@ -260,7 +260,8 @@ func (a *app) openRepo(path string) {
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
 	a.branch, a.head, a.base, a.branches, a.commits = "", "", "", nil, nil
-	a.commitsTotal, a.commitLog = 0, gitx.CommitLog{}
+	a.commitsTotal, a.commitLog, a.commitsFor = 0, gitx.CommitLog{}, ""
+	a.commitsErr, a.commitsFailedAt = "", 0
 	a.shown = false
 	a.baseSet, a.rng, a.worktrees = false, nil, nil
 	if a.win != nil {
@@ -291,6 +292,7 @@ func (a *app) closeRepo() {
 	a.cancelLoad()
 	a.gen++
 	a.projectsOpen, a.shown = false, false
+	a.commitsErr, a.commitsFailedAt = "", 0
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff")
 	}
@@ -473,7 +475,7 @@ func (a *app) loadCommits(then func()) {
 	a.commitsGen++
 	r, gen := a.repo, a.commitsGen
 	base, head := a.listRange()
-	key := base + ".." + cmp.Or(head, a.branch)
+	key := r.Root + "\x00" + base + ".." + cmp.Or(head, a.branch)
 	fresh := key != a.commitsFor
 	limit := commitPage
 	if !fresh {

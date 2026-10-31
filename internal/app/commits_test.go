@@ -18,6 +18,26 @@ func pagedApp(t *testing.T, n int) (*app, *ui.Tester) {
 	t.Helper()
 	a := newTestApp(t)
 	dir := a.repo.Root
+	addWork(t, dir, n)
+	a.openRepo(dir)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	return a, tt
+}
+
+// pagedRepo is a fixture repository checked out on the branch work, which
+// has n empty commits on top of main, as pagedApp has.
+func pagedRepo(t *testing.T, n int) string {
+	t.Helper()
+	dir := fixtureRepo(t)
+	addWork(t, dir, n)
+	return dir
+}
+
+// addWork adds the branch work with n empty commits on top of main and
+// checks it out.
+func addWork(t *testing.T, dir string, n int) {
+	t.Helper()
 	var b strings.Builder
 	for i := range n {
 		fmt.Fprintf(&b, "commit refs/heads/work\ncommitter T <t@e> %d +0000\ndata <<END\nCommit number %d\nEND\n", 1700000000+i, i)
@@ -32,10 +52,6 @@ func pagedApp(t *testing.T, n int) (*app, *ui.Tester) {
 		t.Fatalf("git fast-import: %v\n%s", err, out)
 	}
 	git(t, dir, "checkout", "-q", "work")
-	a.openRepo(dir)
-	tt := ui.NewTester(a.view, 1300, 800)
-	tt.Frame()
-	return a, tt
 }
 
 // commitRows returns how many commits the list built, as rows.
@@ -153,6 +169,57 @@ func TestReopenReadsNoOldPage(t *testing.T) {
 		t.Error("a page of the old commit list is read")
 	}
 	pump(t, a, "the commits", func() bool { return len(a.commits) == 50 })
+}
+
+// TestReopenStartsAtTop opens a project again while its commit list was
+// scrolled: the list starts at the top and reads only its first page.
+func TestReopenStartsAtTop(t *testing.T) {
+	a, tt := pagedApp(t, 130)
+	scrollCommits(t, a, tt, func() bool { return len(a.commits) == 100 })
+	a.openRepo(a.repo.Root)
+	for range 3 {
+		tt.Frame()
+	}
+	if len(a.commits) != 50 || !tt.HasText("Commit number 129") {
+		t.Errorf("reopened project: %d commits, texts %q", len(a.commits), tt.Texts())
+	}
+}
+
+// TestOtherRepoStartsFresh opens another project with the same branch
+// names while the commit list was scrolled: its list starts at the top
+// and reads only its first page.
+func TestOtherRepoStartsFresh(t *testing.T) {
+	a, tt := pagedApp(t, 130)
+	scrollCommits(t, a, tt, func() bool { return len(a.commits) == 100 })
+	a.openRepo(pagedRepo(t, 130))
+	for range 3 {
+		tt.Frame()
+	}
+	if len(a.commits) != 50 || !tt.HasText("Commit number 129") {
+		t.Errorf("other project: %d commits, texts %q", len(a.commits), tt.Texts())
+	}
+}
+
+// TestOtherRepoDropsPageError opens another project after a page of
+// commits failed: the error does not show while git reads the new list.
+func TestOtherRepoDropsPageError(t *testing.T) {
+	a, tt := pagedApp(t, 130)
+	gitDir := filepath.Join(a.repo.Root, ".git")
+	if err := os.Rename(gitDir, filepath.Join(t.TempDir(), "git")); err != nil {
+		t.Fatal(err)
+	}
+	scrollCommits(t, a, tt, func() bool { return tt.HasText("Could not list more commits") })
+	a.queue = make(chan func(), 64)
+	a.openRepo(pagedRepo(t, 130))
+	tt.Frame()
+	if a.commitsErr != "" || tt.HasText("Could not list") {
+		t.Errorf("error %q of the old project shows", a.commitsErr)
+	}
+	pump(t, a, "the commits", func() bool { return len(a.commits) == 50 && !a.commitsReading })
+	tt.Frame()
+	if a.commitsErr != "" || tt.HasText("Could not list") {
+		t.Errorf("error %q after the new list", a.commitsErr)
+	}
 }
 
 // TestCommitPageError shows why a page of commits could not be read, and
