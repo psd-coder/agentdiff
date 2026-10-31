@@ -400,19 +400,33 @@ func (rs *Reviews) prune(f *Found, repo string) error {
 	return err
 }
 
+// Next is what an action on an earlier review did, and what the window
+// shows next.
+type Next struct {
+	// Outcome is set when the action replaced the review of the scope:
+	// Rev is the new review. Err is why the action failed or did nothing.
+	Outcome
+	// Left reports that the earlier review left the list, so its page
+	// closes.
+	Left bool
+	// Open is the scope whose review the window shows next, or nil.
+	Open *gitx.Scope
+}
+
 // Restore brings the archived review e back to the empty review rev of
 // the uncommitted changes, and marks it kept, so it does not go back to
-// the archive by itself. It does nothing while an agent writes into e.
-func (rs *Reviews) Restore(e *Earlier, rev *review.Review, busy func(*review.Review) bool) Outcome {
-	out := Outcome{Rev: rev}
+// the archive by itself. It does nothing while rev is not empty or an
+// agent writes into e, and Err says why.
+func (rs *Reviews) Restore(e *Earlier, rev *review.Review, busy func(*review.Review) bool) Next {
 	if !rev.Empty() {
-		return out
+		return Next{Err: errors.New("the uncommitted changes have a review of their own")}
 	}
 	if rs.busy(rev.Repo, e.Rev.Scope, busy) {
-		return out
+		return Next{Err: errors.New("an agent still writes into the earlier review")}
 	}
+	out := Outcome{Rev: rev}
 	if out.Err = rs.adopt(&out, e.Rev); out.Rev == rev {
-		return out
+		return Next{Err: out.Err}
 	}
 	rs.adoptedFrom = nil
 	rs.Drop(e)
@@ -420,32 +434,33 @@ func (rs *Reviews) Restore(e *Earlier, rev *review.Review, busy func(*review.Rev
 	if err := rs.store.SaveReview(out.Rev); err != nil {
 		out.Err = errors.Join(out.Err, fmt.Errorf("keep review: %w", err))
 	}
-	return out
+	scope := rev.Scope
+	return Next{Outcome: out, Left: true, Open: &scope}
 }
 
 // MoveTo moves the archived review e to scope to of repo, when to has no
-// review of its own, neither saved nor open. It reports whether e moved.
-func (rs *Reviews) MoveTo(repo string, e *Earlier, to gitx.Scope, busy func(*review.Review) bool) (bool, error) {
+// review of its own, neither saved nor open, and opens to.
+func (rs *Reviews) MoveTo(repo string, e *Earlier, to gitx.Scope, busy func(*review.Review) bool) Next {
 	k := key(repo, to)
 	if open := rs.open[k]; open != nil && (!open.Empty() || busy(open)) {
-		return false, nil
+		return Next{Open: &to}
 	}
 	if !rs.store.LoadReview(repo, to).Empty() {
-		return false, nil
+		return Next{Open: &to}
 	}
 	if err := rs.store.MoveReview(repo, e.Rev.Scope, to); err != nil {
-		return false, err
+		return Next{Err: err}
 	}
 	delete(rs.open, k)
 	rs.Drop(e)
-	return true, nil
+	return Next{Left: true, Open: &to}
 }
 
 // Delete deletes the archived review e.
-func (rs *Reviews) Delete(repo string, e *Earlier) error {
+func (rs *Reviews) Delete(repo string, e *Earlier) Next {
 	if err := rs.store.DeleteReview(repo, e.Rev.Scope); err != nil {
-		return err
+		return Next{Err: err}
 	}
 	rs.Drop(e)
-	return nil
+	return Next{Left: true}
 }
