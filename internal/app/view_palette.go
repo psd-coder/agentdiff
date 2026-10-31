@@ -30,7 +30,7 @@ func (a *app) usedCommand(id string) {
 func (a *app) paletteCommands() []*command {
 	q := strings.ToLower(strings.TrimSpace(a.paletteQuery))
 	var out []*command
-	for _, cm := range a.commands() {
+	for _, cm := range a.cachedCommands() {
 		if _, ok := a.here(cm); ok && cm.id != "palette" && strings.Contains(strings.ToLower(cm.title), q) {
 			out = append(out, cm)
 		}
