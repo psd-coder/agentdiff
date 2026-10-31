@@ -2286,6 +2286,27 @@ func TestCommandPalette(t *testing.T) {
 	}
 }
 
+func TestCloseRepoForgetsTheLoad(t *testing.T) {
+	a := newTestApp(t)
+	if len(a.files) == 0 || len(a.diffs) == 0 {
+		t.Fatalf("the first load read no files: %+v", a.perLoad)
+	}
+	a.queue = make(chan func(), 64)
+	a.refresh()
+	if !a.switching || a.loadingScope == nil {
+		t.Fatalf("no load runs: switching = %v, loading scope = %v", a.switching, a.loadingScope)
+	}
+
+	a.closeRepo()
+	drain(a)
+	if a.loading || a.switching || a.loadingScope != nil {
+		t.Errorf("loading = %v, switching = %v, loading scope = %v", a.loading, a.switching, a.loadingScope)
+	}
+	if a.snap != nil || len(a.files) != 0 || len(a.diffs) != 0 {
+		t.Errorf("the closed project keeps %d files and %d diffs", len(a.files), len(a.diffs))
+	}
+}
+
 // TestWelcomeList opens a recent project from the welcome screen with the
 // keyboard.
 func TestWelcomeList(t *testing.T) {
