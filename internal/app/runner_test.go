@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -157,5 +159,142 @@ func TestRegenerateAfterReloadInDialog(t *testing.T) {
 	if a.running(a.rev, store.TargetOverview) == nil || a.running(old, store.TargetOverview) != nil {
 		t.Errorf("overview runs on screen %v, in the archived review %v",
 			a.running(a.rev, store.TargetOverview) != nil, a.running(old, store.TargetOverview) != nil)
+	}
+}
+
+// heldAgent makes every agent run of the app wait until the test ends.
+func heldAgent(t *testing.T, a *app) {
+	t.Helper()
+	a.queue = make(chan func(), 256)
+	newFakeAgent(t, a).hold()
+}
+
+// writeAhead gives the review on screen an overview of n steps and
+// queues the deeper walkthrough of every step.
+func writeAhead(t *testing.T, a *app, n int) []*review.Walk {
+	t.Helper()
+	var steps []review.Step
+	for i := range n {
+		steps = append(steps, review.Step{Title: fmt.Sprintf("Step %d", i), Text: "Text."})
+	}
+	a.rev.Overview = &review.Overview{Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: steps}}
+	a.deeperAhead(a.rev)
+	if len(a.rev.Walks) != n {
+		t.Fatalf("%d walks, want %d", len(a.rev.Walks), n)
+	}
+	return slices.Clone(a.rev.Walks)
+}
+
+// TestQuestionSkipsWriteAheadQueue asks a question while the write-ahead
+// slots are full: the question runs at once and takes no slot.
+func TestQuestionSkipsWriteAheadQueue(t *testing.T) {
+	a := newTestApp(t)
+	heldAgent(t, a)
+	walks := writeAhead(t, a, 4)
+	a.askQuestion("", -1, "Why?")
+	q := a.rev.Walks[len(a.rev.Walks)-1]
+	if a.running(a.rev, q.ID) == nil {
+		t.Fatal("the question waits")
+	}
+	if n := a.aheadCount(); n != 3 {
+		t.Errorf("%d write-ahead walks run, want 3", n)
+	}
+	if !a.queued(a.rev, walks[3].ID) {
+		t.Error("the fourth step left the queue")
+	}
+}
+
+// TestOtherReviewTakesNoWriteAheadSlot runs walks the user asked for in
+// another review, then writes ahead in the review on screen: all three
+// write-ahead slots are free.
+func TestOtherReviewTakesNoWriteAheadSlot(t *testing.T) {
+	a := newTestApp(t)
+	a.saveReview()
+	cp := a.store.LoadReview(a.repo.Root, a.scope)
+	cp.Scope = gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"}
+	heldAgent(t, a)
+	for range 3 {
+		a.runWalk(cp, cp.AddWalk("", -1, "Why?"), false)
+	}
+	walks := writeAhead(t, a, 4)
+	for _, w := range walks[:3] {
+		if a.running(a.rev, w.ID) == nil {
+			t.Errorf("step %d waits", w.Step)
+		}
+	}
+	if !a.queued(a.rev, walks[3].ID) {
+		t.Error("the fourth step does not wait")
+	}
+}
+
+// aheadRunning reports for each walk whether its run goes on now.
+func aheadRunning(a *app, walks []*review.Walk) []bool {
+	var out []bool
+	for _, w := range walks {
+		out = append(out, a.running(a.rev, w.ID) != nil)
+	}
+	return out
+}
+
+// TestWriteAheadQueueStartsInOrder runs three write-ahead walks at most,
+// and starts the oldest queued walk when a slot frees.
+func TestWriteAheadQueueStartsInOrder(t *testing.T) {
+	a := newTestApp(t)
+	heldAgent(t, a)
+	w := writeAhead(t, a, 5)
+	if got := aheadRunning(a, w); !slices.Equal(got, []bool{true, true, true, false, false}) {
+		t.Fatalf("running %v", got)
+	}
+	a.stopWalk(w[1].ID)
+	if got := aheadRunning(a, w); !slices.Equal(got, []bool{true, false, true, true, false}) || !a.queued(a.rev, w[4].ID) {
+		t.Errorf("after stopping step 1: running %v, step 4 queued %v", got, a.queued(a.rev, w[4].ID))
+	}
+}
+
+// TestStopQueuedWalk stops a queued walk: it leaves the queue without a
+// trace, and a later free slot does not start it.
+func TestStopQueuedWalk(t *testing.T) {
+	a := newTestApp(t)
+	heldAgent(t, a)
+	w := writeAhead(t, a, 4)
+	a.stopWalk(w[3].ID)
+	if a.queued(a.rev, w[3].ID) || w[3].Err != "" {
+		t.Errorf("stopped queued step: queued %v, err %q", a.queued(a.rev, w[3].ID), w[3].Err)
+	}
+	a.stopWalk(w[0].ID)
+	if a.running(a.rev, w[3].ID) != nil {
+		t.Error("the stopped step started when a slot freed")
+	}
+}
+
+// TestOtherReviewWriteAheadSharesSlots writes ahead in another review
+// first: the walks of the review on screen wait, because the limit holds
+// for all reviews.
+func TestOtherReviewWriteAheadSharesSlots(t *testing.T) {
+	a := newTestApp(t)
+	a.saveReview()
+	cp := a.store.LoadReview(a.repo.Root, a.scope)
+	cp.Scope = gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"}
+	heldAgent(t, a)
+	cp.Overview = &review.Overview{Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{{Title: "A"}, {Title: "B"}, {Title: "C"}}}}
+	a.deeperAhead(cp)
+	w := writeAhead(t, a, 1)
+	if !a.queued(a.rev, w[0].ID) {
+		t.Error("the walk on screen does not wait for the other review's walks")
+	}
+}
+
+// TestUserRunFreesWriteAheadSlot regenerates a walk that the app writes
+// ahead: the user's run takes its place, and the next queued walk starts.
+func TestUserRunFreesWriteAheadSlot(t *testing.T) {
+	a := newTestApp(t)
+	heldAgent(t, a)
+	w := writeAhead(t, a, 4)
+	a.runWalk(a.rev, w[0], false)
+	if a.running(a.rev, w[0].ID) == nil {
+		t.Fatal("the user's run does not go on")
+	}
+	if a.running(a.rev, w[3].ID) == nil {
+		t.Error("the fourth step still waits")
 	}
 }
