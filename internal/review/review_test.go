@@ -197,6 +197,19 @@ func TestQuestionPrompt(t *testing.T) {
 	}
 }
 
+func TestThreadCounts(t *testing.T) {
+	r := New("/r", gitx.Scope{})
+	r.AddThread(Anchor{Kind: AnchorLines, File: "a.go"})
+	r.AddThread(Anchor{Kind: AnchorFile, File: "a.go"})
+	r.AddThread(Anchor{Kind: AnchorLines, File: "b.go"})
+	r.AddThread(Anchor{Kind: AnchorSection, Section: "S"})
+	r.AddThread(Anchor{Kind: AnchorGeneral})
+	want := map[string]int{"a.go": 2, "b.go": 1}
+	if got := r.ThreadCounts(); !reflect.DeepEqual(got, want) {
+		t.Errorf("ThreadCounts = %v, want %v", got, want)
+	}
+}
+
 func TestThreads(t *testing.T) {
 	r := New("/r", gitx.Scope{})
 	a := r.AddThread(Anchor{Kind: AnchorLines, File: "a.go"})

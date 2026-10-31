@@ -216,6 +216,7 @@ func (a *app) fileNav(c *ui.Context) {
 	t := c.Theme()
 	page := a.page
 	groups := a.groups()
+	threads := a.rev.ThreadCounts()
 	ui.Column(c).Padding(0, 10).Children(func() {
 		sidebarHeading(c, "Files", func() {
 			a.cmdSegmented(c, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
@@ -228,7 +229,7 @@ func (a *app) fileNav(c *ui.Context) {
 		if a.cfg.FlatFiles {
 			for _, f := range a.files {
 				if a.listed(f.Path) {
-					a.fileItem(c, f.Path)
+					a.fileItem(c, f.Path, threads[f.Path])
 				}
 			}
 		}
@@ -249,7 +250,7 @@ func (a *app) fileNav(c *ui.Context) {
 				a.groupItem(c, gi, g.Title, len(files), open)
 				if *open {
 					for _, f := range files {
-						a.fileItem(c, f).Level(2)
+						a.fileItem(c, f, threads[f]).Level(2)
 					}
 				}
 			})
@@ -336,7 +337,8 @@ func (a *app) groupItem(c *ui.Context, gi int, title string, files int, open *bo
 	})
 }
 
-func (a *app) fileItem(c *ui.Context, file string) ui.Element {
+// fileItem is a file in the sidebar, with the number of threads on it.
+func (a *app) fileItem(c *ui.Context, file string, threads int) ui.Element {
 	t := c.Theme()
 	viewed := a.rev.Viewed[file]
 	item := ui.SidebarItem(c, "file:"+file, nil, path.Base(file)).Tooltip(file)
@@ -345,13 +347,12 @@ func (a *app) fileItem(c *ui.Context, file string) ui.Element {
 		item.TextColor(t.TextMuted)
 	}
 	d := a.diffs[file]
-	n := len(a.rev.ThreadsOn(file))
 	item.Children(func() {
 		if a.cfg.FlatFiles && dir != "." {
 			ui.Text(c, dir).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1)
 		}
-		if n > 0 {
-			ui.Badge(c, fmt.Sprint(n))
+		if threads > 0 {
+			ui.Badge(c, fmt.Sprint(threads))
 		}
 		if d != nil {
 			ui.Row(c).Gap(4).Children(func() {
