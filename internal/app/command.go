@@ -82,7 +82,7 @@ func (a *app) commands() []*command {
 			run: func(_ *ui.Context, id string) { a.setExcluded(id, true) }},
 		{id: "stop-thread", title: "Stop the Agent in the Thread", target: a.targetThread,
 			can: a.busy,
-			run: func(_ *ui.Context, id string) { a.stopThread(a.rev.Thread(id)) }},
+			run: func(_ *ui.Context, id string) { a.runner.stop(a.rev, id) }},
 		{id: "thread-log", title: "Show Log of the Thread", tip: "What the agent did in this thread", target: a.targetThread,
 			can: func(id string) bool { return a.rev.Thread(id).Agent != "" },
 			run: func(_ *ui.Context, id string) { a.showLog(id) }},
@@ -95,7 +95,7 @@ func (a *app) commands() []*command {
 		}},
 		{id: "question-log", title: "Show Log of the Question", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) { a.showLog(id) }},
 		{id: "delete-question", title: "Delete Question", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) {
-			a.stopWalk(id)
+			a.runner.stop(a.rev, id)
 			a.rev.DeleteWalk(id)
 			a.closeQuestion()
 			a.leaveGone()
@@ -103,7 +103,7 @@ func (a *app) commands() []*command {
 		}},
 
 		{id: "stop-walk", title: "Stop Walkthrough", target: a.targetWalk, can: a.busy,
-			run: func(_ *ui.Context, id string) { a.stopWalk(id) }},
+			run: func(_ *ui.Context, id string) { a.runner.stop(a.rev, id) }},
 		{id: "regenerate-walk", title: "Regenerate Walkthrough", target: a.targetWalk,
 			can: func(id string) bool { return !a.busy(id) },
 			run: func(_ *ui.Context, id string) { a.regenerate(id) }},
@@ -129,7 +129,7 @@ func (a *app) commands() []*command {
 			return !a.busy(store.TargetOverview) && !a.rev.Overview.Done() && len(a.files) > 0
 		}, run: func(*ui.Context, string) { a.generateOverview() }},
 		{id: "stop-overview", title: "Stop Overview", can: func(string) bool { return a.busy(store.TargetOverview) },
-			run: func(*ui.Context, string) { a.stopOverview() }},
+			run: func(*ui.Context, string) { a.runner.stop(a.rev, store.TargetOverview) }},
 		{id: "regenerate-overview", title: "Regenerate Overview", can: func(string) bool {
 			return !a.busy(store.TargetOverview) && a.rev.Overview.Done() && len(a.files) > 0
 		}, run: func(*ui.Context, string) { a.regenerate("") }},
@@ -501,7 +501,7 @@ func (a *app) setExcluded(id string, excluded bool) {
 }
 
 func (a *app) deleteThread(id string) {
-	a.stopThread(a.rev.Thread(id))
+	a.runner.stop(a.rev, id)
 	a.rev.DeleteThread(id)
 	a.panel = nil
 	a.saveReview()

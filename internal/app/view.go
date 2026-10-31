@@ -196,7 +196,7 @@ func (a *app) overviewStateOf(s gitx.Scope) overviewState {
 		return overviewQuiet
 	case a.runner.run(rev, store.TargetOverview) != nil:
 		return overviewWriting
-	case !a.runner.unseen[rev]:
+	case !a.unseen[rev]:
 		return overviewQuiet
 	case rev.Overview != nil && rev.Overview.Err != "":
 		return overviewFailed

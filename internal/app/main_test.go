@@ -394,7 +394,7 @@ func TestArchiveUncommitted(t *testing.T) {
 	if tt.HasText("Earlier reviews") {
 		t.Fatal("archived a review an agent writes into")
 	}
-	a.stopOverview()
+	a.runner.stop(a.rev, store.TargetOverview)
 	pump(t, a, "the stopped overview", func() bool { return !a.logsOf(a.rev)[0].running })
 	reload("the other changes")
 	if !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") || !tt.HasText("Get a walkthrough of these changes") {
@@ -576,10 +576,10 @@ func TestStartOverDuringRuns(t *testing.T) {
 	fake := newFakeAgent(t, a)
 	fake.answer("t1", "Because.")
 	a.ask(a.rev, a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
-	thread := a.runner.logs[a.rev][0]
+	thread := a.logs[a.rev][0]
 	fake.hold()
 	a.askQuestion("", -1, "What?")
-	runs := slices.Clone(a.runner.logs[a.rev])
+	runs := slices.Clone(a.logs[a.rev])
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		entries, _ := a.store.ReadRun(root, scope, thread.info.ID)
@@ -620,7 +620,7 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 	tt.Type("Why?")
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	tt.Frame()
-	if n := len(a.runner.logs[a.rev]); n != 1 {
+	if n := len(a.logs[a.rev]); n != 1 {
 		t.Fatalf("runs after the first question = %d", n)
 	}
 	if !tt.HasText("Thinking…") {
@@ -695,14 +695,14 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 	pump(t, a, "the commit", func() bool { return !a.switching })
 	otherRev := a.rev
 	other := otherRev.AddWalk("", -1, "Other review?")
-	a.runWalk(otherRev, other, false)
+	a.runWalk(otherRev, other)
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	pump(t, a, "the uncommitted changes", func() bool { return !a.switching })
 	parent := a.rev.AddWalk("", -1, "Parent?")
 	child := a.rev.AddWalk(parent.ID, -1, "Child?")
 	sibling := a.rev.AddWalk("", -1, "Sibling?")
 	for _, w := range []*review.Walk{parent, child, sibling} {
-		a.runWalk(a.rev, w, false)
+		a.runWalk(a.rev, w)
 	}
 	a.deleteWalk(parent)
 	pump(t, a, "the stopped runs", func() bool { return !a.busy(parent.ID) && !a.busy(child.ID) })
@@ -1206,8 +1206,8 @@ func TestDeeperAhead(t *testing.T) {
 	a.queue = make(chan func(), 256)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
-	if len(a.rev.Walks) != 4 || a.runner.aheadCount() != maxAhead || !a.runner.queued(a.rev, a.rev.Walks[3].ID) {
-		t.Fatalf("%d walks, %d write-ahead walks running", len(a.rev.Walks), a.runner.aheadCount())
+	if len(a.rev.Walks) != 4 || a.runner.run(a.rev, a.rev.Walks[2].ID) == nil || !a.runner.queued(a.rev, a.rev.Walks[3].ID) {
+		t.Fatalf("%d walks, the third runs %v, the fourth waits %v", len(a.rev.Walks), a.runner.run(a.rev, a.rev.Walks[2].ID) != nil, a.runner.queued(a.rev, a.rev.Walks[3].ID))
 	}
 	for i, w := range a.rev.Walks {
 		if w.Step != i || w.Question != "" {
