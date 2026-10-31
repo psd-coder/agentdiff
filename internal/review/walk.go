@@ -63,7 +63,7 @@ type Walk struct {
 	Question  string         `json:"question,omitempty"`
 	Content   *Walkthrough   `json:"content,omitempty"`
 	Markdown  string         `json:"markdown,omitempty"`
-	SessionID string         `json:"sessionId,omitempty"`
+	Sessions  Sessions       `json:"sessions,omitempty"`
 	Agent     agent.Provider `json:"agent,omitempty"`
 	Model     string         `json:"model,omitempty"`
 	Generated time.Time      `json:"generated"`

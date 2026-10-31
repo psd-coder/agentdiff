@@ -102,7 +102,7 @@ func TestOverviewAndGroups(t *testing.T) {
 	a := newTestApp(t)
 	md := "## 1. High level\n- Keys are lower-cased in `cache/cache.go:6`.\n\n## 2. Data changes\nNone.\n\n```json\n{\"groups\":[{\"title\":\"Cache keys\",\"summary\":\"Lower-case keys.\",\"files\":[\"cache/cache.go\"]},{\"title\":\"API\",\"summary\":\"New handler.\",\"files\":[\"api/handler.go\"]}]}\n```"
 	body, groups := review.ParseOverview(md, a.fileNames())
-	a.rev.Overview = &review.Overview{Markdown: body, Groups: groups, Agent: agent.Claude, Generated: time.Now(), SessionID: "s"}
+	a.rev.Overview = &review.Overview{Markdown: body, Groups: groups, Agent: agent.Claude, Generated: time.Now(), Sessions: review.Sessions{agent.Claude: "s"}}
 	tt := ui.NewTester(a.view, 1300, 900)
 	tt.Frame()
 	for _, want := range []string{"1. High level", "2. Data changes", "Cache keys", "Review order", "Lower-case keys."} {
@@ -1034,7 +1034,7 @@ func pump(t *testing.T, a *app, what string, ok func() bool) {
 
 func TestWalkthrough(t *testing.T) {
 	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, SessionID: "root", Generated: time.Now(), Walk: &review.Walkthrough{
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "Cache keys are lower-cased now.",
 		Steps: []review.Step{
 			{Title: "Lower-case keys", Text: "`Get` lower-cases its key.", Refs: []review.Ref{
@@ -1067,7 +1067,7 @@ func TestWalkthrough(t *testing.T) {
 		t.Fatalf("walk = %+v, page %q", w, a.page)
 	}
 	pump(t, a, "the deeper walkthrough", func() bool { return a.walkRuns[w.ID] == nil })
-	if w.Err != "" || w.SessionID != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
+	if w.Err != "" || w.Sessions[agent.Claude] != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
 		t.Fatalf("walk = %+v", w)
 	}
 	prompt, err := os.ReadFile(filepath.Join(filepath.Dir(a.cfg.Agent.Binary), "prompt.txt"))
@@ -1117,7 +1117,7 @@ func TestDeeperAhead(t *testing.T) {
 		return len(a.walkRuns) == 0 && len(a.ahead) == 0
 	})
 	for _, w := range a.rev.Walks {
-		if w.Content == nil || w.SessionID != "s1" {
+		if w.Content == nil || w.Sessions[agent.Claude] != "s1" {
 			t.Errorf("walk = %+v", w)
 		}
 	}
@@ -1190,7 +1190,7 @@ func TestBackFromSnippet(t *testing.T) {
 
 func TestQuestionPanel(t *testing.T) {
 	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, SessionID: "root", Generated: time.Now(), Walk: &review.Walkthrough{
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
 	}}
 	reply := "```json\n" + `{"summary": "Callers pass mixed case.", "steps": [{"title": "Caller", "text": "x", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
@@ -1224,7 +1224,7 @@ func TestQuestionPanel(t *testing.T) {
 
 	a.askMore(a.rev, w, "And the tests?")
 	pump(t, a, "the follow-up", func() bool { return !a.walkBusy(w.ID) })
-	if len(w.More) != 1 || w.More[0].Content == nil || w.SessionID != "q1" {
+	if len(w.More) != 1 || w.More[0].Content == nil || w.Sessions[agent.Claude] != "q1" {
 		t.Fatalf("follow-up = %+v", w.More)
 	}
 	if b, _ := os.ReadFile(prompt); !strings.Contains(string(b), "follow-up question: And the tests?") || strings.Contains(string(b), "The change set under review") {

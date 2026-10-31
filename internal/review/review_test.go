@@ -1,12 +1,47 @@
 package review
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/psd-coder/agentdiff/internal/agent"
 	"github.com/psd-coder/agentdiff/internal/gitx"
 )
+
+// TestLoadsSessionOfOldReview loads a review file saved while each item
+// kept one session. The session goes under the item's agent, and the
+// file saved again keeps only the sessions per provider.
+func TestLoadsSessionOfOldReview(t *testing.T) {
+	old := `{
+		"overview": {"agent": "claude", "sessionId": "ov", "markdown": "x"},
+		"walks": [{"id": "w1", "agent": "codex", "sessionId": "walk"}],
+		"threads": [
+			{"id": "t1", "agent": "claude", "sessionId": "thread"},
+			{"id": "t2", "sessionId": "orphan"}
+		]
+	}`
+	var r Review
+	if err := json.Unmarshal([]byte(old), &r); err != nil {
+		t.Fatal(err)
+	}
+	got := []Sessions{r.Overview.Sessions, r.Walks[0].Sessions, r.Threads[0].Sessions, r.Threads[1].Sessions}
+	want := []Sessions{{agent.Claude: "ov"}, {agent.Codex: "walk"}, {agent.Claude: "thread"}, nil}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sessions = %v, want %v", got, want)
+	}
+	if r.Overview.Markdown != "x" || r.Walks[0].ID != "w1" {
+		t.Errorf("review = %+v", r)
+	}
+	b, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "sessionId") || !strings.Contains(string(b), `"sessions":{"claude":"ov"}`) {
+		t.Errorf("saved again = %s", b)
+	}
+}
 
 func TestParseOverview(t *testing.T) {
 	files := []string{"a/x.go", "a/y.go", "b/z.go", "README.md"}

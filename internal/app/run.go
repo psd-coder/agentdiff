@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"log"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -145,7 +146,13 @@ func (a *app) generateOverview() {
 			run.activity = ev.Text
 		case agent.EventDone:
 			ov := review.ReadOverview(answer(ev.Text, run.text), files)
-			ov.SessionID, ov.Agent, ov.Model, ov.Generated, ov.PatchID, ov.Files = session, cfg.Provider, cfg.Model, time.Now(), patch, fileIDs
+			ov.Agent, ov.Model, ov.Generated, ov.PatchID, ov.Files = cfg.Provider, cfg.Model, time.Now(), patch, fileIDs
+			if old := rev.Overview; old != nil {
+				ov.Sessions = maps.Clone(old.Sessions)
+			}
+			if session != "" {
+				ov.Sessions.Set(cfg.Provider, session)
+			}
 			rev.Overview = &ov
 			cancel()
 			delete(a.overviews, rev)
@@ -158,9 +165,10 @@ func (a *app) generateOverview() {
 			if stopped {
 				return
 			}
-			ov := &review.Overview{Agent: cfg.Provider, Model: cfg.Model, Generated: time.Now(), Err: ev.Err.Error()}
+			ov := &review.Overview{Generated: time.Now(), Err: ev.Err.Error()}
 			if old := rev.Overview; old.Done() {
-				ov.Walk, ov.Markdown, ov.Groups, ov.SessionID, ov.PatchID, ov.Files = old.Walk, old.Markdown, old.Groups, old.SessionID, old.PatchID, old.Files
+				ov.Walk, ov.Markdown, ov.Groups, ov.Sessions, ov.PatchID, ov.Files = old.Walk, old.Markdown, old.Groups, old.Sessions, old.PatchID, old.Files
+				ov.Agent, ov.Model, ov.Generated = old.Agent, old.Model, old.Generated
 			}
 			rev.Overview = ov
 			a.saveReviewOf(rev)
@@ -301,15 +309,15 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 	if auto {
 		cfg = cfg.Auto()
 	}
-	parentSession, parentAgent := "", agent.Provider("")
+	parentSession := ""
 	if p := rev.Walk(w.Parent); p != nil {
-		parentSession, parentAgent = p.SessionID, p.Agent
+		parentSession = p.Sessions[cfg.Provider]
 	} else if ov := rev.Overview; w.Parent == "" && ov != nil {
-		parentSession, parentAgent = ov.SessionID, ov.Agent
+		parentSession = ov.Sessions[cfg.Provider]
 	}
 	d := review.DeeperRequest{
 		Question: w.Question,
-		Known:    parentSession != "" && parentAgent == cfg.Provider,
+		Known:    parentSession != "",
 		NewRev:   rev.Scope.NewRev(),
 	}
 	if s, ok := rev.StepOf(w); ok {
@@ -327,7 +335,8 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 	}
 	req.Prompt = review.DeeperPrompt(d)
 
-	w.Content, w.Markdown, w.Err, w.SessionID, w.More = nil, "", "", "", nil
+	w.Content, w.Markdown, w.Err, w.More, w.Agent, w.Model = nil, "", "", nil, "", ""
+	delete(w.Sessions, cfg.Provider)
 	title := "Deeper: " + rev.WalkTitle(w)
 	if w.Question != "" {
 		title = "Question: " + w.Question
@@ -343,10 +352,11 @@ func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 		return
 	}
 	cfg := a.cfg.Agent
-	f := review.FollowupRequest{Question: q, Known: w.SessionID != "" && w.Agent == cfg.Provider, NewRev: rev.Scope.NewRev()}
+	session := w.Sessions[cfg.Provider]
+	f := review.FollowupRequest{Question: q, Known: session != "", NewRev: rev.Scope.NewRev()}
 	req := agent.Request{Dir: rev.Repo, SystemPrompt: review.SystemPrompt}
 	if f.Known {
-		req.ResumeID = w.SessionID
+		req.ResumeID = session
 	} else {
 		diffstat := ""
 		if rev == a.rev {
@@ -362,7 +372,6 @@ func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 
 // streamWalk runs the agent for the latest turn of a walk.
 func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, req agent.Request, title string) {
-	w.Agent, w.Model = cfg.Provider, cfg.Model
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &walkRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.walkRuns[w.ID] = run
@@ -374,7 +383,7 @@ func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, r
 		}
 		switch ev.Kind {
 		case agent.EventSession:
-			w.SessionID = ev.SessionID
+			w.Sessions.Set(cfg.Provider, ev.SessionID)
 		case agent.EventText:
 			run.text += ev.Text
 			run.activity = "Writing the walkthrough…"
@@ -386,6 +395,9 @@ func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, r
 				w.SetAnswer(wt, "", "", time.Now())
 			} else {
 				w.SetAnswer(nil, text, "", time.Now())
+			}
+			if len(w.More) == 0 {
+				w.Agent, w.Model = cfg.Provider, cfg.Model
 			}
 			cancel()
 			delete(a.walkRuns, w.ID)
@@ -455,13 +467,16 @@ func (a *app) ask(t *review.Thread, text string) {
 	cfg := a.cfg.Agent
 	t.Messages = append(t.Messages, review.Message{Role: review.RoleUser, Text: text, Time: time.Now()})
 	req := agent.Request{Dir: a.repo.Root, SystemPrompt: review.SystemPrompt}
-	known := t.SessionID != "" && t.Agent == cfg.Provider
-	prompt := review.QuestionPrompt(t, text, known)
+	session, overviewSession := t.Sessions[cfg.Provider], ""
+	if rev.Overview != nil {
+		overviewSession = rev.Overview.Sessions[cfg.Provider]
+	}
+	prompt := review.QuestionPrompt(t, text, session != "")
 	switch {
-	case known:
-		req.ResumeID = t.SessionID
-	case rev.Overview != nil && rev.Overview.SessionID != "" && rev.Overview.Agent == cfg.Provider:
-		req.ResumeID, req.Fork = rev.Overview.SessionID, true
+	case session != "":
+		req.ResumeID = session
+	case overviewSession != "":
+		req.ResumeID, req.Fork = overviewSession, true
 	default:
 		prompt = review.ContextPrompt(a.scope.Describe(), a.diffstat) + prompt
 	}
@@ -480,7 +495,7 @@ func (a *app) ask(t *review.Thread, text string) {
 		m := &t.Messages[reply]
 		switch ev.Kind {
 		case agent.EventSession:
-			t.SessionID = ev.SessionID
+			t.Sessions.Set(cfg.Provider, ev.SessionID)
 		case agent.EventText:
 			m.Text += ev.Text
 			m.Activity = ""
