@@ -301,26 +301,13 @@ func TestReviewFollowsCommit(t *testing.T) {
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
-	rev := a.rev
-	if rev.Overview.PatchID == "" || rev.Overview.PatchID != a.patch {
-		t.Fatalf("overview patch %q, scope patch %q", rev.Overview.PatchID, a.patch)
-	}
 
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "Agent work")
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sha := strings.TrimSpace(string(out))
+	sha := headSHA(t, dir)
 	a.refresh()
-	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
-	pump(t, a, "the commit lookup", func() bool { return len(a.reviews.Earlier()) == 1 && a.reviews.Earlier()[0].MovedTo != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
-	tt.Frame()
-	if len(a.reviews.Earlier()) != 1 || a.reviews.Earlier()[0].MovedTo != sha || !a.rev.Empty() || !tt.HasText("Earlier reviews") {
-		t.Fatalf("archived %v, want moved to %q; texts %q", a.reviews.Earlier(), sha, tt.Texts())
-	}
+	waitText(t, a, tt, "now commit "+shortSHA(sha))
 
 	if err := tt.Click("s"); err != nil {
 		t.Fatal(err)
@@ -329,18 +316,17 @@ func TestReviewFollowsCommit(t *testing.T) {
 	if err := tt.Click("Open commit"); err != nil {
 		t.Fatal(err)
 	}
-	pump(t, a, "the commit", func() bool { return !a.loading && !a.switching })
-	if a.scope.Commit != sha || a.rev.Overview == nil || a.rev.Overview.PatchID != rev.Overview.PatchID || a.stale() {
-		t.Fatalf("scope %+v, review %+v, stale %v", a.scope, a.rev.Overview, a.stale())
+	waitText(t, a, tt, "Moved here from earlier uncommitted changes, which had the same changes.")
+	if !tt.HasText(shortSHA(sha)+" Agent work") || tt.HasText("This overview was written for") {
+		t.Errorf("the commit does not show the review as current: %q", tt.Texts())
 	}
-	tt.Frame()
-	if !tt.HasText("Moved here from earlier uncommitted changes, which had the same changes.") {
-		t.Errorf("texts %q", tt.Texts())
+
+	if err := tt.Click("Uncommitted changes"); err != nil {
+		t.Fatal(err)
 	}
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	pump(t, a, "the uncommitted changes", func() bool { return !a.loading && !a.switching })
-	if !a.rev.Empty() || len(a.reviews.Earlier()) != 0 {
-		t.Errorf("the uncommitted scope kept the review: %+v, archived %+v", a.rev, a.reviews.Earlier())
+	waitText(t, a, tt, "There is nothing to review in uncommitted changes.")
+	if tt.HasText("Earlier reviews") {
+		t.Errorf("the uncommitted changes still list the review: %q", tt.Texts())
 	}
 }
 
@@ -359,19 +345,11 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	write(t, dir, "extra.go", "package extra\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "Agent work and more")
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sha := strings.TrimSpace(string(out))
+	sha := headSHA(t, dir)
 	a.refresh()
-	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
-	pump(t, a, "the commit lookup", func() bool { return len(a.reviews.Earlier()) == 1 && a.reviews.Earlier()[0].Probably != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
-	tt.Frame()
-	if len(a.reviews.Earlier()) != 1 || a.reviews.Earlier()[0].MovedTo != "" || a.reviews.Earlier()[0].Probably != sha {
-		t.Fatalf("archived %v, want probably in %q", a.reviews.Earlier(), sha)
-	}
+	waitText(t, a, tt, "probably in commit "+shortSHA(sha))
+
 	if err := tt.Click("s"); err != nil {
 		t.Fatal(err)
 	}
@@ -379,13 +357,9 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	if err := tt.Click("Move review to the commit"); err != nil {
 		t.Fatal(err)
 	}
-	pump(t, a, "the commit", func() bool { return !a.loading && !a.switching })
-	if a.scope.Commit != sha || a.rev.Overview == nil || !a.stale() {
-		t.Fatalf("scope %+v, review %+v, stale %v", a.scope, a.rev.Overview, a.stale())
-	}
-	tt.Frame()
-	if !tt.HasText("This overview was written for 2 files. Since then, 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
-		t.Errorf("texts %q", tt.Texts())
+	waitText(t, a, tt, "This overview was written for 2 files. Since then, 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.")
+	if !tt.HasText(shortSHA(sha) + " Agent work and more") {
+		t.Errorf("the commit is not open: %q", tt.Texts())
 	}
 }
 
@@ -401,17 +375,13 @@ func TestArchiveUncommitted(t *testing.T) {
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
-	if len(a.rev.Overview.Files) != 2 {
-		t.Fatalf("overview files = %v", a.rev.Overview.Files)
-	}
-	reload := func(what string) *ui.Tester {
+	tt := ui.NewTester(a.view, 1300, 800)
+	reload := func(what string) {
 		t.Helper()
 		a.refresh()
 		pump(t, a, what, func() bool { return !a.loading && !a.switching })
 		drain(a)
-		tt := ui.NewTester(a.view, 1300, 800)
 		tt.Frame()
-		return tt
 	}
 
 	git(t, dir, "stash", "-u", "-q")
@@ -419,14 +389,14 @@ func TestArchiveUncommitted(t *testing.T) {
 	fake.hold()
 	a.generateOverview()
 	reload("the busy reload")
-	if a.rev.Overview == nil {
+	if tt.HasText("Earlier reviews") {
 		t.Fatal("archived a review an agent writes into")
 	}
 	a.stopOverview()
 	pump(t, a, "the stopped overview", func() bool { return !a.runsOf(a.rev)[0].running })
-	tt := reload("the other changes")
-	if !a.rev.Empty() || len(a.reviews.Earlier()) != 1 || !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") {
-		t.Fatalf("review %+v, archived %v; texts %q", a.rev, a.reviews.Earlier(), tt.Texts())
+	reload("the other changes")
+	if !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") || !tt.HasText("Get a walkthrough of these changes") {
+		t.Fatalf("texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "archived")
 
@@ -434,25 +404,28 @@ func TestArchiveUncommitted(t *testing.T) {
 		t.Fatal(err)
 	}
 	git(t, dir, "stash", "pop", "-q")
-	tt = reload("the changes back")
-	if a.rev.Overview == nil || a.stale() || len(a.reviews.Earlier()) != 0 || !tt.HasText("Moved here from earlier uncommitted changes") {
-		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
+	reload("the changes back")
+	if !tt.HasText("Moved here from earlier uncommitted changes") || tt.HasText("Earlier reviews") || tt.HasText("This overview was written for") {
+		t.Fatalf("texts %q", tt.Texts())
 	}
 
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	reload("the other changes again")
-	if len(a.reviews.Earlier()) != 1 {
-		t.Fatalf("not archived: %d", len(a.reviews.Earlier()))
+	if err := tt.Click("Lower-case keys."); err != nil {
+		t.Fatal(err)
 	}
-	a.restoreArchived(a.reviews.Earlier()[0])
-	tt = reload("the restored review")
-	if a.rev.Overview == nil || len(a.reviews.Earlier()) != 0 || !a.stale() || !tt.HasText("This overview was written for 2 files. Since then, 2 are no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
-		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
+	tt.Frame()
+	if err := tt.Click("Restore"); err != nil {
+		t.Fatal(err)
+	}
+	reload("the restored review")
+	if tt.HasText("Earlier reviews") || !tt.HasText("This overview was written for 2 files. Since then, 2 are no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
+		t.Fatalf("texts %q", tt.Texts())
 	}
 
 	write(t, dir, "cache/cache.go", "package cache\n")
-	tt = reload("a file of the review")
+	reload("a file of the review")
 	if !tt.HasText("This overview was written for 2 files. Since then, 1 changed, 1 is no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
 		t.Errorf("texts %q", tt.Texts())
 	}
@@ -1084,6 +1057,25 @@ func TestRefreshListsNewCommits(t *testing.T) {
 	if len(a.commits) != before+1 || a.commits[0].Subject != "Commit the work" {
 		t.Fatalf("commits after refresh = %+v", a.commits)
 	}
+}
+
+// waitText pumps the app until the window shows a text containing text.
+func waitText(t *testing.T, a *app, tt *ui.Tester, text string) {
+	t.Helper()
+	pump(t, a, fmt.Sprintf("the text %q", text), func() bool {
+		tt.Frame()
+		return tt.HasText(text)
+	})
+}
+
+// headSHA is the commit that HEAD names in the repository at dir.
+func headSHA(t *testing.T, dir string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // pump runs the app's queued updates on the test goroutine until ok.
@@ -2765,11 +2757,6 @@ func TestEarlierReviewPage(t *testing.T) {
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
-	code := a.rev.Overview.Walk.Steps[0].Refs[0].Code
-	if len(code) != 3 || code[1].Text != "\treturn strings.ToLower(key)" || !code[1].Changed || code[0].Changed {
-		t.Fatalf("saved code %+v", code)
-	}
-
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	a.refresh()
@@ -2779,7 +2766,7 @@ func TestEarlierReviewPage(t *testing.T) {
 	pump(t, a, "the second overview", func() bool { return a.overviewRunning() == nil })
 	tt := ui.NewTester(a.view, 1300, 900)
 	tt.Frame()
-	if len(a.reviews.Earlier()) != 1 || !tt.HasText("Other change.") || !tt.HasText("Earlier reviews") {
+	if !tt.HasText("Other change.") || !tt.HasText("Earlier reviews") {
 		t.Fatalf("archived %v; texts %q", a.reviews.Earlier(), tt.Texts())
 	}
 
@@ -2798,21 +2785,19 @@ func TestEarlierReviewPage(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "earlier-review")
-	if a.page != "archived:"+a.reviews.Earlier()[0].ID() || !tt.HasText("    return strings.ToLower(key)") {
-		t.Fatalf("page %q; texts %q", a.page, tt.Texts())
+	if !tt.HasText("    return strings.ToLower(key)") {
+		t.Fatalf("the page lacks the saved code: %q", tt.Texts())
 	}
-	if a.applies(a.cmd("restore-archived"), a.reviews.Earlier()[0].ID()) {
+	if _, ok := tt.Find("Restore"); ok {
 		t.Error("restore offered over the review of the current changes")
 	}
 
-	a.goBack()
-	tt.Frame()
 	if err := tt.Click("Delete"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if len(a.reviews.Earlier()) != 0 || a.page != "overview" || len(a.store.Archived(dir)) != 0 {
-		t.Errorf("after delete: archived %v, page %q", a.reviews.Earlier(), a.page)
+	if tt.HasText("Earlier reviews") || !tt.HasText("Other change.") {
+		t.Errorf("after delete: texts %q", tt.Texts())
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -461,12 +463,15 @@ func TestMoveTo(t *testing.T) {
 			rs.Decide(rs.Read(repo, uncommitted, BeforeLoad(cur), same, nil), cur, func(*review.Review) bool { return false })
 			busy := func(r *review.Review) bool { return tc.busy && r == open }
 
-			moved, err := rs.MoveTo(repo, rs.Find("pb"), commit, busy)
-			if err != nil {
-				t.Fatal(err)
+			next := rs.MoveTo(repo, rs.Find("pb"), commit, busy)
+			if next.Err != nil {
+				t.Fatal(next.Err)
 			}
-			if moved != tc.moved {
-				t.Fatalf("moved = %v, want %v", moved, tc.moved)
+			if next.Left != tc.moved || next.Rev != nil {
+				t.Fatalf("left = %v, review %q, want left %v and the review of the scope kept", next.Left, label(next.Rev), tc.moved)
+			}
+			if next.Open == nil || *next.Open != commit {
+				t.Errorf("opens %v, want the commit", next.Open)
 			}
 			if got := label(s.LoadReview(repo, commit)) == "earlier"; got != tc.moved {
 				t.Errorf("the commit holds the earlier review: %v", got)
@@ -476,6 +481,108 @@ func TestMoveTo(t *testing.T) {
 			}
 			if open != nil && rs.Obsolete(open) != tc.moved {
 				t.Errorf("the open review is obsolete: %v", rs.Obsolete(open))
+			}
+		})
+	}
+}
+
+// TestRestore brings an earlier review back to the empty review of the
+// uncommitted changes, and refuses while that review is not empty or an
+// agent writes into the earlier review.
+func TestRestore(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		notEmpty bool
+		busy     bool
+		gone     bool
+		restored bool
+	}{
+		{name: "restores into the empty review and opens it", restored: true},
+		{name: "refuses while the uncommitted changes have a review", notEmpty: true},
+		{name: "refuses while an agent writes into the earlier review", busy: true},
+		{name: "fails when the earlier review is gone from the store", gone: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := store.Store{Dir: t.TempDir()}
+			if err := s.SaveReview(saved(archived, "earlier", "pb", nil)); err != nil {
+				t.Fatal(err)
+			}
+			rs := New(s)
+			open := rs.Of(repo, archived)
+			cur := rs.Of(repo, uncommitted)
+			rs.Decide(rs.Read(repo, uncommitted, BeforeLoad(cur), same, nil), cur, func(*review.Review) bool { return false })
+			if tc.notEmpty {
+				cur.Overview = &review.Overview{Markdown: "own"}
+			}
+			busy := func(r *review.Review) bool { return tc.busy && r == open }
+			if tc.gone {
+				removeReview(t, s, archived)
+			}
+
+			next := rs.Restore(rs.Find("pb"), cur, busy)
+
+			if next.Left != tc.restored || (next.Err != nil) == tc.restored {
+				t.Fatalf("left = %v, err = %v, want restored %v", next.Left, next.Err, tc.restored)
+			}
+			if !tc.restored {
+				if next.Rev != nil || next.Open != nil || rs.Find("pb") == nil || !s.LoadReview(repo, uncommitted).Empty() ||
+					!tc.gone && label(s.LoadReview(repo, archived)) != "earlier" {
+					t.Errorf("a refused restore changed something: %+v", next)
+				}
+				return
+			}
+			if label(next.Rev) != "earlier" || !next.Rev.Kept || rs.Find("pb") != nil {
+				t.Errorf("review %q, kept %v, still listed %v", label(next.Rev), next.Rev.Kept, rs.Find("pb") != nil)
+			}
+			if next.Open == nil || *next.Open != uncommitted {
+				t.Errorf("opens %v, want the uncommitted changes", next.Open)
+			}
+			if got := s.LoadReview(repo, uncommitted); label(got) != "earlier" || !got.Kept {
+				t.Errorf("saved review %q, kept %v", label(got), got.Kept)
+			}
+		})
+	}
+}
+
+// TestDelete deletes an earlier review from the store and the list, and
+// keeps it on the list when the store cannot delete it.
+func TestDelete(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		broken  bool
+		deleted bool
+	}{
+		{name: "deletes the earlier review", deleted: true},
+		{name: "keeps the earlier review when the store fails", broken: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := store.Store{Dir: t.TempDir()}
+			if err := s.SaveReview(saved(archived, "earlier", "pb", nil)); err != nil {
+				t.Fatal(err)
+			}
+			rs := New(s)
+			cur := rs.Of(repo, uncommitted)
+			rs.Decide(rs.Read(repo, uncommitted, BeforeLoad(cur), same, nil), cur, func(*review.Review) bool { return false })
+			if tc.broken {
+				// A file in place of the store directory makes every
+				// delete fail.
+				file := filepath.Join(t.TempDir(), "file")
+				if err := os.WriteFile(file, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				rs.store = store.Store{Dir: file}
+			}
+
+			next := rs.Delete(repo, rs.Find("pb"))
+
+			if next.Left != tc.deleted || (next.Err != nil) == tc.deleted || next.Open != nil || next.Rev != nil {
+				t.Fatalf("left = %v, err = %v, open %v, want deleted %v", next.Left, next.Err, next.Open, tc.deleted)
+			}
+			if got := rs.Find("pb") == nil; got != tc.deleted {
+				t.Errorf("left the list: %v", got)
+			}
+			if got := s.LoadReview(repo, archived).Empty(); got != tc.deleted {
+				t.Errorf("gone from the store: %v", got)
 			}
 		})
 	}

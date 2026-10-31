@@ -788,19 +788,7 @@ func (a *app) dropEarlier(e *continuity.Earlier) {
 // restoreArchived brings an archived review back to the uncommitted
 // scope, which keeps it from then on.
 func (a *app) restoreArchived(e *continuity.Earlier) {
-	if !a.rev.Empty() {
-		return
-	}
-	out := a.reviews.Restore(e, a.rev, a.reviewBusy)
-	if out.Rev == a.rev {
-		if out.Err != nil {
-			a.showError("Could not restore the review", out.Err)
-		}
-		return
-	}
-	a.settle(out)
-	a.dropEarlier(e)
-	a.openPage("overview")
+	a.showNext(e, a.reviews.Restore(e, a.rev, a.reviewBusy), "Could not restore the review")
 }
 
 // moveArchived moves an archived review to the commit that probably
@@ -808,23 +796,34 @@ func (a *app) restoreArchived(e *continuity.Earlier) {
 // opens the commit.
 func (a *app) moveArchived(e *continuity.Earlier) {
 	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: e.Probably}
-	moved, err := a.reviews.MoveTo(a.repo.Root, e, to, a.reviewBusy)
-	if err != nil {
-		a.showError("Could not move the review", err)
-		return
-	}
-	if moved {
-		a.dropEarlier(e)
-	}
-	a.setScope(to)
+	a.showNext(e, a.reviews.MoveTo(a.repo.Root, e, to, a.reviewBusy), "Could not move the review")
 }
 
 func (a *app) deleteArchived(e *continuity.Earlier) {
-	if err := a.reviews.Delete(a.repo.Root, e); err != nil {
-		a.showError("Could not delete the review", err)
+	a.showNext(e, a.reviews.Delete(a.repo.Root, e), "Could not delete the review")
+}
+
+// showNext shows what an action on the archived review e did. When the
+// action replaced the review of the scope, its error goes to the notice
+// with the other save errors. Any other error goes to a dialog that says
+// failed.
+func (a *app) showNext(e *continuity.Earlier, next continuity.Next, failed string) {
+	if next.Rev != nil {
+		a.settle(next.Outcome)
+	} else if next.Err != nil {
+		a.showError(failed, next.Err)
+	}
+	if next.Left {
+		a.dropEarlier(e)
+	}
+	if next.Open == nil {
 		return
 	}
-	a.dropEarlier(e)
+	if *next.Open == a.scope {
+		a.openPage("overview")
+	} else {
+		a.setScope(*next.Open)
+	}
 }
 
 // stale reports whether the overview was written for other changes than
