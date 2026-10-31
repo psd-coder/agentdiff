@@ -413,7 +413,7 @@ func (a *app) threadCard(c *ui.Context, th *review.Thread) {
 				first = th.Messages[0].Text
 			}
 			ui.Text(c, excerpt(first, 160)).MaxLines(1)
-			ui.Text(c, threadMeta(th)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			ui.Text(c, a.threadMeta(th)).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 	})
 	if card.Clicked() {
@@ -421,7 +421,7 @@ func (a *app) threadCard(c *ui.Context, th *review.Thread) {
 	}
 }
 
-func threadMeta(th *review.Thread) string {
+func (a *app) threadMeta(th *review.Thread) string {
 	var parts []string
 	if th.Anchor.Kind == review.AnchorLines {
 		parts = append(parts, th.Anchor.Label())
@@ -433,7 +433,7 @@ func threadMeta(th *review.Thread) string {
 		}
 	}
 	switch {
-	case th.Busy():
+	case a.threadBusy(th.ID):
 		parts = append(parts, "agent is answering…")
 	case replies > 0:
 		parts = append(parts, fmt.Sprintf("%d agent replies", replies))

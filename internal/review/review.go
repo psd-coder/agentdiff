@@ -67,10 +67,6 @@ type Thread struct {
 	Created   time.Time      `json:"created"`
 }
 
-func (t *Thread) Busy() bool {
-	return len(t.Messages) > 0 && t.Messages[len(t.Messages)-1].Pending
-}
-
 func (t *Thread) Discussed() bool {
 	for _, m := range t.Messages {
 		if m.Role == RoleAgent {

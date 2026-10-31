@@ -272,7 +272,7 @@ func (a *app) sectionThreads(c *ui.Context, title, body string) {
 	threads := a.rev.ThreadsOnSection(title)
 	for _, th := range threads {
 		label := "Thread"
-		if th.Busy() {
+		if a.threadBusy(th.ID) {
 			label = "Answering…"
 		} else if len(th.Messages) > 0 {
 			label = excerpt(th.Messages[0].Text, 24)

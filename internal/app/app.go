@@ -1019,7 +1019,7 @@ func (a *app) reviewBusy(rev *review.Review) bool {
 		}
 	}
 	for _, t := range rev.Threads {
-		if a.threadRun[t.ID] != nil {
+		if a.threadBusy(t.ID) {
 			return true
 		}
 	}

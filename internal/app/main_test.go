@@ -588,6 +588,85 @@ func TestStartOverDuringRuns(t *testing.T) {
 	}
 }
 
+// TestThreadAsksOnceWhileAnswering comments in a thread while the agent
+// answers it. The thread cannot ask again until the answer ends, and Stop
+// still stops the answer.
+func TestThreadAsksOnceWhileAnswering(t *testing.T) {
+	a := newTestApp(t)
+	a.queue = make(chan func(), 64)
+	hang := filepath.Join(t.TempDir(), "claude")
+	write(t, filepath.Dir(hang), "claude", "#!/bin/sh\ncat > /dev/null\nexec sleep 30\n")
+	if err := os.Chmod(hang, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: hang}
+	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	a.openThread(th.ID)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	tt.Type("Why?")
+	tt.Key(ui.Cmd, ui.KeyEnter)
+	tt.Frame()
+	if n := len(a.runs[a.rev]); n != 1 {
+		t.Fatalf("runs after the first question = %d", n)
+	}
+
+	tt.Type("Keep it short.")
+	if err := tt.Click("Comment"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	hint, ok := tt.Find("Cmd+Enter asks the agent")
+	if !ok {
+		t.Fatal("the composer is not open")
+	}
+	// The text area sits right above the hint, and Comment took its focus.
+	tt.ClickAt(hint.X+20, hint.Y-30)
+	tt.Type("And the tests?")
+	tt.Key(ui.Cmd, ui.KeyEnter)
+	tt.Frame()
+	if err := tt.Click("Ask agent"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if n := len(a.runs[a.rev]); n != 1 {
+		t.Fatalf("runs after asking again = %d", n)
+	}
+	if d := a.drafts[th.ID]; !strings.Contains(d, "And the tests?") {
+		t.Errorf("draft after asking again = %q", d)
+	}
+	if !a.reviewBusy(a.rev) {
+		t.Error("the review is not busy while the thread runs")
+	}
+
+	if !a.applies(a.cmd("stop-thread"), th.ID) {
+		t.Error("stop-thread does not apply after the comment")
+	}
+	if err := tt.Click("Stop"); err != nil {
+		t.Fatal(err)
+	}
+	pump(t, a, "the stopped answer", func() bool { return !a.threadBusy(th.ID) })
+	if a.applies(a.cmd("stop-thread"), th.ID) {
+		t.Error("stop-thread applies after the answer ended")
+	}
+	want := []review.Message{
+		{Role: review.RoleUser, Text: "Why?"},
+		{Role: review.RoleAgent, Err: "Stopped"},
+		{Role: review.RoleUser, Text: "Keep it short."},
+	}
+	saved := a.store.LoadReview(a.repo.Root, a.scope).Thread(th.ID)
+	for name, got := range map[string]*review.Thread{"shown": th, "saved": saved} {
+		if got == nil || len(got.Messages) != len(want) {
+			t.Fatalf("%s messages = %+v", name, got)
+		}
+		for i, m := range got.Messages {
+			if m.Role != want[i].Role || m.Text != want[i].Text || m.Err != want[i].Err {
+				t.Errorf("%s message %d = %+v, want %+v", name, i, m, want[i])
+			}
+		}
+	}
+}
+
 // TestDeleteWalkStopsItsRuns deletes a walk: the runs of the walk and the
 // walks under it stop, and the runs of other walks go on.
 func TestDeleteWalkStopsItsRuns(t *testing.T) {
