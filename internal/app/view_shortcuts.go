@@ -52,7 +52,7 @@ func (a *app) moreShortcuts() []shortcut {
 	inMenu := a.menuIDs()
 	var out []shortcut
 	for _, cm := range a.cachedCommands() {
-		if keys := a.keysOf(cm); keys != "" && !inMenu[cm.id] {
+		if keys := a.keymap().of(cm.id); keys != "" && !inMenu[cm.id] {
 			out = append(out, shortcut{keyLabel(keys), strings.TrimSuffix(cm.title, "…")})
 		}
 	}

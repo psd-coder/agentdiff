@@ -17,17 +17,18 @@ func (a *app) startRecording(id string) {
 func (a *app) recordKeys(keys string) {
 	cm := a.cmd(a.recording)
 	a.recording = ""
-	if sameKeys(keys, a.keysOf(cm)) {
+	switch as := a.keymap().assign(cm.id, keys); as.kind {
+	case assignUnchanged:
 		return
-	}
-	if use := a.keysTaken(keys); use != "" {
-		a.keysNote = keyLabel(keys) + " is taken by " + use + ", which you cannot change."
+	case assignTaken:
+		a.keysNote = keyLabel(keys) + " is taken by " + as.other + ", which you cannot change."
 		return
+	case assignMoved:
+		a.keysNote = keyLabel(keys) + " moved from " + a.cmd(as.other).title + " to " + cm.title + "."
+	default:
+		a.keysNote = ""
 	}
-	a.keysNote = ""
-	if from := a.setKeys(cm.id, keys); from != nil {
-		a.keysNote = keyLabel(keys) + " moved from " + from.title + " to " + cm.title + "."
-	}
+	a.keysChanged()
 }
 
 // keyInput records a key pressed with Command or Control. Escape cancels,
@@ -57,7 +58,7 @@ func (a *app) shortcutsTab(c *ui.Context) {
 	q := strings.ToLower(strings.TrimSpace(a.keysFilter))
 	var cmds []*command
 	for _, cm := range a.cachedCommands() {
-		if strings.Contains(strings.ToLower(cm.title), q) || q != "" && strings.Contains(strings.ToLower(keyLabel(a.keysOf(cm))), q) {
+		if strings.Contains(strings.ToLower(cm.title), q) || q != "" && strings.Contains(strings.ToLower(keyLabel(a.keymap().of(cm.id))), q) {
 			cmds = append(cmds, cm)
 		}
 	}
@@ -77,7 +78,8 @@ func (a *app) shortcutsTab(c *ui.Context) {
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, a.keysNote).FontSize(12).TextColor(t.TextMuted).Grow(1).Shrink(1)
 		ui.Button(c, "Reset all shortcuts").Disabled(len(a.cfg.Keys) == 0).OnClick(func() {
-			a.resetKeys()
+			a.keymap().reset()
+			a.keysChanged()
 			a.keysNote = ""
 		})
 	})
@@ -85,8 +87,8 @@ func (a *app) shortcutsTab(c *ui.Context) {
 
 func (a *app) shortcutRow(c *ui.Context, cm *command) {
 	t := c.Theme()
-	keys := a.keysOf(cm)
-	_, changed := a.cfg.Keys[cm.id]
+	keys := a.keymap().of(cm.id)
+	changed := a.keymap().changed(cm.id)
 	ui.Row(c).Gap(8).Padding(2, 0).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, strings.TrimSuffix(cm.title, "…")).Grow(1).Shrink(1).SingleLine()
 		if a.recording == cm.id {
@@ -128,14 +130,16 @@ func (a *app) shortcutRow(c *ui.Context, cm *command) {
 		if keys == "" {
 			remove.Invisible()
 		} else if remove.Clicked() {
-			a.setKeys(cm.id, "")
+			a.keymap().assign(cm.id, "")
+			a.keysChanged()
 			a.keysNote = ""
 		}
 		reset := ui.Button(c, "Reset").Label("Reset the shortcut of " + cm.title).Tooltip("Back to " + defaultKeysLabel(cm))
 		if !changed {
 			reset.Invisible()
 		} else if reset.Clicked() {
-			a.resetKeys(cm.id)
+			a.keymap().reset(cm.id)
+			a.keysChanged()
 			a.keysNote = ""
 		}
 	})

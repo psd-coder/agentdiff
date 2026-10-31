@@ -83,7 +83,7 @@ func (a *app) paletteModal(c *ui.Context) {
 		ui.Scroll(c).MaxHeight(360).Children(func() {
 			_, rows = nav.list(c, "Commands", func(addRow pickRow) {
 				for _, cm := range cmds {
-					keys := a.keysOf(cm)
+					keys := a.keymap().of(cm.id)
 					row := addRow(c.Key(cm.id), func() {
 						ui.Text(c, cm.title).SingleLine().Shrink(1).Grow(1)
 						if keys != "" {

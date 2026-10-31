@@ -128,6 +128,7 @@ type app struct {
 	cmds         map[string]*command
 	inMenu       map[string]bool
 	menuDirty    bool
+	km           *keymap
 	pending      string // the command the menu bar queued
 	paletteOpen  bool
 	paletteQuery string

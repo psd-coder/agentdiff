@@ -1,6 +1,7 @@
 package app
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -99,13 +100,6 @@ func parseAccelerator(acc string) (ui.Modifiers, ui.Key, bool) {
 	return 0, 0, false
 }
 
-// sameKeys tells whether two accelerators name the same keys.
-func sameKeys(x, y string) bool {
-	mx, kx, okx := parseAccelerator(x)
-	my, ky, oky := parseAccelerator(y)
-	return okx && oky && mx == my && kx == ky
-}
-
 // keyLabel writes an accelerator the way the menus of macOS show it: ⇧⌘B.
 func keyLabel(acc string) string {
 	mods, key, ok := parseAccelerator(acc)
@@ -137,83 +131,44 @@ var fixedKeys = map[string]string{
 	"CmdOrCtrl+Backspace": "removing a project from the list",
 }
 
-// keysOf are the command's keys: the user's, or the app's default.
-func (a *app) keysOf(cm *command) string {
-	if keys, ok := a.cfg.Keys[cm.id]; ok {
-		return keys
+// keymap is the shortcuts of the commands, built from the config once.
+// The keys of the standard items of the menu bar, as Copy, and the fixed
+// keys are reserved. Of two commands with the same keys in the config,
+// the one higher in the menu bar keeps them. The config keeps the
+// keymap's overrides from then on.
+func (a *app) keymap() *keymap {
+	if a.km != nil {
+		return a.km
 	}
-	return cm.keys
-}
-
-// keysTaken names what already uses the keys: a standard item of the menu
-// bar, as Copy, or a key of the app's fields. Empty when it is free.
-func (a *app) keysTaken(keys string) string {
-	var walk func(items []*mygo.MenuItem) string
-	walk = func(items []*mygo.MenuItem) string {
+	reserved := maps.Clone(fixedKeys)
+	var order []*command
+	var walk func(items []*mygo.MenuItem)
+	walk = func(items []*mygo.MenuItem) {
 		for _, it := range items {
-			if it.Role != "" && it.Accelerator != "" && sameKeys(it.Accelerator, keys) {
-				return it.Label
+			if it.Role != "" && it.Accelerator != "" {
+				reserved[it.Accelerator] = it.Label
 			}
-			if name := walk(it.Submenu); name != "" {
-				return name
+			if it.ID != "" {
+				order = append(order, a.cmd(it.ID))
 			}
-		}
-		return ""
-	}
-	if name := walk(a.menu().Items()); name != "" {
-		return name
-	}
-	for k, use := range fixedKeys {
-		if sameKeys(k, keys) {
-			return use
+			walk(it.Submenu)
 		}
 	}
-	return ""
-}
-
-// setKeys gives the command the keys, "" for none. A command that had
-// the same keys loses them, and setKeys returns it.
-func (a *app) setKeys(id, keys string) (from *command) {
-	if a.cfg.Keys == nil {
-		a.cfg.Keys = map[string]string{}
-	}
-	if keys != "" {
-		for _, other := range a.cachedCommands() {
-			if other.id != id && sameKeys(a.keysOf(other), keys) {
-				a.cfg.Keys[other.id] = ""
-				from = other
-			}
+	walk(a.menuBar(func(string) string { return "" }).Items())
+	for _, cm := range a.cachedCommands() {
+		if !slices.Contains(order, cm) {
+			order = append(order, cm)
 		}
 	}
-	if keys == a.cmd(id).keys {
-		delete(a.cfg.Keys, id)
-	} else {
-		a.cfg.Keys[id] = keys
-	}
-	a.keysChanged()
-	return from
-}
-
-// resetKeys gives the commands their default keys back, every command
-// for none. A command that took one of them loses it.
-func (a *app) resetKeys(ids ...string) {
-	if len(ids) == 0 {
-		a.cfg.Keys = nil
-		a.keysChanged()
-		return
-	}
-	for _, id := range ids {
-		delete(a.cfg.Keys, id)
-		if keys := a.cmd(id).keys; keys != "" {
-			a.setKeys(id, keys)
-		}
-	}
-	a.keysChanged()
+	a.km = newKeymap(order, reserved, a.cfg.Keys)
+	a.cfg.Keys = a.km.overrides()
+	return a.km
 }
 
 // keysChanged saves the keys, and has the next frame put them in the
 // menu bar: a change can come from a click on the menu bar itself.
 func (a *app) keysChanged() {
+	a.cfg.Keys = a.keymap().overrides()
 	a.saveConfig()
 	a.menuDirty = true
 	if a.win != nil {
@@ -237,7 +192,7 @@ func (a *app) commandKeys(c *ui.Context) {
 	}
 	inMenu := a.menuIDs()
 	for _, cm := range a.cachedCommands() {
-		keys := a.keysOf(cm)
+		keys := a.keymap().of(cm.id)
 		if keys == "" || inMenu[cm.id] {
 			continue
 		}

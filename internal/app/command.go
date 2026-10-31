@@ -298,7 +298,7 @@ func (a *app) queueCommand(id string) {
 	if a.recording != "" {
 		// The menu bar takes its keys before the window sees them: they
 		// are the keys being recorded.
-		a.recordKeys(a.keysOf(a.cmd(id)))
+		a.recordKeys(a.keymap().of(id))
 		return
 	}
 	a.pending = id
@@ -318,7 +318,7 @@ func (a *app) runQueued(c *ui.Context) {
 // tooltip is the tooltip of the command's button: what it does and its
 // keys.
 func (a *app) tooltip(cm *command) string {
-	keys := a.keysOf(cm)
+	keys := a.keymap().of(cm.id)
 	switch {
 	case keys != "" && cm.tip != "":
 		return cm.tip + " (" + keyLabel(keys) + ")"

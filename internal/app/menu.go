@@ -9,10 +9,13 @@ import (
 
 // menu is the menu bar. Its shortcuts work wherever the keyboard focus
 // is, and the menus show them.
-func (a *app) menu() *mygo.Menu {
+func (a *app) menu() *mygo.Menu { return a.menuBar(a.keymap().of) }
+
+// menuBar is the menu bar with the keys of each command from keys.
+func (a *app) menuBar(keys func(id string) string) *mygo.Menu {
 	item := func(id string) *mygo.MenuItem {
 		cm := a.cmd(id)
-		return &mygo.MenuItem{ID: id, Label: cm.title, Accelerator: a.keysOf(cm), Click: func(*mygo.MenuItem, *mygo.Window) { a.queueCommand(id) }}
+		return &mygo.MenuItem{ID: id, Label: cm.title, Accelerator: keys(id), Click: func(*mygo.MenuItem, *mygo.Window) { a.queueCommand(id) }}
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
