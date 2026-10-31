@@ -587,3 +587,29 @@ func TestThreadExchangeResults(t *testing.T) {
 		})
 	}
 }
+
+func TestExchangeTargetAndKind(t *testing.T) {
+	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	w := r.AddWalk("", -1, "Why?")
+	th := r.AddThread(Anchor{Kind: AnchorGeneral})
+	cfg := agent.Config{Provider: agent.Claude}
+	tests := []struct {
+		name   string
+		ex     *Exchange
+		target string
+		kind   Kind
+	}{
+		{"overview", OverviewExchange(r, testChanges, cfg, ""), "overview", KindOverview},
+		{"deeper", DeeperExchange(r, w, cfg, ""), w.ID, KindWalk},
+		{"follow-up", FollowupExchange(r, w, cfg, "", "And?"), w.ID, KindWalk},
+		{"thread", ThreadExchange(r, th, cfg, "", "Why?"), th.ID, KindThread},
+	}
+	for _, tc := range tests {
+		if got := tc.ex.Target(); got != tc.target {
+			t.Errorf("%s: target %q, want %q", tc.name, got, tc.target)
+		}
+		if got := tc.ex.Kind(); got != tc.kind {
+			t.Errorf("%s: kind %v, want %v", tc.name, got, tc.kind)
+		}
+	}
+}
