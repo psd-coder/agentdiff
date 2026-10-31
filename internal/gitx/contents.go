@@ -116,12 +116,12 @@ func (r *Repo) objectInfo(ctx context.Context, spec string) (oid, kind string, s
 
 // worktreeFile reads the file through an os.Root, so a symlinked directory
 // in the path cannot lead outside the repository.
-func (r *Repo) worktreeFile(ctx context.Context, path string) (string, error) {
+func (r *Repo) worktreeFile(ctx context.Context, path string) (content string, err error) {
 	root, err := os.OpenRoot(r.Root)
 	if err != nil {
 		return "", err
 	}
-	defer root.Close()
+	defer func() { err = errors.Join(err, root.Close()) }()
 	name := filepath.FromSlash(path)
 	info, err := root.Lstat(name)
 	if err != nil {
@@ -143,7 +143,7 @@ func (r *Repo) worktreeFile(ctx context.Context, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { err = errors.Join(err, file.Close()) }()
 	data, err := io.ReadAll(io.LimitReader(file, maxContentSize+1))
 	if err != nil {
 		return "", err
@@ -199,7 +199,7 @@ func (r *Repo) NewContentReader(ctx context.Context, s Scope) (*ContentReader, e
 	}
 	stdout, err := c.cmd.StdoutPipe()
 	if err != nil {
-		c.stdin.Close()
+		err = errors.Join(err, c.stdin.Close())
 		stop()
 		return nil, err
 	}
@@ -211,8 +211,7 @@ func (r *Repo) NewContentReader(ctx context.Context, s Scope) (*ContentReader, e
 	// A git older than 2.36 has no --batch-command and exits at once.
 	// The first request finds that, so the caller can use Contents instead.
 	if _, _, _, err := c.info(v.from); err != nil {
-		c.Close()
-		return nil, err
+		return nil, errors.Join(err, c.Close())
 	}
 	return c, nil
 }
@@ -231,7 +230,7 @@ func (c *ContentReader) Close() error {
 		return nil
 	}
 	c.err = errReaderClosed
-	c.stdin.Close()
+	stdinErr := c.stdin.Close()
 	err := c.cmd.Wait()
 	c.stop()
 	if err != nil {
@@ -240,7 +239,7 @@ func (c *ContentReader) Close() error {
 		}
 		return &Error{Args: catFileArgs, Stderr: strings.TrimSpace(c.stderr.String()), Err: err}
 	}
-	return nil
+	return stdinErr
 }
 
 func (c *ContentReader) blob(rev, path string) (string, error) {
@@ -329,13 +328,14 @@ func (c *ContentReader) fail(err error) error {
 	if c.err != nil {
 		return c.err
 	}
-	c.stdin.Close()
+	stdinErr := c.stdin.Close()
 	c.stop()
-	c.cmd.Wait()
+	// The process was just killed, so Wait only reports the kill.
+	_ = c.cmd.Wait()
 	if cerr := c.ctx.Err(); cerr != nil {
 		c.err = cerr
 	} else {
-		c.err = &Error{Args: catFileArgs, Stderr: strings.TrimSpace(c.stderr.String()), Err: err}
+		c.err = &Error{Args: catFileArgs, Stderr: strings.TrimSpace(c.stderr.String()), Err: errors.Join(err, stdinErr)}
 	}
 	return c.err
 }

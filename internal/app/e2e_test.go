@@ -131,6 +131,7 @@ func runAgent(t *testing.T, ctx context.Context, cfg agent.Config, req agent.Req
 			final = ev.Text
 		case agent.EventError:
 			t.Fatalf("agent: %v", ev.Err)
+		case agent.EventText:
 		}
 	}
 	return final, session

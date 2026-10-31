@@ -42,14 +42,14 @@ func (a *app) filePage(c *ui.Context, file string) {
 	}
 }
 
-func (a *app) groupPage(c *ui.Context, i int) {
+func (a *app) groupPage(c *ui.Context, gi string) {
 	t := c.Theme()
-	groups := a.groups()
-	if i < 0 || i >= len(groups) {
+	i, ok := a.groupIndex(gi)
+	if !ok {
 		a.overviewPage(c)
 		return
 	}
-	g := groups[i]
+	g := a.groups()[i]
 	rows := a.cardRows([]pageRow{{kind: titleRow}}, g.Files)
 	a.cardList(c, fmt.Sprintf("group:%d", i), rows, func(pageRow) {
 		pageTitle(c).AlignItems(ui.Start).Children(func() {

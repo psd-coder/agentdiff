@@ -106,14 +106,12 @@ func (a *app) applyTheme() {
 
 func (a *app) openSettings() {
 	f := &settingsForm{
-		open:   true,
-		status: map[agent.Provider]string{},
-		settingsValues: settingsValues{
-			agent:     newAgentForm(a.cfg.Agent, a.cfg.Questions),
-			ahead:     a.cfg.DeeperAhead,
-			theme:     themeIndex(a.cfg.Theme),
-			codeTheme: codeThemeNamed(a.cfg.CodeTheme).name,
-		},
+		open:      true,
+		status:    map[agent.Provider]string{},
+		agent:     newAgentForm(a.cfg.Agent, a.cfg.Questions),
+		ahead:     a.cfg.DeeperAhead,
+		theme:     themeIndex(a.cfg.Theme),
+		codeTheme: codeThemeNamed(a.cfg.CodeTheme).name,
 	}
 	f.saved = f.settingsValues
 	a.settings = f

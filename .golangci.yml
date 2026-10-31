@@ -1,0 +1,13 @@
+version: "2"
+
+linters:
+  enable:
+    - errorlint
+    - exhaustive
+    - gocritic
+    - misspell
+    - modernize
+    - unparam
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true

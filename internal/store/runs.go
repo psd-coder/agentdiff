@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -84,8 +85,7 @@ func (s Store) CreateRun(repo string, scope gitx.Scope, info RunInfo) (*RunWrite
 	w := &RunWriter{f: f, enc: json.NewEncoder(f)}
 	w.enc.SetEscapeHTML(false)
 	if err := w.enc.Encode(info); err != nil {
-		f.Close()
-		return nil, err
+		return nil, errors.Join(err, f.Close())
 	}
 	return w, nil
 }
@@ -104,8 +104,11 @@ func (s Store) pruneRuns(dir string) {
 	names := runFiles(dir)
 	for len(names) >= MaxRuns {
 		path := filepath.Join(dir, names[0])
-		os.Remove(path)
-		os.Remove(usagePath(path))
+		for _, p := range []string{path, usagePath(path)} {
+			if err := os.Remove(p); err != nil && !IsNotExist(err) {
+				log.Printf("prune runs: %v", err)
+			}
+		}
 		names = names[1:]
 	}
 }
@@ -146,13 +149,12 @@ func (s Store) Runs(repo string, scope gitx.Scope) []RunInfo {
 	return runs
 }
 
-func readRunInfo(path string) (RunInfo, error) {
-	var info RunInfo
+func readRunInfo(path string) (info RunInfo, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return info, err
 	}
-	defer f.Close()
+	defer func() { err = errors.Join(err, f.Close()) }()
 	r := bufio.NewReader(f)
 	line, err := r.ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -180,17 +182,16 @@ var resumeArg = regexp.MustCompile(`(?:--resume|\bresume|\bfork) ([0-9a-f]{8}-[0
 
 // ReadRun returns the log entries of a run. A line cut off by a crash is
 // skipped.
-func (s Store) ReadRun(repo string, scope gitx.Scope, id string) ([]agent.LogEntry, error) {
+func (s Store) ReadRun(repo string, scope gitx.Scope, id string) (entries []agent.LogEntry, err error) {
 	f, err := os.Open(s.RunPath(repo, scope, id))
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { err = errors.Join(err, f.Close()) }()
 	r := bufio.NewReader(f)
 	if _, err := r.ReadBytes('\n'); err != nil {
 		return nil, nil
 	}
-	var entries []agent.LogEntry
 	for {
 		line, err := r.ReadBytes('\n')
 		var e agent.LogEntry

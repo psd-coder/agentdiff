@@ -111,8 +111,9 @@ func (s Scope) Describe() string {
 		return fmt.Sprintf("the changes introduced by commit %s: `git show %s`", s.Commit, s.Commit)
 	case ScopeRange:
 		return fmt.Sprintf("the changes between `%s` and `%s`: `git diff %s %s` (commits listed by `git log %s..%s`)", s.From, s.To, s.From, s.To, s.From, s.To)
+	default:
+		return "an unknown change set"
 	}
-	return "an unknown change set"
 }
 
 func (s Scope) branchName() string { return cmp.Or(s.Head, s.Branch) }
@@ -127,8 +128,9 @@ func (s Scope) NewRev() string {
 		return s.Commit
 	case ScopeRange:
 		return s.To
+	default:
+		return ""
 	}
-	return ""
 }
 
 func shortRef(ref string) string {
@@ -140,7 +142,7 @@ func shortRef(ref string) string {
 
 func isHex(s string) bool {
 	for _, c := range s {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
 	}

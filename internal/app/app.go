@@ -678,7 +678,11 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		read := map[string]contents{}
 		if err == nil {
 			if cr, cerr := r.NewContentReader(ctx, s); cerr == nil {
-				defer cr.Close()
+				defer func() {
+					if err := cr.Close(); err != nil && ctx.Err() == nil {
+						log.Printf("content reader: %v", err)
+					}
+				}()
 				readFile = cr.Contents
 			} else if ctx.Err() == nil {
 				log.Printf("content reader: %v", cerr)
@@ -1265,8 +1269,7 @@ func (a *app) saved(err error) {
 }
 
 func (a *app) scopeLabel() string {
-	switch a.scope.Kind {
-	case gitx.ScopeCommit:
+	if a.scope.Kind == gitx.ScopeCommit {
 		for _, c := range a.commits {
 			if c.SHA == a.scope.Commit {
 				return fmt.Sprintf("%s %s", c.Short, c.Subject)

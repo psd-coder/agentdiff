@@ -273,15 +273,15 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
+	_, err = tmp.Write(b)
+	err = errors.Join(err, tmp.Close())
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
 	}
-	if err := tmp.Close(); err != nil {
-		return err
+	if err != nil {
+		return errors.Join(err, os.Remove(tmp.Name()))
 	}
-	return os.Rename(tmp.Name(), path)
+	return nil
 }
 
 func IsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }

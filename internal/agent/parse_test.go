@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bufio"
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,12 +12,11 @@ import (
 
 func parseFixture(t *testing.T, p lineParser, name string) []Event {
 	t.Helper()
-	f, err := os.Open(filepath.Join("testdata", name))
+	data, err := os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(nil, maxLineSize)
 	var events []Event
 	for scanner.Scan() {

@@ -224,8 +224,12 @@ func TestReadRunSkipsCutLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString(`{"kind":"stdout","te`)
-	f.Close()
+	if _, err := f.WriteString(`{"kind":"stdout","te`); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 	entries, err := s.ReadRun("/repo", scope, info.ID)
 	if err != nil || len(entries) != 1 {
 		t.Errorf("entries = %+v, %v", entries, err)
@@ -278,7 +282,9 @@ func TestFindMoveCopyReview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := s.FindReview("/repo", commit, "p2"); ok {
 		t.Error("found a review for other changes")
 	}
@@ -372,7 +378,9 @@ func TestRunResumedFromCommand(t *testing.T) {
 	if err := w.Write(agent.LogEntry{Kind: agent.LogCommand, Text: "claude -p --resume 2b02f0c1-3491-4bdd-9e05-ee7282cd2510 --fork-session"}); err != nil {
 		t.Fatal(err)
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
 	runs := s.Runs("/repo", scope)
 	if len(runs) != 1 || runs[0].Resumed != "2b02f0c1-3491-4bdd-9e05-ee7282cd2510" {
 		t.Errorf("runs = %+v", runs)
