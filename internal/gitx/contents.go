@@ -17,6 +17,7 @@ import (
 
 const maxContentSize = 2 << 20
 
+// Contents resolves s and reads the old and the new side of f.
 func (r *Repo) Contents(ctx context.Context, s Scope, f FileChange) (old, new string, err error) {
 	if err := checkFile(f); err != nil {
 		return "", "", err
@@ -25,9 +26,7 @@ func (r *Repo) Contents(ctx context.Context, s Scope, f FileChange) (old, new st
 	if err != nil {
 		return "", "", err
 	}
-	return r.sides(ctx, v, f, func(rev, path string) (string, error) {
-		return r.blob(ctx, rev, path)
-	})
+	return (&Snapshot{repo: r, revs: v}).Contents(ctx, f)
 }
 
 func checkFile(f FileChange) error {
@@ -182,17 +181,15 @@ type ContentReader struct {
 	err error
 }
 
-// NewContentReader resolves s and starts the git process, which runs
-// until Close or until ctx is done. The caller must call Close.
-func (r *Repo) NewContentReader(ctx context.Context, s Scope) (*ContentReader, error) {
-	v, err := r.resolve(ctx, s)
-	if err != nil {
-		return nil, err
-	}
+// NewContentReader starts the git process that reads the files of the
+// snapshot, which runs until Close or until ctx is done. The caller must
+// call Close.
+func (s *Snapshot) NewContentReader(ctx context.Context) (*ContentReader, error) {
 	procCtx, stop := context.WithCancel(ctx)
-	c := &ContentReader{repo: r, ctx: ctx, stop: stop, revs: v}
-	c.cmd = command(procCtx, r.Root, catFileArgs...)
+	c := &ContentReader{repo: s.repo, ctx: ctx, stop: stop, revs: s.revs}
+	c.cmd = command(procCtx, s.repo.Root, catFileArgs...)
 	c.cmd.Stderr = &c.stderr
+	var err error
 	if c.stdin, err = c.cmd.StdinPipe(); err != nil {
 		stop()
 		return nil, err
@@ -210,13 +207,13 @@ func (r *Repo) NewContentReader(ctx context.Context, s Scope) (*ContentReader, e
 	c.out = bufio.NewReader(stdout)
 	// A git older than 2.36 has no --batch-command and exits at once.
 	// The first request finds that, so the caller can use Contents instead.
-	if _, _, _, err := c.info(v.from); err != nil {
+	if _, _, _, err := c.info(s.revs.from); err != nil {
 		return nil, errors.Join(err, c.Close())
 	}
 	return c, nil
 }
 
-// Contents is Repo.Contents for one file of the reader's scope.
+// Contents is Snapshot.Contents through the reader's git process.
 func (c *ContentReader) Contents(f FileChange) (old, new string, err error) {
 	if err := checkFile(f); err != nil {
 		return "", "", err

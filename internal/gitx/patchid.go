@@ -25,8 +25,8 @@ type Fingerprint struct {
 // the input of git patch-id; the files' chunks are numbered below it.
 const wholePatch = "ffffffffffffffffffffffffffffffffffffffff"
 
-func (r *Repo) Fingerprint(ctx context.Context, s Scope) (Fingerprint, error) {
-	patch, err := r.patch(ctx, s)
+func (s *Snapshot) Fingerprint(ctx context.Context) (Fingerprint, error) {
+	patch, err := s.patch(ctx)
 	if err != nil {
 		return Fingerprint{}, err
 	}
@@ -38,7 +38,7 @@ func (r *Repo) Fingerprint(ctx context.Context, s Scope) (Fingerprint, error) {
 		fmt.Fprintf(&in, "commit %040x\n", i)
 		in.Write(ch.text)
 	}
-	ids, err := r.patchIDs(ctx, in.Bytes())
+	ids, err := s.repo.patchIDs(ctx, in.Bytes())
 	if err != nil {
 		return Fingerprint{}, err
 	}
@@ -56,30 +56,18 @@ func (r *Repo) Fingerprint(ctx context.Context, s Scope) (Fingerprint, error) {
 	return fp, nil
 }
 
-// patch is the diff of a scope, with the untracked files as added ones.
-func (r *Repo) patch(ctx context.Context, s Scope) ([]byte, error) {
-	v, err := r.resolve(ctx, s)
-	if err != nil {
+// patch is the diff of the snapshot, with the untracked files as added ones.
+func (s *Snapshot) patch(ctx context.Context) ([]byte, error) {
+	out := &cappedBuffer{}
+	args := append([]string{"diff"}, diffFlags...)
+	args = append(append(args, "-p"), s.revs.args()...)
+	if err := s.repo.run(ctx, out, append(args, "--")...); err != nil {
 		return nil, err
 	}
-	patch, err := r.diff(ctx, v, "-p")
-	if err != nil || !v.worktree() {
-		return patch, err
-	}
-	paths, err := r.untrackedPaths(ctx)
-	if err != nil {
+	if err := s.repo.untrackedPatches(ctx, s.untracked, out); err != nil {
 		return nil, err
 	}
-	for _, p := range paths {
-		var out bytes.Buffer
-		args := append([]string{"diff"}, diffFlags...)
-		// --no-index exits with 1 when the files differ, which they always do.
-		if err := r.run(ctx, &out, append(args, "--no-index", "--", "/dev/null", p)...); err != nil && exitCode(err) != 1 {
-			return nil, err
-		}
-		patch = append(patch, out.Bytes()...)
-	}
-	return patch, nil
+	return out.buf.Bytes(), nil
 }
 
 type fileChunk struct {

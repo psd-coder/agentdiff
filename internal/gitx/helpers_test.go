@@ -90,9 +90,18 @@ func (tr *testRepo) open() *Repo {
 	return r
 }
 
+func snapshot(t testing.TB, r *Repo, s Scope) *Snapshot {
+	t.Helper()
+	snap, err := r.Snapshot(t.Context(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snap
+}
+
 func changesByPath(t *testing.T, r *Repo, s Scope) map[string]FileChange {
 	t.Helper()
-	changes, err := r.Changes(t.Context(), s)
+	changes, err := snapshot(t, r, s).Changes(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

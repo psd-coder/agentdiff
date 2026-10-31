@@ -329,7 +329,7 @@ func TestOtherBranch(t *testing.T) {
 	}
 
 	s := Scope{Kind: ScopeBranch, Base: "main", Head: "feature"}
-	changes, err := r.Changes(ctx, s)
+	changes, err := snapshot(t, r, s).Changes(ctx)
 	if err != nil || len(changes) != 1 || changes[0].Path != "b.txt" {
 		t.Fatalf("Changes = %+v, %v", changes, err)
 	}
@@ -381,7 +381,7 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	r := tr.open()
 	ctx := t.Context()
 	uncommitted := Scope{Kind: ScopeUncommitted}
-	if fp, err := r.Fingerprint(ctx, uncommitted); err != nil || fp.Patch != "" || len(fp.Files) != 0 {
+	if fp, err := snapshot(t, r, uncommitted).Fingerprint(ctx); err != nil || fp.Patch != "" || len(fp.Files) != 0 {
 		t.Fatalf("clean tree: %+v, err %v", fp, err)
 	}
 	tr.write("a.txt", "one\nTWO\nthree\n")
@@ -390,7 +390,7 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	if err := os.Remove(filepath.Join(tr.dir, "old.txt")); err != nil {
 		t.Fatal(err)
 	}
-	before, err := r.Fingerprint(ctx, uncommitted)
+	before, err := snapshot(t, r, uncommitted).Fingerprint(ctx)
 	if err != nil || before.Patch == "" {
 		t.Fatalf("uncommitted: %+v, err %v", before, err)
 	}
@@ -401,7 +401,7 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 		t.Errorf("binary file missing: %v", before.Files)
 	}
 	sha := tr.commit("change")
-	after, err := r.Fingerprint(ctx, Scope{Kind: ScopeCommit, Commit: sha})
+	after, err := snapshot(t, r, Scope{Kind: ScopeCommit, Commit: sha}).Fingerprint(ctx)
 	if err != nil || after.Patch != before.Patch || !maps.Equal(after.Files, before.Files) {
 		t.Errorf("commit %+v, uncommitted %+v, err %v", after, before, err)
 	}
@@ -432,12 +432,12 @@ func TestFingerprintIgnoresDiffPrefixConfig(t *testing.T) {
 			tr.write("a.txt", "one\nTWO\n")
 			tr.write("dir/new file.txt", "new\n")
 			tr.write("pic.bin", "\x00\x01")
-			want, err := r.Fingerprint(ctx, uncommitted)
+			want, err := snapshot(t, r, uncommitted).Fingerprint(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
 			tr.git("config", key, "true")
-			got, err := r.Fingerprint(ctx, uncommitted)
+			got, err := snapshot(t, r, uncommitted).Fingerprint(ctx)
 			if err != nil || got.Patch != want.Patch || !maps.Equal(got.Files, want.Files) {
 				t.Fatalf("with %s %+v, without %+v, err %v", key, got, want, err)
 			}

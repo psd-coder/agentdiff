@@ -8,7 +8,7 @@ import (
 
 func TestDiffStatUncommitted(t *testing.T) {
 	r := uncommittedFixture(t).open()
-	stat, err := r.DiffStat(t.Context(), Scope{Kind: ScopeUncommitted})
+	stat, err := snapshot(t, r, Scope{Kind: ScopeUncommitted}).DiffStat(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestDiffStatUncommitted(t *testing.T) {
 
 func TestDiffStatBranch(t *testing.T) {
 	h := newHistoryFixture(t)
-	stat, err := h.open().DiffStat(t.Context(), Scope{Kind: ScopeBranch, Base: "main"})
+	stat, err := snapshot(t, h.open(), Scope{Kind: ScopeBranch, Base: "main"}).DiffStat(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

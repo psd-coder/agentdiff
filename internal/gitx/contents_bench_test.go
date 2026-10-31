@@ -34,13 +34,14 @@ func BenchmarkLoad(b *testing.B) {
 	r, scopes := benchScopes(b)
 	for _, name := range []string{"uncommitted", "branch", "commit"} {
 		s := scopes[name]
-		files, err := r.Changes(b.Context(), s)
+		snap := snapshot(b, r, s)
+		files, err := snap.Changes(b.Context())
 		if err != nil || len(files) != benchFiles {
 			b.Fatalf("Changes(%s) = %d files, %v", name, len(files), err)
 		}
 		b.Run(name, func(b *testing.B) {
 			for b.Loop() {
-				cr, err := r.NewContentReader(b.Context(), s)
+				cr, err := snapshot(b, r, s).NewContentReader(b.Context())
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -61,12 +62,13 @@ func BenchmarkFile(b *testing.B) {
 	r, scopes := benchScopes(b)
 	for _, name := range []string{"uncommitted", "branch", "commit"} {
 		s := scopes[name]
-		files, err := r.Changes(b.Context(), s)
+		snap := snapshot(b, r, s)
+		files, err := snap.Changes(b.Context())
 		if err != nil || len(files) != benchFiles {
 			b.Fatalf("Changes(%s) = %d files, %v", name, len(files), err)
 		}
 		b.Run(name, func(b *testing.B) {
-			cr, err := r.NewContentReader(b.Context(), s)
+			cr, err := snap.NewContentReader(b.Context())
 			if err != nil {
 				b.Fatal(err)
 			}

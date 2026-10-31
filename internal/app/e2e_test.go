@@ -37,11 +37,15 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("commits: %v", err)
 	}
 	scope := gitx.Scope{Kind: gitx.ScopeCommit, Commit: commits[0].SHA}
-	files, err := repo.Changes(ctx, scope)
+	snap, err := repo.Snapshot(ctx, scope)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stat, err := repo.DiffStat(ctx, scope)
+	files, err := snap.Changes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stat, err := snap.DiffStat(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
