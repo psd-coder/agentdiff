@@ -156,6 +156,7 @@ type app struct {
 	refocus       string
 	shortcutsOpen bool
 
+	cmdList      []*command
 	cmds         map[string]*command
 	inMenu       map[string]bool
 	menuDirty    bool

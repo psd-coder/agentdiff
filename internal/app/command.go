@@ -204,14 +204,22 @@ func (a *app) commands() []*command {
 	}
 }
 
-// cmd is the command id. It panics on an unknown id, which is a bug.
-func (a *app) cmd(id string) *command {
-	if a.cmds == nil {
+// cachedCommands is commands, built once: a command reads the app's state
+// only in its functions, so the list never changes.
+func (a *app) cachedCommands() []*command {
+	if a.cmdList == nil {
+		a.cmdList = a.commands()
 		a.cmds = map[string]*command{}
-		for _, cm := range a.commands() {
+		for _, cm := range a.cmdList {
 			a.cmds[cm.id] = cm
 		}
 	}
+	return a.cmdList
+}
+
+// cmd is the command id. It panics on an unknown id, which is a bug.
+func (a *app) cmd(id string) *command {
+	a.cachedCommands()
 	cm := a.cmds[id]
 	if cm == nil {
 		panic("unknown command " + id)

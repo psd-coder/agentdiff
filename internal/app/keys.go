@@ -235,7 +235,7 @@ func (a *app) commandKeys(c *ui.Context) {
 		return
 	}
 	inMenu := a.menuIDs()
-	for _, cm := range a.commands() {
+	for _, cm := range a.cachedCommands() {
 		keys := a.keysOf(cm)
 		if keys == "" || inMenu[cm.id] {
 			continue
