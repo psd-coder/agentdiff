@@ -176,6 +176,9 @@ func TestFailedStartKeepsSessions(t *testing.T) {
 	if ov.Err == "" || ov.Sessions[agent.Codex] != "" || th.Sessions[agent.Codex] != "" || w.Sessions[agent.Codex] != "" {
 		t.Fatalf("after the failed runs: overview %+v, thread %v, walk %v", ov.Sessions, th.Sessions, w.Sessions)
 	}
+	if ov.Walk == nil || ov.Walk.Summary != "s" {
+		t.Errorf("the failed overview lost its walkthrough: %+v", ov.Walk)
+	}
 	if ov.Agent != agent.Claude || w.Agent != agent.Claude {
 		t.Errorf("written by: overview %q, walk %q, want claude", ov.Agent, w.Agent)
 	}

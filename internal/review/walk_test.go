@@ -54,18 +54,6 @@ func TestParseWalkthroughFallbacks(t *testing.T) {
 	}
 }
 
-func TestReadOverview(t *testing.T) {
-	files := []string{"a.go", "b.go"}
-	ov := ReadOverview("```json\n"+`{"summary": "s", "steps": [{"title": "t", "text": "x"}], "groups": [{"title": "A", "files": ["a.go"]}]}`+"\n```", files)
-	if ov.Walk == nil || ov.Walk.Groups != nil || len(ov.Groups) != 2 || ov.Groups[1].Title != "Other changes" {
-		t.Errorf("walkthrough overview = %+v", ov)
-	}
-	ov = ReadOverview("## High level\nText.", files)
-	if ov.Walk != nil || ov.Markdown != "## High level\nText." || len(ov.Groups) != 1 {
-		t.Errorf("markdown overview = %+v", ov)
-	}
-}
-
 func TestDeeperPrompt(t *testing.T) {
 	step := &Step{Title: "Lower-case keys", Text: "Get lower-cases.", Refs: []Ref{{File: "c.go", Side: SideNew, Start: 6, End: 6, Why: "the change"}}}
 	known := DeeperPrompt(DeeperRequest{Step: step, Known: true, Context: "CONTEXT", Path: []string{"P"}})

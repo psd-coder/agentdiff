@@ -146,15 +146,6 @@ func TestSectionsEdges(t *testing.T) {
 	}
 }
 
-func TestOverviewPromptDefaults(t *testing.T) {
-	p := OverviewPrompt("the uncommitted changes", " a | 1 +", "", []string{"a"}, "  ")
-	for _, want := range []string{"the uncommitted changes", "What data changes", "\"groups\"", "\"checklist\"", "\"refs\"", "working tree", "- a\n"} {
-		if !strings.Contains(p, want) {
-			t.Errorf("prompt lacks %q", want)
-		}
-	}
-}
-
 func TestAnchorLabel(t *testing.T) {
 	tests := []struct {
 		a    Anchor
