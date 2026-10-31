@@ -381,79 +381,66 @@ func (a *app) comment(t *review.Thread, text string) {
 	a.saveReview()
 }
 
-// ask sends a thread's question to the agent. A thread's first question
-// forks the overview's session, so every thread starts from what the
-// agent learned writing the overview, and threads stay apart.
-func (a *app) ask(t *review.Thread, text string) {
+// threadRun is an answer being written in a thread. reply is where the
+// answer goes in the thread's messages.
+type threadRun struct {
+	text     string
+	activity string
+	started  time.Time
+	reply    int
+	cancel   context.CancelFunc
+}
+
+// ask sends a thread's question to the agent, in the repository and the
+// scope of rev.
+func (a *app) ask(rev *review.Review, t *review.Thread, text string) {
 	text = strings.TrimSpace(text)
 	if text == "" || a.threadBusy(t.ID) {
 		return
 	}
-	rev := a.rev
 	cfg := a.cfg.Agent
-	t.Messages = append(t.Messages, review.Message{Role: review.RoleUser, Text: text, Time: time.Now()})
-	req := agent.Request{Dir: a.repo.Root, SystemPrompt: review.SystemPrompt}
-	session, overviewSession := t.Sessions[cfg.Provider], ""
-	if rev.Overview != nil {
-		overviewSession = rev.Overview.Sessions[cfg.Provider]
-	}
-	prompt := review.QuestionPrompt(t, text, session != "")
-	switch {
-	case session != "":
-		req.ResumeID = session
-	case overviewSession != "":
-		req.ResumeID, req.Fork = overviewSession, true
-	default:
-		prompt = review.ContextPrompt(a.scope.Describe(), a.diffstatOf(rev)) + prompt
-	}
-	req.Prompt = prompt
-	t.Agent = cfg.Provider
-	t.Messages = append(t.Messages, review.Message{Role: review.RoleAgent, Time: time.Now(), Pending: true, Activity: "Thinking…"})
-	reply := len(t.Messages) - 1
+	ex := review.ThreadExchange(rev, t, cfg, a.diffstatOf(rev), text)
 	ctx, cancel := context.WithCancel(context.Background())
-	a.threadRun[t.ID] = cancel
-	a.saveReview()
+	run := &threadRun{activity: "Thinking…", started: time.Now(), reply: len(t.Messages), cancel: cancel}
+	a.threadRuns[t.ID] = run
+	a.saveReviewOf(rev)
 	info := newRunInfo(t.ID, t.Anchor.Label(), excerpt(text, 160), cfg)
-	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
-		if reply >= len(t.Messages) {
+	a.stream(ctx, cfg, ex.Request, rev, info, func(ev agent.Event) {
+		if a.threadRuns[t.ID] != run {
 			return
 		}
-		m := &t.Messages[reply]
 		switch ev.Kind {
 		case agent.EventSession:
-			t.Sessions.Set(cfg.Provider, ev.SessionID)
+			ex.Started(ev.SessionID)
 		case agent.EventText:
-			m.Text += ev.Text
-			m.Activity = ""
+			run.text += ev.Text
+			run.activity = ""
 		case agent.EventActivity:
-			m.Activity = ev.Text
+			run.activity = ev.Text
 		case agent.EventDone:
-			if strings.TrimSpace(ev.Text) != "" {
-				m.Text = ev.Text
-			}
-			m.Pending, m.Activity = false, ""
+			ex.Answered(answer(ev.Text, run.text), time.Now())
 			cancel()
-			delete(a.threadRun, t.ID)
+			delete(a.threadRuns, t.ID)
 			a.saveReviewOf(rev)
 		case agent.EventError:
-			m.Pending, m.Activity = false, ""
-			m.Err = ev.Err.Error()
 			if ctx.Err() != nil {
-				m.Err = "Stopped"
+				ex.Stopped(time.Now())
+			} else {
+				ex.Failed(ev.Err.Error(), time.Now())
 			}
 			cancel()
-			delete(a.threadRun, t.ID)
+			delete(a.threadRuns, t.ID)
 			a.saveReviewOf(rev)
 		}
 	})
 }
 
 // threadBusy reports whether the agent answers in the thread.
-func (a *app) threadBusy(id string) bool { return a.threadRun[id] != nil }
+func (a *app) threadBusy(id string) bool { return a.threadRuns[id] != nil }
 
 func (a *app) stopThread(t *review.Thread) {
-	if cancel := a.threadRun[t.ID]; cancel != nil {
-		cancel()
+	if run := a.threadRuns[t.ID]; run != nil {
+		run.cancel()
 	}
 }
 

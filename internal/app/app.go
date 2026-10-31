@@ -145,17 +145,17 @@ type app struct {
 	logTarget string
 	logPct    float32
 
-	page      string
-	history   []string
-	forward   []string
-	scrolls   map[string]*ui.ScrollState
-	lists     map[string]*cardPage
-	thread    string
-	drafts    map[string]string
-	overviews map[*review.Review]*overviewRun
-	threadRun map[string]context.CancelFunc
-	walkRuns  map[string]*walkRun
-	ahead     []queuedWalk
+	page       string
+	history    []string
+	forward    []string
+	scrolls    map[string]*ui.ScrollState
+	lists      map[string]*cardPage
+	thread     string
+	drafts     map[string]string
+	overviews  map[*review.Review]*overviewRun
+	threadRuns map[string]*threadRun
+	walkRuns   map[string]*walkRun
+	ahead      []queuedWalk
 
 	sidebarW    float32
 	scopePct    float32
@@ -215,7 +215,7 @@ func newApp(s store.Store) *app {
 		logPct:      50,
 		drafts:      map[string]string{},
 		overviews:   map[*review.Review]*overviewRun{},
-		threadRun:   map[string]context.CancelFunc{},
+		threadRuns:  map[string]*threadRun{},
 		walkRuns:    map[string]*walkRun{},
 		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},

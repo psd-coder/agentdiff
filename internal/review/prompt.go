@@ -28,7 +28,7 @@ const LegacyQuestions = `Explain the changes:
 5. Explain non-beautiful changes.
 6. Tell about assumptions and rules which force non-beautiful changes.`
 
-const SystemPrompt = `You help a developer review code changes that a coding agent made. You only read: never edit files, never run commands that change the repository. Inspect changes with read-only git commands (git diff, git show, git log, git blame, git status) and with the Read, Grep and Glob tools. Other shell commands are refused, so do not try them; simple pipes into cat -n, grep, head, tail or wc are fine. Be concise and concrete.`
+const systemPrompt = `You help a developer review code changes that a coding agent made. You only read: never edit files, never run commands that change the repository. Inspect changes with read-only git commands (git diff, git show, git log, git blame, git status) and with the Read, Grep and Glob tools. Other shell commands are refused, so do not try them; simple pipes into cat -n, grep, head, tail or wc are fine. Be concise and concrete.`
 
 const walkSchema = `{"summary": "...", "steps": [{"title": "...", "text": "...", "refs": [{"file": "path/to/file", "side": "new", "start": 10, "end": 18, "why": "..."}]}]}`
 
@@ -278,16 +278,16 @@ func Sections(md string) []Section {
 	return out
 }
 
-// ContextPrompt starts a conversation when there is no overview to go on
+// contextPrompt starts a conversation when there is no overview to go on
 // from.
-func ContextPrompt(scope, diffstat string) string {
+func contextPrompt(scope, diffstat string) string {
 	return fmt.Sprintf("The change set under review is %s\n\nDiffstat:\n```\n%s\n```\n\nRead the changes you need before you answer.\n\n", scope, strings.TrimSpace(diffstat))
 }
 
-// QuestionPrompt is the message of a thread sent to the agent. A session
+// questionPrompt is the message of a thread sent to the agent. A session
 // that does not know the thread yet, a new or a forked one, gets what the
 // thread is about and what was said in it so far.
-func QuestionPrompt(t *Thread, text string, known bool) string {
+func questionPrompt(t *Thread, text string, known bool) string {
 	if known {
 		return text
 	}

@@ -72,7 +72,7 @@ func TestOverviewExchangeRequest(t *testing.T) {
 			r := New("/repo", tt.scope)
 			r.Overview = &Overview{Walk: &Walkthrough{Summary: "old"}, Sessions: Sessions{agent.Claude: "c0", agent.Codex: "x0"}}
 			req := OverviewExchange(r, testChanges, agent.Config{Provider: tt.provider}, tt.questions).Request
-			if req.Dir != "/repo" || req.SystemPrompt != SystemPrompt {
+			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
 			if req.ResumeID != "" || req.Fork {
@@ -283,7 +283,7 @@ func TestDeeperExchangeRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r, inner, question := walkReview(tt.scope)
 			req := DeeperExchange(r, tt.walk(r, inner, question), agent.Config{Provider: tt.provider}, testChanges.Diffstat).Request
-			if req.Dir != "/repo" || req.SystemPrompt != SystemPrompt {
+			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
 			if req.ResumeID != tt.resume || req.Fork != (tt.resume != "") {
@@ -436,6 +436,154 @@ func TestWalkExchangeResults(t *testing.T) {
 			w, e := tt.start(New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted}))
 			tt.apply(e)
 			tt.check(t, w)
+		})
+	}
+}
+
+func TestThreadExchangeRequest(t *testing.T) {
+	lines := Anchor{Kind: AnchorLines, File: "a.go", Side: SideNew, Start: 3, Quote: "x := 1"}
+	earlier := []Message{{Role: RoleUser, Text: "Why?"}, {Role: RoleAgent, Text: "Because."}}
+	tests := []struct {
+		name     string
+		provider agent.Provider
+		overview Sessions
+		thread   Sessions
+		messages []Message
+		resume   string
+		fork     bool
+		want     []string
+		lacks    []string
+	}{
+		{
+			name:     "the first question forks the overview session of the provider",
+			provider: agent.Claude,
+			overview: Sessions{agent.Claude: "c0", agent.Codex: "x0"},
+			resume:   "c0",
+			fork:     true,
+			want:     []string{"new, separate discussion thread", "a.go:3 (+)", "x := 1", "The reviewer asks:\n\nAnd then?"},
+			lacks:    []string{"Diffstat", "so far"},
+		},
+		{
+			name:     "the first question without an overview session of the provider starts with the change set",
+			provider: agent.Codex,
+			overview: Sessions{agent.Claude: "c0"},
+			want:     []string{"commit abc123", "Diffstat:\n```\na.go | 1 +\n b.go | 2 +-\n```", "a.go:3 (+)", "And then?"},
+		},
+		{
+			name:     "a later question goes on in the thread session",
+			provider: agent.Claude,
+			overview: Sessions{agent.Claude: "c0"},
+			thread:   Sessions{agent.Claude: "t1"},
+			messages: earlier,
+			resume:   "t1",
+			want:     []string{"And then?"},
+			lacks:    []string{"a.go", "Because."},
+		},
+		{
+			name:     "a later question to a new session of the provider forks the overview with the thread so far",
+			provider: agent.Codex,
+			overview: Sessions{agent.Codex: "x0"},
+			thread:   Sessions{agent.Claude: "t1"},
+			messages: earlier,
+			resume:   "x0",
+			fork:     true,
+			want:     []string{"a.go:3 (+)", "Reviewer: Why?\n\nAgent: Because.\n\n", "The reviewer asks:\n\nAnd then?"},
+			lacks:    []string{"Reviewer: And then?"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := New("/repo", gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
+			r.Overview = &Overview{Sessions: tt.overview}
+			th := r.AddThread(lines)
+			th.Sessions = tt.thread
+			th.Messages = append([]Message(nil), tt.messages...)
+			req := ThreadExchange(r, th, agent.Config{Provider: tt.provider}, testChanges.Diffstat, "And then?").Request
+			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
+				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
+			}
+			if req.ResumeID != tt.resume || req.Fork != tt.fork {
+				t.Errorf("resumes %q (fork %v), want %q (fork %v)", req.ResumeID, req.Fork, tt.resume, tt.fork)
+			}
+			checkPrompt(t, req.Prompt, tt.want, tt.lacks)
+			last := th.Messages[len(th.Messages)-1]
+			if len(th.Messages) != len(tt.messages)+1 || last.Role != RoleUser || last.Text != "And then?" {
+				t.Errorf("messages after the question = %+v", th.Messages)
+			}
+			if th.Agent != tt.provider {
+				t.Errorf("thread agent %q, want %q", th.Agent, tt.provider)
+			}
+		})
+	}
+}
+
+func TestThreadExchangeWithoutOverview(t *testing.T) {
+	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	th := r.AddThread(Anchor{Kind: AnchorGeneral})
+	req := ThreadExchange(r, th, agent.Config{Provider: agent.Claude}, "", "Why?").Request
+	if req.ResumeID != "" || req.Fork {
+		t.Errorf("resumes %q (fork %v), want a new session", req.ResumeID, req.Fork)
+	}
+	checkPrompt(t, req.Prompt, []string{"uncommitted changes", "the change set as a whole", "Why?"}, nil)
+}
+
+func TestThreadExchangeResults(t *testing.T) {
+	at := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name     string
+		apply    func(e *Exchange, th *Thread)
+		want     []Message
+		sessions Sessions
+	}{
+		{
+			name:     "the answer follows the question, and the session is kept",
+			apply:    func(e *Exchange, _ *Thread) { e.Started("x1"); e.Answered("Because.", at) },
+			want:     []Message{{Role: RoleUser, Text: "Why?"}, {Role: RoleAgent, Text: "Because.", Time: at}},
+			sessions: Sessions{agent.Claude: "c1", agent.Codex: "x1"},
+		},
+		{
+			name: "a comment during the run comes after the answer",
+			apply: func(e *Exchange, th *Thread) {
+				th.Messages = append(th.Messages, Message{Role: RoleUser, Text: "Keep it short."})
+				e.Answered("Because.", at)
+			},
+			want: []Message{
+				{Role: RoleUser, Text: "Why?"},
+				{Role: RoleAgent, Text: "Because.", Time: at},
+				{Role: RoleUser, Text: "Keep it short."},
+			},
+			sessions: Sessions{agent.Claude: "c1"},
+		},
+		{
+			name:     "a failure after the start keeps the session and shows the error",
+			apply:    func(e *Exchange, _ *Thread) { e.Started("x1"); e.Failed("boom", at) },
+			want:     []Message{{Role: RoleUser, Text: "Why?"}, {Role: RoleAgent, Err: "boom", Time: at}},
+			sessions: Sessions{agent.Claude: "c1", agent.Codex: "x1"},
+		},
+		{
+			name:     "a stopped run shows Stopped",
+			apply:    func(e *Exchange, _ *Thread) { e.Stopped(at) },
+			want:     []Message{{Role: RoleUser, Text: "Why?"}, {Role: RoleAgent, Err: "Stopped", Time: at}},
+			sessions: Sessions{agent.Claude: "c1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+			th := r.AddThread(Anchor{Kind: AnchorGeneral})
+			th.Sessions = Sessions{agent.Claude: "c1"}
+			e := ThreadExchange(r, th, agent.Config{Provider: agent.Codex}, "", "Why?")
+			th.Messages[0].Time = time.Time{}
+			tt.apply(e, th)
+			if !reflect.DeepEqual(th.Messages, tt.want) {
+				t.Errorf("messages = %+v\nwant       %+v", th.Messages, tt.want)
+			}
+			if !reflect.DeepEqual(th.Sessions, tt.sessions) {
+				t.Errorf("sessions = %v, want %v", th.Sessions, tt.sessions)
+			}
+			if r.Overview != nil || len(r.Walks) != 0 {
+				t.Errorf("the thread run wrote the overview %+v or walks %+v", r.Overview, r.Walks)
+			}
 		})
 	}
 }
