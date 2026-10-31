@@ -67,9 +67,9 @@ func (a *app) projectList(c *ui.Context, nav *pickList, open string, add bool, c
 	if add {
 		n++
 	}
-	l := nav.list(c, "Projects", func() {
+	l, rows := nav.list(c, "Projects", func(addRow pickRow) {
 		for i, p := range recent {
-			row := nav.row(c.Key(p), func() {
+			row := addRow(c.Key(p), func() {
 				ui.Icon(c, folderIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
 				ui.Column(c).Grow(1).Shrink(1).Children(func() {
 					ui.Text(c, filepath.Base(p)).Bold().SingleLine()
@@ -87,7 +87,7 @@ func (a *app) projectList(c *ui.Context, nav *pickList, open string, add bool, c
 		}
 		if add {
 			ui.Divider(c).Margin(4, 0)
-			row := nav.row(c, func() {
+			row := addRow(c, func() {
 				ui.Icon(c, plusIcon).Size(menuIcon, menuIcon).TextColor(t.TextMuted)
 				ui.Text(c, "Add project…")
 			}, nil).Label("Add project…")
@@ -95,7 +95,8 @@ func (a *app) projectList(c *ui.Context, nav *pickList, open string, add bool, c
 				choose(len(recent))
 			}
 		}
-	}).Focusable().AutoFocus()
+	})
+	l.Focusable().AutoFocus()
 	a.takeFocus(l, "switch-project")
 	for _, k := range []ui.Key{ui.KeyDown, ui.KeyUp, ui.KeyPageDown, ui.KeyPageUp} {
 		if l.Shortcut(0, k) {
@@ -116,7 +117,7 @@ func (a *app) projectList(c *ui.Context, nav *pickList, open string, add bool, c
 			a.confirmRemoveProject(recent[nav.hi])
 		}
 	}
-	if row, ok := nav.active(); ok {
+	if row, ok := nav.active(rows); ok {
 		l.ActiveDescendant(row)
 	}
 }
@@ -222,8 +223,9 @@ func (a *app) branchList(c *ui.Context) {
 		if in.Changed() {
 			nav.open(0)
 		}
+		var rows []ui.Element
 		ui.Scroll(c).MaxHeight(380).Children(func() {
-			nav.list(c, "Branches", func() {
+			_, rows = nav.list(c, "Branches", func(addRow pickRow) {
 				for _, b := range branches {
 					chosen := a.rng == nil && b == a.headBranch()
 					tree := trees[b]
@@ -234,7 +236,7 @@ func (a *app) branchList(c *ui.Context) {
 						}
 					}
 					label := b
-					row := nav.row(c.Key(b), func() {
+					row := addRow(c.Key(b), func() {
 						check := ui.Icon(c, checkIcon).Size(menuIcon, menuIcon).TextColor(t.Accent)
 						if !chosen {
 							check.Invisible()
@@ -262,7 +264,7 @@ func (a *app) branchList(c *ui.Context) {
 				ui.Text(c, "No branches match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
 			}
 		})
-		if row, ok := nav.active(); ok && len(branches) > 0 {
+		if row, ok := nav.active(rows); ok && len(branches) > 0 {
 			in.ActiveDescendant(row)
 		}
 	})

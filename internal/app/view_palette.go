@@ -79,11 +79,12 @@ func (a *app) paletteModal(c *ui.Context) {
 		if in.Changed() {
 			nav.open(0)
 		}
+		var rows []ui.Element
 		ui.Scroll(c).MaxHeight(360).Children(func() {
-			nav.list(c, "Commands", func() {
+			_, rows = nav.list(c, "Commands", func(addRow pickRow) {
 				for _, cm := range cmds {
 					keys := a.keysOf(cm)
-					row := nav.row(c.Key(cm.id), func() {
+					row := addRow(c.Key(cm.id), func() {
 						ui.Text(c, cm.title).SingleLine().Shrink(1).Grow(1)
 						if keys != "" {
 							ui.Text(c, keyLabel(keys)).Font("monospace").FontSize(12).TextColor(t.TextMuted)
@@ -101,7 +102,7 @@ func (a *app) paletteModal(c *ui.Context) {
 				ui.Text(c, "No commands match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
 			}
 		})
-		if row, ok := nav.active(); ok && len(cmds) > 0 {
+		if row, ok := nav.active(rows); ok && len(cmds) > 0 {
 			in.ActiveDescendant(row)
 		}
 	})

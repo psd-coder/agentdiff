@@ -19,9 +19,11 @@ type pickList struct {
 	reveal  bool
 	pointer [2]float32
 	follow  bool
-	rows    []ui.Element
-	bars    []ui.Element
 }
+
+// pickRow adds a row to a pickList: body, and actions after it that show
+// while the highlight is on the row. A click on the row chooses it.
+type pickRow func(c *ui.Context, body func(), actions func()) ui.Element
 
 // open puts the highlight on row i, as the list opens or its filter
 // changes.
@@ -46,10 +48,11 @@ func (p *pickList) key(k ui.Key, n int) bool {
 	return true
 }
 
-// list builds the rows that fn adds with row, under label for assistive
-// technology.
-func (p *pickList) list(c *ui.Context, label string, fn func()) ui.Element {
-	p.rows, p.bars = p.rows[:0], p.bars[:0]
+// list builds the rows that fn adds with addRow, under label for assistive
+// technology. It returns the list and its rows, which last for this
+// build pass only.
+func (p *pickList) list(c *ui.Context, label string, fn func(addRow pickRow)) (ui.Element, []ui.Element) {
+	var rows, bars []ui.Element
 	l := ui.Column(c).Gap(2).Role(ui.RoleList).Label(label).KeepFocus()
 	// In window coordinates, so that the list scrolling under a resting
 	// pointer does not count as the pointer moving.
@@ -60,9 +63,25 @@ func (p *pickList) list(c *ui.Context, label string, fn func()) ui.Element {
 	if over {
 		p.pointer = pt
 	}
-	l.Children(fn)
-	p.hi = max(0, min(p.hi, len(p.rows)-1))
-	for i, row := range p.rows {
+	addRow := func(c *ui.Context, body func(), actions func()) ui.Element {
+		t := c.Theme()
+		row := ui.Row(c).AlignItems(ui.Center).Radius(t.Radius).Role(ui.RoleListItem)
+		if p.follow && row.Hovered() {
+			p.hi = len(rows)
+		}
+		var bar ui.Element
+		row.Children(func() {
+			ui.Row(c).Grow(1).Shrink(1).Gap(menuGap).Padding(6, menuInset).AlignItems(ui.Center).Children(body)
+			if actions != nil {
+				bar = ui.Row(c).Gap(2).PaddingEnd(4).Children(actions)
+			}
+		})
+		rows, bars = append(rows, row), append(bars, bar)
+		return row
+	}
+	l.Children(func() { fn(addRow) })
+	p.hi = max(0, min(p.hi, len(rows)-1))
+	for i, row := range rows {
 		on := i == p.hi
 		row.Checked(on)
 		if on {
@@ -71,38 +90,19 @@ func (p *pickList) list(c *ui.Context, label string, fn func()) ui.Element {
 				row.ScrollIntoView()
 			}
 		}
-		if bar := p.bars[i]; !on && bar != (ui.Element{}) {
+		if bar := bars[i]; !on && bar != (ui.Element{}) {
 			bar.Invisible()
 		}
 	}
 	p.reveal = false
-	return l
+	return l, rows
 }
 
-// row adds a row: body, and actions after it that show while the
-// highlight is on the row. A click on the row chooses it.
-func (p *pickList) row(c *ui.Context, body func(), actions func()) ui.Element {
-	t := c.Theme()
-	row := ui.Row(c).AlignItems(ui.Center).Radius(t.Radius).Role(ui.RoleListItem)
-	if p.follow && row.Hovered() {
-		p.hi = len(p.rows)
-	}
-	var bar ui.Element
-	row.Children(func() {
-		ui.Row(c).Grow(1).Shrink(1).Gap(menuGap).Padding(6, menuInset).AlignItems(ui.Center).Children(body)
-		if actions != nil {
-			bar = ui.Row(c).Gap(2).PaddingEnd(4).Children(actions)
-		}
-	})
-	p.rows, p.bars = append(p.rows, row), append(p.bars, bar)
-	return row
-}
-
-// active is the row the highlight is on, which assistive technology
-// follows as the focused one.
-func (p *pickList) active() (ui.Element, bool) {
-	if p.hi < len(p.rows) {
-		return p.rows[p.hi], true
+// active is the row of rows the highlight is on, which assistive
+// technology follows as the focused one.
+func (p *pickList) active(rows []ui.Element) (ui.Element, bool) {
+	if p.hi < len(rows) {
+		return rows[p.hi], true
 	}
 	return ui.Element{}, false
 }
