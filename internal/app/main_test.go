@@ -18,7 +18,6 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
-	"github.com/psd-coder/agentdiff/internal/continuity"
 	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
 	"github.com/psd-coder/agentdiff/internal/store"
@@ -316,11 +315,11 @@ func TestReviewFollowsCommit(t *testing.T) {
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
 	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
-	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].MovedTo != "" })
+	pump(t, a, "the commit lookup", func() bool { return len(a.reviews.Earlier()) == 1 && a.reviews.Earlier()[0].MovedTo != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if len(a.archived) != 1 || a.archived[0].MovedTo != sha || !a.rev.Empty() || !tt.HasText("Earlier reviews") {
-		t.Fatalf("archived %v, want moved to %q; texts %q", a.archived, sha, tt.Texts())
+	if len(a.reviews.Earlier()) != 1 || a.reviews.Earlier()[0].MovedTo != sha || !a.rev.Empty() || !tt.HasText("Earlier reviews") {
+		t.Fatalf("archived %v, want moved to %q; texts %q", a.reviews.Earlier(), sha, tt.Texts())
 	}
 
 	if err := tt.Click("s"); err != nil {
@@ -340,8 +339,8 @@ func TestReviewFollowsCommit(t *testing.T) {
 	}
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	pump(t, a, "the uncommitted changes", func() bool { return !a.loading && !a.switching })
-	if !a.rev.Empty() || len(a.archived) != 0 {
-		t.Errorf("the uncommitted scope kept the review: %+v, archived %+v", a.rev, a.archived)
+	if !a.rev.Empty() || len(a.reviews.Earlier()) != 0 {
+		t.Errorf("the uncommitted scope kept the review: %+v, archived %+v", a.rev, a.reviews.Earlier())
 	}
 }
 
@@ -367,11 +366,11 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
 	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
-	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].Probably != "" })
+	pump(t, a, "the commit lookup", func() bool { return len(a.reviews.Earlier()) == 1 && a.reviews.Earlier()[0].Probably != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if len(a.archived) != 1 || a.archived[0].MovedTo != "" || a.archived[0].Probably != sha {
-		t.Fatalf("archived %v, want probably in %q", a.archived, sha)
+	if len(a.reviews.Earlier()) != 1 || a.reviews.Earlier()[0].MovedTo != "" || a.reviews.Earlier()[0].Probably != sha {
+		t.Fatalf("archived %v, want probably in %q", a.reviews.Earlier(), sha)
 	}
 	if err := tt.Click("s"); err != nil {
 		t.Fatal(err)
@@ -426,8 +425,8 @@ func TestArchiveUncommitted(t *testing.T) {
 	a.stopOverview()
 	pump(t, a, "the stopped overview", func() bool { return !a.runsOf(a.rev)[0].running })
 	tt := reload("the other changes")
-	if !a.rev.Empty() || len(a.archived) != 1 || !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") {
-		t.Fatalf("review %+v, archived %v; texts %q", a.rev, a.archived, tt.Texts())
+	if !a.rev.Empty() || len(a.reviews.Earlier()) != 1 || !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") {
+		t.Fatalf("review %+v, archived %v; texts %q", a.rev, a.reviews.Earlier(), tt.Texts())
 	}
 	snapshot(t, tt, "archived")
 
@@ -436,19 +435,19 @@ func TestArchiveUncommitted(t *testing.T) {
 	}
 	git(t, dir, "stash", "pop", "-q")
 	tt = reload("the changes back")
-	if a.rev.Overview == nil || a.stale() || len(a.archived) != 0 || !tt.HasText("Moved here from earlier uncommitted changes") {
+	if a.rev.Overview == nil || a.stale() || len(a.reviews.Earlier()) != 0 || !tt.HasText("Moved here from earlier uncommitted changes") {
 		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
 	}
 
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	reload("the other changes again")
-	if len(a.archived) != 1 {
-		t.Fatalf("not archived: %d", len(a.archived))
+	if len(a.reviews.Earlier()) != 1 {
+		t.Fatalf("not archived: %d", len(a.reviews.Earlier()))
 	}
-	a.restoreArchived(a.archived[0])
+	a.restoreArchived(a.reviews.Earlier()[0])
 	tt = reload("the restored review")
-	if a.rev.Overview == nil || len(a.archived) != 0 || !a.stale() || !tt.HasText("This overview was written for 2 files. Since then, 2 are no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
+	if a.rev.Overview == nil || len(a.reviews.Earlier()) != 0 || !a.stale() || !tt.HasText("This overview was written for 2 files. Since then, 2 are no longer in the changes and 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
 		t.Fatalf("review %+v, stale %v; texts %q", a.rev.Overview, a.stale(), tt.Texts())
 	}
 
@@ -1328,9 +1327,7 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 		}},
 		{"start over", func(a *app) { a.startOver() }},
 		{"archive", func(a *app) {
-			if err := a.archiveCurrent(&continuity.Earlier{}); err != nil {
-				t.Fatal(err)
-			}
+			archiveOnReload(t, a)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1366,6 +1363,16 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 	}
 }
 
+// archiveOnReload reloads the uncommitted changes after it marks the
+// overview as written for a file that is no longer changed, so the
+// review goes to the archive.
+func archiveOnReload(t *testing.T, a *app) {
+	t.Helper()
+	a.rev.Overview.Files = map[string]string{"gone.go": "x"}
+	a.reload()
+	pump(t, a, "the archive", func() bool { return len(a.reviews.Earlier()) == 1 })
+}
+
 // TestArchiveDropsSavedNote archives a review whose feedback was saved:
 // the feedback page of the new review shows no "Saved to" note.
 func TestArchiveDropsSavedNote(t *testing.T) {
@@ -1379,9 +1386,7 @@ func TestArchiveDropsSavedNote(t *testing.T) {
 	if !tt.HasText("Saved to /tmp/feedback.md") {
 		t.Fatal("the note does not show before archiving")
 	}
-	if err := a.archiveCurrent(&continuity.Earlier{}); err != nil {
-		t.Fatal(err)
-	}
+	archiveOnReload(t, a)
 	tt.Frame()
 	if tt.HasText("Saved to") {
 		t.Error("the feedback page kept the Saved to note of the archived review")
@@ -2772,8 +2777,8 @@ func TestEarlierReviewPage(t *testing.T) {
 	pump(t, a, "the second overview", func() bool { return a.overviewRunning() == nil })
 	tt := ui.NewTester(a.view, 1300, 900)
 	tt.Frame()
-	if len(a.archived) != 1 || !tt.HasText("Other change.") || !tt.HasText("Earlier reviews") {
-		t.Fatalf("archived %v; texts %q", a.archived, tt.Texts())
+	if len(a.reviews.Earlier()) != 1 || !tt.HasText("Other change.") || !tt.HasText("Earlier reviews") {
+		t.Fatalf("archived %v; texts %q", a.reviews.Earlier(), tt.Texts())
 	}
 
 	if r, ok := tt.Find("Lower-case keys."); ok {
@@ -2791,10 +2796,10 @@ func TestEarlierReviewPage(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "earlier-review")
-	if a.page != "archived:"+a.archived[0].ID() || !tt.HasText("    return strings.ToLower(key)") {
+	if a.page != "archived:"+a.reviews.Earlier()[0].ID() || !tt.HasText("    return strings.ToLower(key)") {
 		t.Fatalf("page %q; texts %q", a.page, tt.Texts())
 	}
-	if a.applies(a.cmd("restore-archived"), a.archived[0].ID()) {
+	if a.applies(a.cmd("restore-archived"), a.reviews.Earlier()[0].ID()) {
 		t.Error("restore offered over the review of the current changes")
 	}
 
@@ -2804,8 +2809,8 @@ func TestEarlierReviewPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if len(a.archived) != 0 || a.page != "overview" || len(a.store.Archived(dir)) != 0 {
-		t.Errorf("after delete: archived %v, page %q", a.archived, a.page)
+	if len(a.reviews.Earlier()) != 0 || a.page != "overview" || len(a.store.Archived(dir)) != 0 {
+		t.Errorf("after delete: archived %v, page %q", a.reviews.Earlier(), a.page)
 	}
 }
 
@@ -2828,7 +2833,10 @@ func TestEarlierReviewInFull(t *testing.T) {
 	}
 	th := rev.AddThread(review.Anchor{Kind: review.AnchorLines, File: "cache/cache.go", Side: review.SideNew, Start: 6, End: 6, Quote: "\treturn strings.ToLower(key)"})
 	th.Messages = []review.Message{{Role: review.RoleUser, Text: "Keep keys as they are."}}
-	a.archived = []*continuity.Earlier{{Rev: rev}}
+	if err := a.store.SaveReview(rev); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
 	a.goTo("archived:p1")
 	tt := ui.NewTester(a.view, 1300, 2400)
 	tt.Frame()

@@ -64,7 +64,7 @@ func (a *app) pageExists(page string) bool {
 		return a.diffs[f] != nil
 	}
 	if id, ok := strings.CutPrefix(page, "archived:"); ok {
-		return a.earlierReview(id) != nil
+		return a.reviews.Find(id) != nil
 	}
 	if g, ok := strings.CutPrefix(page, "group:"); ok {
 		if _, found := a.groupIndex(g); !found {
