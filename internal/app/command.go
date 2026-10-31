@@ -83,7 +83,7 @@ func (a *app) commands() []*command {
 			can: func(id string) bool { return !a.rev.Thread(id).Excluded },
 			run: func(_ *ui.Context, id string) { a.setExcluded(id, true) }},
 		{id: "stop-thread", title: "Stop the Agent in the Thread", target: a.targetThread,
-			can: func(id string) bool { return a.rev.Thread(id).Busy() },
+			can: a.threadBusy,
 			run: func(_ *ui.Context, id string) { a.stopThread(a.rev.Thread(id)) }},
 		{id: "thread-log", title: "Show Log of the Thread", tip: "What the agent did in this thread", target: a.targetThread,
 			can: func(id string) bool { return a.rev.Thread(id).Agent != "" },

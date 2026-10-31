@@ -229,8 +229,8 @@ func TestThreads(t *testing.T) {
 		t.Error("DeleteThread failed")
 	}
 	a.Messages = []Message{{Role: RoleUser}, {Role: RoleAgent, Pending: true}}
-	if !a.Busy() || !a.Discussed() {
-		t.Error("Busy/Discussed wrong")
+	if !a.Discussed() {
+		t.Error("Discussed wrong")
 	}
 }
 

@@ -444,7 +444,7 @@ func (a *app) comment(t *review.Thread, text string) {
 // agent learned writing the overview, and threads stay apart.
 func (a *app) ask(t *review.Thread, text string) {
 	text = strings.TrimSpace(text)
-	if text == "" || t.Busy() {
+	if text == "" || a.threadBusy(t.ID) {
 		return
 	}
 	rev := a.rev
@@ -502,6 +502,9 @@ func (a *app) ask(t *review.Thread, text string) {
 		}
 	})
 }
+
+// threadBusy reports whether the agent answers in the thread.
+func (a *app) threadBusy(id string) bool { return a.threadRun[id] != nil }
 
 func (a *app) stopThread(t *review.Thread) {
 	if cancel := a.threadRun[t.ID]; cancel != nil {

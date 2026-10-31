@@ -104,7 +104,7 @@ func (a *app) message(c *ui.Context, th *review.Thread, i int) {
 func (a *app) composer(c *ui.Context, th *review.Thread) {
 	t := c.Theme()
 	draft := a.drafts[th.ID]
-	busy := th.Busy()
+	busy := a.threadBusy(th.ID)
 	ui.Column(c).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
 		placeholder := "Comment, or question for the agent"
 		if len(th.Messages) > 0 {
@@ -112,7 +112,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 		}
 		in := ui.TextArea(c.Key("draft-"+th.ID), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
 			OnTextKey(func(k ui.TextKey) bool {
-				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !th.Busy() {
+				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !a.threadBusy(th.ID) {
 					a.ask(th, k.Text())
 					k.SetText("")
 					a.drafts[th.ID] = ""
@@ -173,7 +173,7 @@ func (a *app) threadRow(c *ui.Context, th *review.Thread) {
 			first = th.Messages[0].Text
 		}
 		ui.Text(c, excerpt(first, 300)).MaxLines(2)
-		ui.Text(c, threadMeta(th)).FontSize(11).TextColor(t.TextMuted)
+		ui.Text(c, a.threadMeta(th)).FontSize(11).TextColor(t.TextMuted)
 	})
 	if row.Clicked() {
 		a.openThread(th.ID)
