@@ -133,6 +133,12 @@ func (a *app) scopeList(c *ui.Context) {
 			ui.Row(c).Padding(t.Space(4), t.Space(2), t.Space(1), t.Space(2)).Background(t.Surface).Children(func() {
 				ui.Text(c, rows.label(i)).FontSize(t.FontSize - 1).FontWeight(600).TextColor(t.TextMuted).Grow(1).SingleLine()
 			})
+		case k == noteRow && a.commitsErr != "" && len(rows.commits) > 0:
+			ui.Column(c).Gap(4).Padding(4, 8).Children(func() {
+				ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.Danger).Selectable()
+				textLink(c, "Try again", func(e ui.Element) { e.FontSize(12) }).AlignSelf(ui.Start).
+					OnClick(func() { a.readCommitPage(a.commitsFailedAt) })
+			})
 		case k == noteRow && a.commitsErr != "":
 			ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.Danger).Padding(4, 8).Selectable()
 		case k == noteRow:

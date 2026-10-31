@@ -516,10 +516,20 @@ func (a *app) loadCommits(then func()) {
 // view count once the list has shown the commits read last.
 func (a *app) loadMoreCommits(last int) {
 	n := len(a.commits)
-	if a.commitsShown != a.commitsGen || a.commitsReading || n >= a.commitsTotal || last < n-commitsAhead ||
+	if a.commitsShown != a.commitsGen || n >= a.commitsTotal || last < n-commitsAhead ||
 		a.commitsErr != "" && last == a.commitsFailedAt {
 		return
 	}
+	a.readCommitPage(last)
+}
+
+// readCommitPage reads the page after the commits read, unless a read
+// runs. last is the last commit in view.
+func (a *app) readCommitPage(last int) {
+	if a.commitsReading {
+		return
+	}
+	n := len(a.commits)
 	a.commitsReading = true
 	r, gen, cl := a.repo, a.commitsGen, a.commitLog
 	a.async(func() {

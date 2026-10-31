@@ -156,7 +156,7 @@ func TestReopenReadsNoOldPage(t *testing.T) {
 }
 
 // TestCommitPageError shows why a page of commits could not be read, and
-// reads it again once the list scrolls.
+// reads it again once the list scrolls, or at once with Try again.
 func TestCommitPageError(t *testing.T) {
 	a, tt := pagedApp(t, 130)
 	dir := a.repo.Root
@@ -168,7 +168,6 @@ func TestCommitPageError(t *testing.T) {
 	if len(a.commits) != 50 {
 		t.Errorf("%d commits, texts %q", len(a.commits), tt.Texts())
 	}
-	snapshot(t, tt, "commit-page-error")
 	if err := os.Rename(away, gitDir); err != nil {
 		t.Fatal(err)
 	}
@@ -187,5 +186,30 @@ func TestCommitPageError(t *testing.T) {
 	}
 	if a.commitsErr != "" || tt.HasText("Could not list more commits") {
 		t.Errorf("error %q stays", a.commitsErr)
+	}
+
+	// Try again reads the page at once, without a scroll.
+	if err := os.Rename(gitDir, away); err != nil {
+		t.Fatal(err)
+	}
+	scrollCommits(t, a, tt, func() bool { return tt.HasText("Try again") })
+	for range 5 {
+		tt.Scroll(r.X+r.W/2, r.Y+r.H/2, 0, 200)
+		tt.Frame()
+	}
+	snapshot(t, tt, "commit-page-error")
+	if err := os.Rename(away, gitDir); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.commits) != 100 {
+		t.Fatalf("read again before Try again: %d commits", len(a.commits))
+	}
+	if err := tt.Click("Try again"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.commits) != 130 || a.commitsErr != "" || tt.HasText("Try again") {
+		t.Errorf("after Try again: %d commits, error %q", len(a.commits), a.commitsErr)
 	}
 }
