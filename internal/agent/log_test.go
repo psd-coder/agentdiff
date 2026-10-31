@@ -84,6 +84,30 @@ func TestRunLogExit(t *testing.T) {
 			t.Errorf("last = %+v", last)
 		}
 	})
+	t.Run("cancelled after the result", func(t *testing.T) {
+		bin := writeScript(t, "/bin/cat "+fixturePath(t, "claude_stream.jsonl")+"\nsleep 30")
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		var entries []LogEntry
+		req := Request{Log: func(e LogEntry) { entries = append(entries, e) }}
+		var events []Event
+		for ev := range Run(ctx, Config{Provider: Claude, Binary: bin}, req) {
+			events = append(events, ev)
+			if ev.Kind == EventDone {
+				cancel()
+			}
+		}
+		if last := assertOneTerminal(t, events); last.Kind != EventDone {
+			t.Fatalf("last event = %+v", last)
+		}
+		last := entries[len(entries)-1]
+		if last.Kind != LogExit || last.Text != exitOK {
+			t.Errorf("last = %+v", last)
+		}
+		if items := Summarize(Claude, last); len(items) != 1 || items[0].Failed {
+			t.Errorf("items = %+v", items)
+		}
+	})
 	t.Run("missing binary", func(t *testing.T) {
 		entries := runLog(t, t.Context(), Config{Provider: Claude, Binary: "/nonexistent/claude"}, Request{})
 		if !slices.Equal(logKinds(entries), []LogKind{LogExit}) || !strings.HasPrefix(entries[0].Text, "Could not start: ") {

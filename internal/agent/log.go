@@ -80,9 +80,13 @@ func (w *lineWriter) flush() {
 	}
 }
 
-func exitText(ctx context.Context, err error) string {
+// exitText is how the process ended. The CLI can still run its hooks after
+// it sent the result, so a cancel after the result is a normal exit.
+func exitText(ctx context.Context, err error, delivered bool) string {
 	var exit *exec.ExitError
 	switch {
+	case delivered && ctx.Err() != nil:
+		return exitOK
 	case ctx.Err() != nil:
 		return exitStopped
 	case err == nil:
