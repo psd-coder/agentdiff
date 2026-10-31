@@ -408,6 +408,7 @@ func TestArchiveUncommitted(t *testing.T) {
 		t.Helper()
 		a.refresh()
 		pump(t, a, what, func() bool { return !a.loading && !a.switching })
+		drain(a)
 		tt := ui.NewTester(a.view, 1300, 800)
 		tt.Frame()
 		return tt

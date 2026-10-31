@@ -578,7 +578,9 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			a.shown = true
 			a.files, a.diffstat = files, stat
 			a.patch, a.patchKnown, a.fileIDs = fp.Patch, perr == nil, fp.Files
-			a.archived = archived
+			// The list gets its own array: deleting from it in place
+			// would clear entries the commit lookup below still reads.
+			a.archived = slices.Clone(archived)
 			switch {
 			case from != nil && a.rev.Empty():
 				a.adopt(*from)
