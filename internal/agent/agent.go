@@ -147,7 +147,8 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 	waitErr := make(chan error, 1)
 	go func() {
 		err := cmd.Wait()
-		pw.Close()
+		// Close of an io.PipeWriter always returns nil.
+		_ = pw.Close()
 		waitErr <- err
 	}()
 

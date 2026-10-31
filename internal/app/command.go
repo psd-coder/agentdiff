@@ -337,27 +337,25 @@ func (a *app) runOn(c *ui.Context, id, target string) {
 }
 
 // cmdButton shows the command as a button acting on target, labeled
-// label. It shows nothing, and returns the zero Element, where the
-// command does not apply.
-func (a *app) cmdButton(c *ui.Context, id, target, label string) ui.Element {
-	return a.cmdButtonBase(c, id, target, label, ui.Button)
+// label. It shows nothing where the command does not apply.
+func (a *app) cmdButton(c *ui.Context, id, target, label string) {
+	a.cmdButtonBase(c, id, target, label, ui.Button)
 }
 
 // cmdPrimaryButton is cmdButton with the look of the main action.
-func (a *app) cmdPrimaryButton(c *ui.Context, id, target, label string) ui.Element {
-	return a.cmdButtonBase(c, id, target, label, ui.PrimaryButton)
+func (a *app) cmdPrimaryButton(c *ui.Context, id, target, label string) {
+	a.cmdButtonBase(c, id, target, label, ui.PrimaryButton)
 }
 
-func (a *app) cmdButtonBase(c *ui.Context, id, target, label string, button func(*ui.Context, string) ui.Element) ui.Element {
+func (a *app) cmdButtonBase(c *ui.Context, id, target, label string, button func(*ui.Context, string) ui.Element) {
 	cm := a.cmd(id)
 	if !a.applies(cm, target) {
-		return ui.Element{}
+		return
 	}
 	b := button(c.Key(id+target), label).OnClick(func() { cm.run(c, target) })
 	if tip := a.tooltip(cm); tip != "" {
 		b.Tooltip(tip)
 	}
-	return b
 }
 
 // cmdCheckbox shows the commands on and off, a pair of which one applies
@@ -449,13 +447,19 @@ func (a *app) hasFeedback(string) bool {
 }
 
 // groupFiles are the files of the group with the index g, nil for none.
-func (a *app) groupFiles(g string) []string {
+// groupIndex reads g, the part of a group page name after "group:", and
+// reports whether the group exists.
+func (a *app) groupIndex(g string) (int, bool) {
 	i, err := strconv.Atoi(g)
-	groups := a.groups()
-	if err != nil || i < 0 || i >= len(groups) {
+	return i, err == nil && i >= 0 && i < len(a.groups())
+}
+
+func (a *app) groupFiles(g string) []string {
+	i, ok := a.groupIndex(g)
+	if !ok {
 		return nil
 	}
-	return groups[i].Files
+	return a.groups()[i].Files
 }
 
 func (a *app) groupViewed(g string) bool {

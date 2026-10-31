@@ -197,6 +197,7 @@ func changeItem(c *ui.Context, icon *ui.SVG, label string, look itemLook, end fu
 		iconColor = t.AccentText
 	case grayItem:
 		item.Background(t.SurfacePressed)
+	case plainItem:
 	}
 	return item.Children(func() {
 		ui.Icon(c, icon).FontSize(16).TextColor(iconColor)
@@ -464,9 +465,7 @@ func (a *app) fileNav(c *ui.Context) {
 	a.takeFocus(nav, "files")
 	// Left and Right close and open the group chosen, as in a tree.
 	if gi, ok := strings.CutPrefix(page, "group:"); ok {
-		var i int
-		fmt.Sscanf(gi, "%d", &i)
-		if i < len(groups) {
+		if i, ok := a.groupIndex(gi); ok {
 			open := a.groupOpen(groups[i].Title)
 			switch {
 			case *open && nav.Shortcut(0, ui.KeyLeft):
@@ -606,9 +605,7 @@ func (a *app) main(c *ui.Context) {
 		case strings.HasPrefix(a.page, "walk:"):
 			a.walkPage(c, strings.TrimPrefix(a.page, "walk:"))
 		case strings.HasPrefix(a.page, "group:"):
-			var i int
-			fmt.Sscanf(a.page, "group:%d", &i)
-			a.groupPage(c, i)
+			a.groupPage(c, strings.TrimPrefix(a.page, "group:"))
 		default:
 			a.overviewPage(c)
 		}

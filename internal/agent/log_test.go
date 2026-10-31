@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -46,6 +47,7 @@ func TestRunLog(t *testing.T) {
 			stdout--
 		case LogStderr:
 			got = append(got, e.Text)
+		case LogCommand, LogStdin, LogExit:
 		}
 	}
 	if stdout != 0 {
@@ -100,12 +102,11 @@ func TestCommandLine(t *testing.T) {
 
 func fixtureItems(t *testing.T, p Provider, name string) []LogItem {
 	t.Helper()
-	f, err := os.Open(filepath.Join("testdata", name))
+	data, err := os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(nil, maxLineSize)
 	var items []LogItem
 	for scanner.Scan() {

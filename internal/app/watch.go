@@ -89,7 +89,11 @@ func (a *app) follow(ctx context.Context, dir string, opts mygo.FileWatchOptions
 		return
 	}
 	go func() {
-		defer w.Close()
+		defer func() {
+			if err := w.Close(); err != nil {
+				log.Printf("watch %s: %v", dir, err)
+			}
+		}()
 		for {
 			events, err := w.Next(ctx)
 			if err != nil {

@@ -71,8 +71,9 @@ func (r *Repo) resolve(ctx context.Context, s Scope) (revs, error) {
 			return revs{}, err
 		}
 		return revs{from: from, to: to}, nil
+	default:
+		return revs{}, fmt.Errorf("gitx: unknown scope kind %q", s.Kind)
 	}
-	return revs{}, fmt.Errorf("gitx: unknown scope kind %q", s.Kind)
 }
 
 func (r *Repo) resolveBranch(ctx context.Context, base, branch string) (revs, error) {
@@ -265,7 +266,7 @@ func (r *Repo) untrackedPaths(ctx context.Context) ([]string, error) {
 	return paths, nil
 }
 
-func (r *Repo) untrackedChanges(ctx context.Context) ([]FileChange, error) {
+func (r *Repo) untrackedChanges(ctx context.Context) (changes []FileChange, err error) {
 	paths, err := r.untrackedPaths(ctx)
 	if err != nil {
 		return nil, err
@@ -274,8 +275,8 @@ func (r *Repo) untrackedChanges(ctx context.Context) ([]FileChange, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
-	changes := make([]FileChange, 0, len(paths))
+	defer func() { err = errors.Join(err, root.Close()) }()
+	changes = make([]FileChange, 0, len(paths))
 	for _, p := range paths {
 		lines, binary, err := countWorktreeLines(root, p)
 		if err != nil {
@@ -294,7 +295,7 @@ func (r *Repo) untrackedChanges(ctx context.Context) ([]FileChange, error) {
 
 const binarySniffLen = 8000
 
-func countWorktreeLines(root *os.Root, path string) (int, bool, error) {
+func countWorktreeLines(root *os.Root, path string) (lines int, binary bool, err error) {
 	name := filepath.FromSlash(path)
 	info, err := root.Lstat(name)
 	if err != nil {
@@ -307,7 +308,7 @@ func countWorktreeLines(root *os.Root, path string) (int, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	defer f.Close()
+	defer func() { err = errors.Join(err, f.Close()) }()
 	br := bufio.NewReaderSize(f, binarySniffLen)
 	head, err := br.Peek(binarySniffLen)
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
@@ -316,7 +317,7 @@ func countWorktreeLines(root *os.Root, path string) (int, bool, error) {
 	if bytes.IndexByte(head, 0) >= 0 {
 		return 0, true, nil
 	}
-	lines, err := countLines(br)
+	lines, err = countLines(br)
 	return lines, false, err
 }
 

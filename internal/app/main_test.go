@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"image/png"
@@ -74,12 +75,11 @@ func snapshot(t *testing.T, tt *ui.Tester, name string) {
 	if dir == "" {
 		return
 	}
-	f, err := os.Create(filepath.Join(dir, name+".png"))
-	if err != nil {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, tt.Image()); err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	if err := png.Encode(f, tt.Image()); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name+".png"), buf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -532,7 +532,11 @@ func TestStartOverKeepsReviewWhenDeleteFails(t *testing.T) {
 	if err := os.Chmod(dirs[0], 0o555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(dirs[0], 0o755) })
+	t.Cleanup(func() {
+		if err := os.Chmod(dirs[0], 0o755); err != nil {
+			t.Error(err)
+		}
+	})
 
 	a.startOver()
 	if len(a.rev.Threads) != 1 {
@@ -1539,7 +1543,9 @@ func TestViewedFiles(t *testing.T) {
 	a.rev.Viewed["cache/cache.go"] = true
 	tt.Frame()
 
-	tt.Click("Hide viewed files")
+	if err := tt.Click("Hide viewed files"); err != nil {
+		t.Fatal(err)
+	}
 	tt.Frame()
 	if !shows(tt, "Cache keys") || !shows(tt, "API") {
 		t.Errorf("shown again: %q", tt.Texts())
@@ -1875,7 +1881,9 @@ func TestShortcutSettings(t *testing.T) {
 	// The modifiers held show before the key comes.
 	a.keysFilter = "refresh"
 	tt.Frame()
-	tt.Click("None")
+	if err := tt.Click("None"); err != nil {
+		t.Fatal(err)
+	}
 	tt.Frame()
 	tt.Frame()
 	tt.HoldModifiers(ui.Cmd | ui.Shift)
@@ -1891,7 +1899,9 @@ func TestShortcutSettings(t *testing.T) {
 	// Escape cancels a recording and keeps the dialog.
 	a.keysFilter = "refresh"
 	tt.Frame()
-	tt.Click("None")
+	if err := tt.Click("None"); err != nil {
+		t.Fatal(err)
+	}
 	tt.Frame()
 	tt.Frame()
 	tt.Key(0, ui.KeyEscape)

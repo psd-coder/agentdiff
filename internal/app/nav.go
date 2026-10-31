@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"path"
 	"strings"
 
@@ -147,10 +146,8 @@ func (a *app) pageLabel(page string) string {
 	case strings.HasPrefix(page, "file:"):
 		return path.Base(strings.TrimPrefix(page, "file:"))
 	case strings.HasPrefix(page, "group:"):
-		var i int
-		fmt.Sscanf(page, "group:%d", &i)
-		if groups := a.groups(); i >= 0 && i < len(groups) {
-			return groups[i].Title
+		if i, ok := a.groupIndex(strings.TrimPrefix(page, "group:")); ok {
+			return a.groups()[i].Title
 		}
 	}
 	return "previous page"

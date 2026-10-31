@@ -70,7 +70,11 @@ func BenchmarkFile(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			defer cr.Close()
+			b.Cleanup(func() {
+				if err := cr.Close(); err != nil {
+					b.Error(err)
+				}
+			})
 			i := 0
 			for b.Loop() {
 				if _, _, err := cr.Contents(files[i%len(files)]); err != nil {

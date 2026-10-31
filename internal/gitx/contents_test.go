@@ -248,7 +248,9 @@ func TestContentReaderCancelled(t *testing.T) {
 	if _, _, err := cr.Contents(FileChange{Path: "mod.txt", Status: StatusModified}); !errors.Is(err, context.Canceled) {
 		t.Errorf("Contents() error = %v, want context.Canceled", err)
 	}
-	cr.Close()
+	if err := cr.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
 	if cr.cmd.ProcessState == nil {
 		t.Error("git is still running after Close")
 	}
@@ -263,7 +265,11 @@ func TestContentReaderCancelledMidRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid := cr.cmd.Process.Pid
-	t.Cleanup(func() { syscall.Kill(pid, syscall.SIGKILL) })
+	t.Cleanup(func() {
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			t.Error(err)
+		}
+	})
 	// A stopped git reads the request and never answers, so Contents
 	// waits in the read until the context ends.
 	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
@@ -282,7 +288,9 @@ func TestContentReaderCancelledMidRead(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Contents() still waits after the context ended")
 	}
-	cr.Close()
+	if err := cr.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
 	if cr.cmd.ProcessState == nil {
 		t.Error("git is still running after Close")
 	}
