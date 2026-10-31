@@ -30,6 +30,9 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 		if w != nil {
 			if err := w.Write(e); err != nil {
 				log.Printf("run log: %v", err)
+				if err := w.Close(); err != nil {
+					log.Printf("run log: %v", err)
+				}
 				w = nil
 			}
 		}
@@ -144,12 +147,15 @@ func (a *app) generateOverview() {
 			ov := review.ReadOverview(answer(ev.Text, run.text), files)
 			ov.SessionID, ov.Agent, ov.Model, ov.Generated, ov.PatchID, ov.Files = session, cfg.Provider, cfg.Model, time.Now(), patch, fileIDs
 			rev.Overview = &ov
+			cancel()
 			delete(a.overviews, rev)
 			a.saveReviewOf(rev)
 			a.deeperAhead(rev)
 		case agent.EventError:
+			stopped := ctx.Err() != nil
+			cancel()
 			delete(a.overviews, rev)
-			if ctx.Err() != nil {
+			if stopped {
 				return
 			}
 			ov := &review.Overview{Agent: cfg.Provider, Model: cfg.Model, Generated: time.Now(), Err: ev.Err.Error()}
@@ -378,15 +384,17 @@ func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, r
 			} else {
 				w.SetAnswer(nil, text, "", time.Now())
 			}
+			cancel()
 			delete(a.walkRuns, w.ID)
 			a.saveReviewOf(rev)
 			a.startAhead()
 		case agent.EventError:
-			delete(a.walkRuns, w.ID)
 			msg := ev.Err.Error()
 			if ctx.Err() != nil {
 				msg = "Stopped"
 			}
+			cancel()
+			delete(a.walkRuns, w.ID)
 			w.SetAnswer(nil, "", msg, time.Now())
 			a.saveReviewOf(rev)
 			a.startAhead()
@@ -479,6 +487,7 @@ func (a *app) ask(t *review.Thread, text string) {
 				m.Text = ev.Text
 			}
 			m.Pending, m.Activity = false, ""
+			cancel()
 			delete(a.threadRun, t.ID)
 			a.saveReviewOf(rev)
 		case agent.EventError:
@@ -487,6 +496,7 @@ func (a *app) ask(t *review.Thread, text string) {
 			if ctx.Err() != nil {
 				m.Err = "Stopped"
 			}
+			cancel()
 			delete(a.threadRun, t.ID)
 			a.saveReviewOf(rev)
 		}

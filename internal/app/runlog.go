@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -121,11 +120,12 @@ func (a *app) loadRun(rev *review.Review, r *logRun) {
 		return
 	}
 	r.loading = true
+	repo, scope, id, provider := rev.Repo, rev.Scope, r.info.ID, r.info.Agent
 	a.async(func() {
-		entries, err := a.store.ReadRun(rev.Repo, rev.Scope, r.info.ID)
+		entries, err := a.store.ReadRun(repo, scope, id)
 		var items []logItem
 		for _, e := range entries {
-			items = append(items, logItems(r.info.Agent, e)...)
+			items = append(items, logItems(provider, e)...)
 		}
 		a.update(func() {
 			r.items, r.loaded, r.loading = items, true, false
@@ -148,7 +148,6 @@ func (a *app) startRun(rev *review.Review, info store.RunInfo) (*logRun, *store.
 	a.runs[rev] = runs[:min(len(runs), store.MaxRuns)]
 	w, err := a.store.CreateRun(rev.Repo, rev.Scope, info)
 	if err != nil {
-		log.Printf("run log: %v", err)
 		run.err = err.Error()
 		return run, nil
 	}
