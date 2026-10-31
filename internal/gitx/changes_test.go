@@ -1,7 +1,6 @@
 package gitx
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -35,7 +34,7 @@ func uncommittedFixture(t *testing.T) *testRepo {
 func TestChangesUncommitted(t *testing.T) {
 	tr := uncommittedFixture(t)
 	r := tr.open()
-	got, err := r.Changes(context.Background(), Scope{Kind: ScopeUncommitted})
+	got, err := r.Changes(t.Context(), Scope{Kind: ScopeUncommitted})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +58,7 @@ func TestChangesUnbornHead(t *testing.T) {
 	tr.write("staged.txt", "one\ntwo\n")
 	tr.git("add", "staged.txt")
 	tr.write("untracked one.txt", "u\n")
-	got, err := tr.open().Changes(context.Background(), Scope{Kind: ScopeUncommitted})
+	got, err := tr.open().Changes(t.Context(), Scope{Kind: ScopeUncommitted})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +75,7 @@ func TestChangesCleanTree(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.write("a.txt", "a\n")
 	tr.commit("init")
-	got, err := tr.open().Changes(context.Background(), Scope{Kind: ScopeUncommitted})
+	got, err := tr.open().Changes(t.Context(), Scope{Kind: ScopeUncommitted})
 	if err != nil || len(got) != 0 {
 		t.Errorf("Changes() = %+v, %v, want none", got, err)
 	}
@@ -170,7 +169,7 @@ func TestChangesCommittedScopes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := r.Changes(context.Background(), tt.scope)
+			got, err := r.Changes(t.Context(), tt.scope)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -193,7 +192,7 @@ func TestChangesInvalidScopes(t *testing.T) {
 		{Kind: ScopeRange, From: h.root},
 	}
 	for _, s := range scopes {
-		if _, err := r.Changes(context.Background(), s); err == nil {
+		if _, err := r.Changes(t.Context(), s); err == nil {
 			t.Errorf("Changes(%+v) succeeded", s)
 		}
 	}
@@ -203,7 +202,7 @@ func TestChangesBranchWithoutCommonAncestor(t *testing.T) {
 	h := newHistoryFixture(t)
 	h.git("checkout", "-q", "--orphan", "lonely")
 	h.commit("orphan root")
-	_, err := h.open().Changes(context.Background(), Scope{Kind: ScopeBranch, Base: "main"})
+	_, err := h.open().Changes(t.Context(), Scope{Kind: ScopeBranch, Base: "main"})
 	if err == nil || !strings.Contains(err.Error(), "common ancestor") {
 		t.Errorf("error = %v, want a common ancestor error", err)
 	}

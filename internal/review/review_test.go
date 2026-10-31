@@ -91,6 +91,26 @@ func TestSections(t *testing.T) {
 	}
 }
 
+func TestSectionsEdges(t *testing.T) {
+	tests := []struct {
+		name string
+		md   string
+		want []Section
+	}{
+		{"keeps text without headings as one section", "Just text\nmore\n", []Section{{Body: "Just text\nmore"}}},
+		{"keeps a heading on the last line without a newline", "Intro\n## Last", []Section{{Body: "Intro"}, {Title: "Last"}}},
+		{"keeps the body after the last heading without a newline", "## A\nx\ny", []Section{{Title: "A", Body: "x\ny"}}},
+		{"trims CRLF around titles and bodies and keeps it inside", "Intro\r\n## A\r\nx\r\ny\r\n", []Section{{Body: "Intro"}, {Title: "A", Body: "x\r\ny"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Sections(tt.md); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Sections(%q) = %#v\nwant %#v", tt.md, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestOverviewPromptDefaults(t *testing.T) {
 	p := OverviewPrompt("the uncommitted changes", " a | 1 +", "", []string{"a"}, "  ")
 	for _, want := range []string{"the uncommitted changes", "What data changes", "\"groups\"", "\"checklist\"", "\"refs\"", "working tree", "- a\n"} {
@@ -174,6 +194,19 @@ func TestQuestionPrompt(t *testing.T) {
 	p = QuestionPrompt(th, "ok?", false)
 	if !strings.Contains(p, "a.go:3 (+)") || !strings.Contains(p, "Reviewer: why?\n\nAgent: because") || strings.Contains(p, "Reviewer: ok?") || !strings.HasSuffix(p, "ok?") {
 		t.Errorf("prompt to a new session = %q", p)
+	}
+}
+
+func TestThreadCounts(t *testing.T) {
+	r := New("/r", gitx.Scope{})
+	r.AddThread(Anchor{Kind: AnchorLines, File: "a.go"})
+	r.AddThread(Anchor{Kind: AnchorFile, File: "a.go"})
+	r.AddThread(Anchor{Kind: AnchorLines, File: "b.go"})
+	r.AddThread(Anchor{Kind: AnchorSection, Section: "S"})
+	r.AddThread(Anchor{Kind: AnchorGeneral})
+	want := map[string]int{"a.go": 2, "b.go": 1}
+	if got := r.ThreadCounts(); !reflect.DeepEqual(got, want) {
+		t.Errorf("ThreadCounts = %v, want %v", got, want)
 	}
 }
 

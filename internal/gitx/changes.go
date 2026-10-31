@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -269,9 +270,14 @@ func (r *Repo) untrackedChanges(ctx context.Context) ([]FileChange, error) {
 	if err != nil {
 		return nil, err
 	}
+	root, err := os.OpenRoot(r.Root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
 	changes := make([]FileChange, 0, len(paths))
 	for _, p := range paths {
-		lines, binary, err := r.countWorktreeLines(p)
+		lines, binary, err := countWorktreeLines(root, p)
 		if err != nil {
 			return nil, err
 		}
@@ -288,23 +294,23 @@ func (r *Repo) untrackedChanges(ctx context.Context) ([]FileChange, error) {
 
 const binarySniffLen = 8000
 
-func (r *Repo) countWorktreeLines(path string) (int, bool, error) {
-	full := filepath.Join(r.Root, path)
-	info, err := os.Lstat(full)
+func countWorktreeLines(root *os.Root, path string) (int, bool, error) {
+	name := filepath.FromSlash(path)
+	info, err := root.Lstat(name)
 	if err != nil {
 		return 0, false, err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		return 1, false, nil
 	}
-	f, err := os.Open(full)
+	f, err := root.Open(name)
 	if err != nil {
 		return 0, false, err
 	}
 	defer f.Close()
 	br := bufio.NewReaderSize(f, binarySniffLen)
 	head, err := br.Peek(binarySniffLen)
-	if err != nil && err != io.EOF && err != bufio.ErrBufferFull {
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
 		return 0, false, err
 	}
 	if bytes.IndexByte(head, 0) >= 0 {
@@ -325,7 +331,7 @@ func countLines(r io.Reader) (int, error) {
 			lines += bytes.Count(buf[:n], []byte{'\n'})
 			endsWithNewline = buf[n-1] == '\n'
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

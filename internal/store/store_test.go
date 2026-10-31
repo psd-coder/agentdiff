@@ -50,11 +50,21 @@ func TestAutoEffortDefault(t *testing.T) {
 
 func TestLoadConfigCorrupt(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
-	if err := os.WriteFile(filepath.Join(s.Dir, "config.json"), []byte("{oops"), 0o644); err != nil {
+	path := filepath.Join(s.Dir, "config.json")
+	if err := os.WriteFile(path, []byte("{oops"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if got := s.LoadConfig(); got.Agent.Provider != agent.Claude {
 		t.Errorf("corrupt config = %+v, want defaults", got)
+	}
+	if b, err := os.ReadFile(path + ".bad"); err != nil || string(b) != "{oops" {
+		t.Errorf("config.json.bad = %q, %v", b, err)
+	}
+	if err := s.SaveConfig(DefaultConfig()); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path + ".bad"); string(b) != "{oops" {
+		t.Errorf("saving the config changed config.json.bad to %q", b)
 	}
 }
 
@@ -80,6 +90,19 @@ func TestRecent(t *testing.T) {
 	}
 }
 
+func TestRecentKeepsTheOldSlice(t *testing.T) {
+	c := Config{Recent: []string{"a", "b", "c"}}
+	old := c.Recent
+	c.RemoveRecent("a")
+	c.AddRecent("c")
+	if !slices.Equal(old, []string{"a", "b", "c"}) {
+		t.Errorf("the old recent slice changed to %v", old)
+	}
+	if !slices.Equal(c.Recent, []string{"c", "b"}) {
+		t.Errorf("recent = %v", c.Recent)
+	}
+}
+
 func TestReviewRoundTrip(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	scope := gitx.Scope{Kind: gitx.ScopeBranch, Base: "main"}
@@ -100,6 +123,28 @@ func TestReviewRoundTrip(t *testing.T) {
 	other := s.LoadReview("/other", scope)
 	if len(other.Threads) != 0 {
 		t.Error("reviews of different repos share a file")
+	}
+}
+
+func TestLoadReviewCorrupt(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
+	path := s.reviewPath("/repo", scope)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"threads": "a newer format"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := s.LoadReview("/repo", scope)
+	if len(r.Threads) != 0 || r.Viewed == nil {
+		t.Fatalf("unreadable review = %+v, want a new one", r)
+	}
+	if err := s.SaveReview(r); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(path + ".bad"); err != nil || string(b) != `{"threads": "a newer format"}` {
+		t.Errorf("review .bad file = %q, %v", b, err)
 	}
 }
 
@@ -294,6 +339,26 @@ func TestArchiveReview(t *testing.T) {
 	}
 	if _, ok := s.FindReview("/repo", uncommitted, "p0"); ok {
 		t.Error("the oldest archived review is still there")
+	}
+}
+
+func TestArchivedReturnsTheReviewItRead(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	// The file of archive "a" holds the review of archive "b", whose own
+	// file is missing, as when it is deleted while the archive is listed.
+	r := review.New("/elsewhere", gitx.Scope{Kind: gitx.ScopeArchived, From: "b"})
+	r.Overview = &review.Overview{Markdown: "x", PatchID: "p1"}
+	r.Viewed = nil
+	if err := writeJSON(s.reviewPath("/repo", gitx.Scope{Kind: gitx.ScopeArchived, From: "a"}), r); err != nil {
+		t.Fatal(err)
+	}
+	archived := s.Archived("/repo")
+	if len(archived) != 1 {
+		t.Fatalf("archived = %+v", archived)
+	}
+	got := archived[0]
+	if got.Overview == nil || got.Overview.PatchID != "p1" || got.Repo != "/repo" || got.Viewed == nil {
+		t.Errorf("archived review = %+v", got)
 	}
 }
 

@@ -151,11 +151,28 @@ func (r *Review) DeleteThread(id string) {
 func (r *Review) ThreadsOn(file string) []*Thread {
 	var out []*Thread
 	for _, t := range r.Threads {
-		if t.Anchor.File == file && (t.Anchor.Kind == AnchorFile || t.Anchor.Kind == AnchorLines) {
+		if t.Anchor.File == file && t.Anchor.onFile() {
 			out = append(out, t)
 		}
 	}
 	return out
+}
+
+// ThreadCounts is the number of threads on each file, the ones ThreadsOn
+// returns for it.
+func (r *Review) ThreadCounts() map[string]int {
+	n := map[string]int{}
+	for _, t := range r.Threads {
+		if t.Anchor.onFile() {
+			n[t.Anchor.File]++
+		}
+	}
+	return n
+}
+
+// onFile tells whether the anchor is a file or lines of it.
+func (a Anchor) onFile() bool {
+	return a.Kind == AnchorFile || a.Kind == AnchorLines
 }
 
 func (r *Review) ThreadsOnSection(title string) []*Thread {

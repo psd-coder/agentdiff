@@ -1,10 +1,11 @@
 package gitx
 
 import (
-	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -34,16 +35,28 @@ func TestOpen(t *testing.T) {
 }
 
 func TestOpenNotRepo(t *testing.T) {
-	if _, err := Open(t.TempDir()); !errors.Is(err, ErrNotRepo) {
+	_, err := Open(t.TempDir())
+	if !errors.Is(err, ErrNotRepo) {
 		t.Errorf("Open(non-repo) error = %v, want ErrNotRepo", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "fatal: not a git repository") {
+		t.Errorf("Open(non-repo) error = %v, want git's message", err)
 	}
 	if _, err := Open(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Error("Open(missing dir) succeeded")
 	}
 }
 
+func TestOpenWithoutGit(t *testing.T) {
+	tr := newTestRepo(t)
+	t.Setenv("PATH", t.TempDir())
+	if _, err := Open(tr.dir); !errors.Is(err, exec.ErrNotFound) {
+		t.Errorf("Open without git error = %v, want exec.ErrNotFound", err)
+	}
+}
+
 func TestUnbornRepo(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRepo(t).open()
 	if r.HasHead(ctx) {
 		t.Error("HasHead() = true in a repo without commits")
@@ -52,9 +65,16 @@ func TestUnbornRepo(t *testing.T) {
 	if err != nil || branch != "main" {
 		t.Errorf("CurrentBranch() = %q, %v", branch, err)
 	}
-	commits, err := r.Commits(ctx, "", "", 0)
+	log, err := r.CommitLog(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commits, err := log.Page(ctx, 0, 10)
 	if err != nil || commits == nil || len(commits) != 0 {
-		t.Errorf("Commits() = %#v, %v, want empty slice", commits, err)
+		t.Errorf("Page() = %#v, %v, want empty slice", commits, err)
+	}
+	if n, err := log.Count(ctx); n != 0 || err != nil {
+		t.Errorf("Count() = %d, %v, want 0", n, err)
 	}
 	if base := r.DefaultBase(ctx); base != "" {
 		t.Errorf("DefaultBase() = %q, want empty", base)
@@ -62,7 +82,7 @@ func TestUnbornRepo(t *testing.T) {
 }
 
 func TestBranchesAndDefaultBase(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	remote := newTestRepo(t)
 	remote.write("a.txt", "a\n")
 	remote.commit("init")
@@ -111,7 +131,7 @@ func TestDefaultBaseLocal(t *testing.T) {
 			tr := &testRepo{t: t, dir: t.TempDir()}
 			tr.git("init", "-q", "-b", tt.branch)
 			tr.commit("init")
-			if got := tr.open().DefaultBase(context.Background()); got != tt.want {
+			if got := tr.open().DefaultBase(t.Context()); got != tt.want {
 				t.Errorf("DefaultBase() = %q, want %q", got, tt.want)
 			}
 		})
@@ -119,7 +139,7 @@ func TestDefaultBaseLocal(t *testing.T) {
 }
 
 func TestCommits(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.write("a.txt", "1\n")
 	first := tr.commit("first")
@@ -133,34 +153,36 @@ func TestCommits(t *testing.T) {
 	r := tr.open()
 
 	tests := []struct {
-		name  string
-		base  string
-		limit int
-		want  []string
+		name        string
+		base        string
+		skip, limit int
+		want        []string
 	}{
-		{"all", "", 0, []string{fourth, third, second, first}},
-		{"limited", "", 2, []string{fourth, third}},
-		{"since base", "main", 0, []string{fourth, third}},
-		{"since base limited", "main", 1, []string{fourth}},
-		{"base is head", "feature", 0, nil},
+		{"all", "", 0, 10, []string{fourth, third, second, first}},
+		{"limited", "", 0, 2, []string{fourth, third}},
+		{"skipped", "", 1, 2, []string{third, second}},
+		{"past the end", "", 4, 2, nil},
+		{"since base", "main", 0, 10, []string{fourth, third}},
+		{"since base skipped", "main", 1, 10, []string{third}},
+		{"base is head", "feature", 0, 10, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			commits, err := r.Commits(ctx, tt.base, "", tt.limit)
+			log, err := r.CommitLog(ctx, tt.base, "")
 			if err != nil {
 				t.Fatal(err)
 			}
-			var got []string
-			for _, c := range commits {
-				got = append(got, c.SHA)
-			}
-			if !slices.Equal(got, tt.want) {
-				t.Errorf("Commits(%q, %d) = %q, want %q", tt.base, tt.limit, got, tt.want)
+			if got := pageSHAs(t, log, tt.skip, tt.limit); !slices.Equal(got, tt.want) {
+				t.Errorf("Page(%d, %d) since %q = %q, want %q", tt.skip, tt.limit, tt.base, got, tt.want)
 			}
 		})
 	}
 
-	commits, err := r.Commits(ctx, "", "", 0)
+	log, err := r.CommitLog(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commits, err := log.Page(ctx, 0, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,16 +196,65 @@ func TestCommits(t *testing.T) {
 	if !c.Time.Equal(time.Date(2026, 1, 1, 0, 0, 2, 0, time.UTC)) {
 		t.Errorf("time %v", c.Time)
 	}
-	if _, err := r.Commits(ctx, "no-such-branch", "", 0); err == nil {
-		t.Error("Commits with unknown base succeeded")
+	if _, err := r.CommitLog(ctx, "no-such-branch", ""); err == nil {
+		t.Error("CommitLog with unknown base succeeded")
 	}
-	if _, err := r.Commits(ctx, "--all", "", 0); err == nil {
-		t.Error("Commits with option-like base succeeded")
+	if _, err := r.CommitLog(ctx, "--all", ""); err == nil {
+		t.Error("CommitLog with option-like base succeeded")
 	}
 }
 
+// TestCommitLogKeepsItsCommits reads the pages of a log while the branch
+// gets a new commit: they hold the commits of the branch when the log was
+// made, each once.
+func TestCommitLogKeepsItsCommits(t *testing.T) {
+	ctx := t.Context()
+	tr := newTestRepo(t)
+	tr.commit("base")
+	tr.git("checkout", "-q", "-b", "feature")
+	var want []string
+	for i := range 5 {
+		want = append([]string{tr.commit(fmt.Sprint("work ", i))}, want...)
+	}
+	r := tr.open()
+	log, err := r.CommitLog(ctx, "main", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pageSHAs(t, log, 0, 2)
+	tr.commit("new work")
+	got = append(got, pageSHAs(t, log, 2, 2)...)
+	got = append(got, pageSHAs(t, log, 4, 2)...)
+	if !slices.Equal(got, want) {
+		t.Errorf("pages = %q, want %q", got, want)
+	}
+	if n, err := log.Count(ctx); n != 5 || err != nil {
+		t.Errorf("Count() = %d, %v, want 5", n, err)
+	}
+	log, err = r.CommitLog(ctx, "main", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := log.Count(ctx); n != 6 || err != nil {
+		t.Errorf("Count() of a new log = %d, %v, want 6", n, err)
+	}
+}
+
+func pageSHAs(t *testing.T, log CommitLog, skip, limit int) []string {
+	t.Helper()
+	commits, err := log.Page(t.Context(), skip, limit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shas []string
+	for _, c := range commits {
+		shas = append(shas, c.SHA)
+	}
+	return shas
+}
+
 func TestGitDir(t *testing.T) {
-	got, err := newTestRepo(t).open().GitDir(context.Background())
+	got, err := newTestRepo(t).open().GitDir(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +264,7 @@ func TestGitDir(t *testing.T) {
 }
 
 func TestCommonDirOfLinkedWorktree(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.commit("first")
 	other := filepath.Join(t.TempDir(), "wt")
@@ -220,7 +291,7 @@ func TestIgnored(t *testing.T) {
 	tr.write(".gitignore", "dist/\n*.log\n")
 	tr.write("dist/sub/out.js", "x\n")
 	tr.write("src/a.go", "package a\n")
-	got, err := tr.open().Ignored(context.Background(), []string{".", "dist", "dist/sub", "src", "src/debug.log"})
+	got, err := tr.open().Ignored(t.Context(), []string{".", "dist", "dist/sub", "src", "src/debug.log"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,14 +299,14 @@ func TestIgnored(t *testing.T) {
 	if !maps.Equal(got, want) {
 		t.Errorf("Ignored = %v, want %v", got, want)
 	}
-	got, err = tr.open().Ignored(context.Background(), []string{"src"})
+	got, err = tr.open().Ignored(t.Context(), []string{"src"})
 	if err != nil || len(got) != 0 {
 		t.Errorf("Ignored(src) = %v, %v", got, err)
 	}
 }
 
 func TestOtherBranch(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.write("a.txt", "1\n")
 	tr.commit("first")
@@ -246,12 +317,15 @@ func TestOtherBranch(t *testing.T) {
 	tr.write("a.txt", "dirty\n")
 	r := tr.open()
 
-	commits, err := r.Commits(ctx, "main", "feature", 0)
-	if err != nil || len(commits) != 1 || commits[0].SHA != third {
-		t.Fatalf("Commits(main, feature) = %+v, %v", commits, err)
+	log, err := r.CommitLog(ctx, "main", "feature")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := r.Commits(ctx, "", "no-such-branch", 0); err == nil {
-		t.Error("Commits with unknown head succeeded")
+	if got := pageSHAs(t, log, 0, 10); !slices.Equal(got, []string{third}) {
+		t.Fatalf("Page() of main..feature = %q", got)
+	}
+	if _, err := r.CommitLog(ctx, "", "no-such-branch"); err == nil {
+		t.Error("CommitLog with unknown head succeeded")
 	}
 
 	s := Scope{Kind: ScopeBranch, Base: "main", Head: "feature"}
@@ -272,7 +346,7 @@ func TestOtherBranch(t *testing.T) {
 }
 
 func TestWorktrees(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.write("a.txt", "1\n")
 	tr.commit("first")
@@ -305,7 +379,7 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	tr.write("old.txt", "old\n")
 	tr.commit("init")
 	r := tr.open()
-	ctx := context.Background()
+	ctx := t.Context()
 	uncommitted := Scope{Kind: ScopeUncommitted}
 	if fp, err := r.Fingerprint(ctx, uncommitted); err != nil || fp.Patch != "" || len(fp.Files) != 0 {
 		t.Fatalf("clean tree: %+v, err %v", fp, err)

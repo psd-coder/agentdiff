@@ -3,6 +3,7 @@ package store
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -154,7 +155,7 @@ func readRunInfo(path string) (RunInfo, error) {
 	defer f.Close()
 	r := bufio.NewReader(f)
 	line, err := r.ReadBytes('\n')
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return info, err
 	}
 	if err := json.Unmarshal(line, &info); err != nil {
@@ -196,7 +197,7 @@ func (s Store) ReadRun(repo string, scope gitx.Scope, id string) ([]agent.LogEnt
 		if len(line) > 0 && json.Unmarshal(line, &e) == nil {
 			entries = append(entries, e)
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return entries, nil
 		}
 		if err != nil {

@@ -67,8 +67,8 @@ func extractEnv(out []byte) ([]string, error) {
 
 func parseEnv(data []byte) []string {
 	var env []string
-	for _, entry := range strings.Split(string(data), "\x00") {
-		if i := strings.IndexByte(entry, '='); i > 0 {
+	for entry := range strings.SplitSeq(string(data), "\x00") {
+		if key, _, ok := strings.Cut(entry, "="); ok && key != "" {
 			env = append(env, entry)
 		}
 	}
@@ -76,8 +76,8 @@ func parseEnv(data []byte) []string {
 }
 
 func lookupEnv(env []string, key string) string {
-	for i := len(env) - 1; i >= 0; i-- {
-		if v, ok := strings.CutPrefix(env[i], key+"="); ok {
+	for _, kv := range slices.Backward(env) {
+		if v, ok := strings.CutPrefix(kv, key+"="); ok {
 			return v
 		}
 	}
@@ -116,9 +116,9 @@ func resolveBinary(cfg Config, env []string) (string, error) {
 	if name == "" {
 		name = string(cfg.Provider)
 	}
-	if strings.HasPrefix(name, "~/") {
+	if rest, ok := strings.CutPrefix(name, "~/"); ok {
 		if home, err := os.UserHomeDir(); err == nil {
-			name = filepath.Join(home, name[2:])
+			name = filepath.Join(home, rest)
 		}
 	}
 	if strings.Contains(name, "/") {

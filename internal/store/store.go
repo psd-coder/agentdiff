@@ -49,7 +49,7 @@ func DefaultConfig() Config {
 }
 
 func (c *Config) AddRecent(repo string) {
-	c.Recent = slices.DeleteFunc(c.Recent, func(r string) bool { return r == repo })
+	c.Recent = slices.DeleteFunc(slices.Clone(c.Recent), func(r string) bool { return r == repo })
 	c.Recent = append([]string{repo}, c.Recent...)
 	if len(c.Recent) > maxRecent {
 		c.Recent = c.Recent[:maxRecent]
@@ -57,14 +57,18 @@ func (c *Config) AddRecent(repo string) {
 }
 
 func (c *Config) RemoveRecent(repo string) {
-	c.Recent = slices.DeleteFunc(c.Recent, func(r string) bool { return r == repo })
+	c.Recent = slices.DeleteFunc(slices.Clone(c.Recent), func(r string) bool { return r == repo })
 }
 
 type Store struct{ Dir string }
 
+// LoadConfig returns the saved config, or the default one. A config file
+// it cannot read is moved to config.json.bad.
 func (s Store) LoadConfig() Config {
+	path := filepath.Join(s.Dir, "config.json")
 	cfg := DefaultConfig()
-	if err := readJSON(filepath.Join(s.Dir, "config.json"), &cfg); err != nil {
+	if err := readJSON(path, &cfg); err != nil {
+		setAside(path, err)
 		return DefaultConfig()
 	}
 	if cfg.Agent.Provider == "" {
@@ -85,10 +89,13 @@ func (s Store) reviewPath(repo string, scope gitx.Scope) string {
 	return filepath.Join(s.Dir, "reviews", hex.EncodeToString(sum[:8]), scope.Key()+".json")
 }
 
-// LoadReview returns the saved review of a scope, or a new one.
+// LoadReview returns the saved review of a scope, or a new one. A review
+// file it cannot read is moved to the same path with ".bad" added.
 func (s Store) LoadReview(repo string, scope gitx.Scope) *review.Review {
+	path := s.reviewPath(repo, scope)
 	r := review.New(repo, scope)
-	if err := readJSON(s.reviewPath(repo, scope), r); err != nil {
+	if err := readJSON(path, r); err != nil {
+		setAside(path, err)
 		return review.New(repo, scope)
 	}
 	if r.Viewed == nil {
@@ -214,12 +221,26 @@ func (s Store) Archived(repo string) []*review.Review {
 	var out []*review.Review
 	for _, path := range paths {
 		r := &review.Review{}
-		if readJSON(path, r) == nil && r.Scope.Kind == gitx.ScopeArchived && r.Overview != nil {
-			out = append(out, s.LoadReview(repo, r.Scope))
+		if readJSON(path, r) != nil || r.Scope.Kind != gitx.ScopeArchived || r.Overview == nil {
+			continue
 		}
+		if r.Viewed == nil {
+			r.Viewed = map[string]bool{}
+		}
+		r.Repo = repo
+		out = append(out, r)
 	}
 	slices.SortFunc(out, func(a, b *review.Review) int { return b.Updated.Compare(a.Updated) })
 	return out
+}
+
+// setAside moves a file that failed to load with err to path.bad, so the
+// next save does not write over data the app cannot read, for example a
+// file from another version of the app. It keeps only the newest .bad file.
+func setAside(path string, err error) {
+	if !IsNotExist(err) {
+		_ = os.Rename(path, path+".bad")
+	}
 }
 
 func copyFile(from, to string) error {

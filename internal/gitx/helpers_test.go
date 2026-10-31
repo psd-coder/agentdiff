@@ -1,7 +1,6 @@
 package gitx
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,12 +25,12 @@ func TestMain(m *testing.M) {
 }
 
 type testRepo struct {
-	t       *testing.T
+	t       testing.TB
 	dir     string
 	commits int
 }
 
-func newTestRepo(t *testing.T) *testRepo {
+func newTestRepo(t testing.TB) *testRepo {
 	t.Helper()
 	tr := &testRepo{t: t, dir: t.TempDir()}
 	tr.git("init", "-q", "-b", "main")
@@ -91,7 +90,7 @@ func (tr *testRepo) open() *Repo {
 
 func changesByPath(t *testing.T, r *Repo, s Scope) map[string]FileChange {
 	t.Helper()
-	changes, err := r.Changes(context.Background(), s)
+	changes, err := r.Changes(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}

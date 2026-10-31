@@ -91,8 +91,8 @@ It fits when you:
 
 ## Reviewing a change
 
-1. Pick a project and a branch in the toolbar. The project picker lists the repositories you opened before, adds a new one, and removes one from the list after you confirm (its saved reviews stay). The branch picker lists the local and remote branches, and opens the worktree of a branch that is checked out in another worktree. The button next to it opens Compare, which picks another base for the branch or a custom range. Then pick a scope in the top part of the sidebar: Uncommitted changes (only for the checked-out branch), All changes of the branch since its base, or one of its commits. A branch review belongs to the branch: it stays the same after a checkout, and it opens too when you pick the branch while another one is checked out. The app reads the checked-out branch again when its window gets focus and on Refresh. Uncommitted changes have one review per repository, because they stay in the working tree when you check out another branch.
-2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. The Flat and Grouped switch above the files lists them by path instead, with each file's folder next to its name. Hide viewed files leaves the files you marked viewed out of the list, in both flat and grouped mode. A group leaves the list when all its files are viewed. The open file leaves the list too. Next and previous file follow the order the sidebar shows, so with viewed files hidden they only step through the files left to review. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
+1. Pick a project and a branch in the toolbar. The project picker lists the repositories you opened before, adds a new one, and removes one from the list after you confirm (its saved reviews stay). The branch picker lists the local and remote branches, and opens the worktree of a branch that is checked out in another worktree. The button next to it opens Compare, which picks another base for the branch or a custom range. Then pick a scope in the top part of the sidebar: Uncommitted changes (only for the checked-out branch), All changes of the branch since its base, or one of its commits. The list has every commit of the branch or range. It reads them 50 at a time, and reads the next ones when you scroll near the end of the list. The count next to All changes is the number of all commits. A branch review belongs to the branch: it stays the same after a checkout, and it opens too when you pick the branch while another one is checked out. The app reads the checked-out branch again when its window gets focus and on Refresh. Uncommitted changes have one review per repository, because they stay in the working tree when you check out another branch.
+2. On the Overview page, click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. The Flat and Grouped switch above the files lists them by path instead, with each file's folder in small text under its name. Hide viewed files leaves the files you marked viewed out of the list, in both flat and grouped mode. A group leaves the list when all its files are viewed. The open file leaves the list too. Next and previous file follow the order the sidebar shows, so with viewed files hidden they only step through the files left to review. Stop cancels the run. When the CLI is missing or fails, the overview shows its error output.
 3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step opens a deeper walkthrough on its own page. Ask about this step opens a conversation in the side panel, with the questions asked about that step before. Open as page shows a conversation full width. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back above the page (Cmd+[) returns to where you were, at the same scroll place.
 4. Open a group with Review group, or with its name in the sidebar, to read all its files one after the other, or open one file. The chevron next to a group's name shows and hides its files, as do Right and Left. Mark a file Viewed when you are done with it. Mark all as viewed on the group page marks every file of the group. All files diff under Review in the sidebar (Cmd+4) shows the diffs of every file of the scope on one page, in the order the sidebar lists them, with the group titles between them. On these pages, the chevron before a file's name folds its diff. A file folds when you mark it Viewed, and it unfolds when you take the mark off.
 5. Comment: `+` in the gutter for one line, or click a line number and Shift+click another to select a range, then use `+` on a selected line or Comment on lines. Comment on file comments on the whole file. The thread opens on the right. Comment saves your note. Ask agent (Cmd+Enter) also sends it to the review agent.
@@ -191,21 +191,22 @@ An overview remembers which changes it was written for, as a `git patch-id` of t
 | `go tool mygo dev` | Builds a development app and restarts it on every change. It opens the `agentdiff` repository itself |
 | `go tool mygo build` | Builds `AgentDiff.app` and a `.dmg` into `build/darwin-arm64/` |
 | `go test ./...` | Runs all tests, with no network and no agent calls |
-| `AGENTDIFF_SNAPSHOTS=/tmp/snaps go test .` | Also writes PNG screenshots of the main screens, rendered without a window, into an existing directory |
-| `AGENTDIFF_E2E=claude go test -run TestEndToEnd -v .` | Asks a real agent (`claude` or `codex`) to explain this repository's last commit, then asks a question in a forked session. It uses your subscription. `AGENTDIFF_E2E_MODEL` sets the model |
+| `AGENTDIFF_SNAPSHOTS=/tmp/snaps go test ./internal/app` | Also writes PNG screenshots of the main screens, rendered without a window, into an existing directory |
+| `AGENTDIFF_E2E=claude go test -run TestEndToEnd -v ./internal/app` | Asks a real agent (`claude` or `codex`) to explain this repository's last commit, then asks a question in a forked session. It uses your subscription. `AGENTDIFF_E2E_MODEL` sets the model |
 
 ## Project layout
 
 ```
-main.go, app.go, run.go   window, app state, agent runs and streaming
-view*.go                  one file per screen: overview, files, thread panel, feedback, settings
+main.go                   picks the repository to open and starts the app
+internal/app              window, app state, agent runs and streaming
+internal/app/view*.go     one file per screen: overview, files, thread panel, feedback, settings
 internal/gitx             git CLI wrapper: scopes, changed files, file contents, commits
 internal/agent            claude and codex CLI runner: arguments, stream parsing, login-shell PATH
 internal/review           review model, explanation prompt and parsing, feedback export
 internal/store            JSON files for settings and reviews
 ```
 
-Only the packages under `internal/` and the views talk to git and the CLIs. Views never block: git and agent work runs on goroutines and reaches the view through `Window.Update`.
+Only the packages under `internal/` talk to git and the CLIs. Views never block: git and agent work runs on goroutines and reaches the view through `Window.Update`.
 
 ## FAQ
 

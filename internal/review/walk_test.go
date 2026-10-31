@@ -18,7 +18,8 @@ func TestParseWalkthrough(t *testing.T) {
 				{"file": "cache/cache.go", "side": "old", "start": 4, "end": 2},
 				{"file": "cache/cache.go", "start": 1, "end": 40},
 				{"file": "", "start": 3, "end": 4},
-				{"file": "x.go", "start": 0, "end": 4}
+				{"file": "x.go", "start": 0, "end": 4},
+				{"file": "x.go", "start": 9223372036854775800, "end": 9223372036854775807}
 			]},
 			{"title": " ", "text": ""}
 		],

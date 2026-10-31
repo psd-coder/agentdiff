@@ -273,13 +273,17 @@ func ParseWalkthrough(answer string) (*Walkthrough, bool) {
 	return &w, true
 }
 
-// cleanRefs drops references without a file or a line and cuts long
-// ones to maxRefLines.
+// maxRefStart is the highest start line a reference keeps. A larger one
+// would overflow the end line, and no diff has that many lines.
+const maxRefStart = 1 << 31
+
+// cleanRefs drops references without a file or a valid line and cuts
+// long ones to maxRefLines.
 func cleanRefs(refs []Ref) []Ref {
 	var out []Ref
 	for _, r := range refs {
 		r.File = strings.TrimPrefix(strings.TrimSpace(r.File), "./")
-		if r.File == "" || r.Start < 1 {
+		if r.File == "" || r.Start < 1 || r.Start > maxRefStart {
 			continue
 		}
 		if r.Side != SideOld {
