@@ -79,6 +79,8 @@ type app struct {
 	switching    bool
 	loadingScope *scopeLoad
 	diffs        map[string]*fileDiff
+	// stopLoad cancels the git work of the latest load.
+	stopLoad context.CancelFunc
 	// folded holds the files the reviewer folded or unfolded in this
 	// scope. The others are folded while they are viewed or big.
 	folded map[string]bool
@@ -252,6 +254,7 @@ func (a *app) openRepo(path string) {
 func (a *app) closeRepo() {
 	a.repo = nil
 	a.unwatch()
+	a.cancelLoad()
 	a.gen++
 	a.projectsOpen, a.shown = false, false
 	if a.win != nil {
@@ -490,6 +493,9 @@ type contents struct {
 // then the window keeps what it shows, under a spinner. A new scope
 // opens with its own review on its overview.
 func (a *app) load(s gitx.Scope, fresh bool) {
+	a.cancelLoad()
+	ctx, cancel := context.WithCancel(context.Background())
+	a.stopLoad = cancel
 	a.gen++
 	gen, r := a.gen, a.repo
 	rev, page := a.rev, a.page
@@ -517,7 +523,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 	first := a.firstPaint(rev, page, fresh)
 	uncommitted := s.Kind == gitx.ScopeUncommitted
 	a.async(func() {
-		ctx := context.Background()
+		defer cancel()
 		files, err := r.Changes(ctx, s)
 		stat := ""
 		if err == nil {
@@ -610,7 +616,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		if err != nil {
 			return
 		}
-		if len(wanted) > 0 {
+		if len(wanted) > 0 && ctx.Err() == nil {
 			moved, probable := findCommits(ctx, r, wanted)
 			a.update(func() {
 				if gen != a.gen {
@@ -626,6 +632,9 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			})
 		}
 		for _, f := range files {
+			if ctx.Err() != nil {
+				return
+			}
 			if _, ok := read[f.Path]; ok {
 				continue
 			}
@@ -638,6 +647,14 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			})
 		}
 	})
+}
+
+// cancelLoad stops the git work of the latest load, whose results are
+// stale once another load starts or the project closes.
+func (a *app) cancelLoad() {
+	if a.stopLoad != nil {
+		a.stopLoad()
+	}
 }
 
 // clearChanges forgets the changes of the scope, which load reads.
