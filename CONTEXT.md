@@ -47,3 +47,11 @@ _Avoid_: found, search
 **Freshness**:
 Whether the overview was written for the changes the scope has now: fresh, stale, or unknown while the changes are not read or an agent writes the overview.
 _Avoid_: staleness check, drift state
+
+**Keymap**:
+The shortcut of each command: its default, or the one the reviewer gave it in the settings. No two commands share a shortcut.
+_Avoid_: bindings, key config
+
+**Reserved keys**:
+Shortcuts that no command can take: those of the standard items of the menu bar, as Copy, and the keys the app uses in fields and lists.
+_Avoid_: system keys, fixed keys
