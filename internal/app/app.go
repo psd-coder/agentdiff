@@ -1037,13 +1037,25 @@ func (a *app) saveReview() {
 	}
 }
 
+// saveReviewOf saves r while it is the review of its scope. A review that
+// was started over or replaced is obsolete, and a late agent answer must
+// not write it back.
 func (a *app) saveReviewOf(r *review.Review) {
+	if a.obsolete(r) {
+		return
+	}
 	if r == a.rev {
 		a.keepSnippets()
 	}
 	if err := a.store.SaveReview(r); err != nil {
 		log.Printf("save review: %v", err)
 	}
+}
+
+// obsolete reports whether r is no longer the review the app keeps for
+// its scope.
+func (a *app) obsolete(r *review.Review) bool {
+	return a.reviews[reviewKey(r.Repo, r.Scope)] != r
 }
 
 func (a *app) saveConfig() {

@@ -80,7 +80,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 		}
 		a.update(func() {
 			run.running = false
-			if u := run.info.Usage; u != nil {
+			if u := run.info.Usage; u != nil && !a.obsolete(rev) {
 				u.CostUSD = a.runCost(rev, run, req.ResumeID)
 				if err := a.store.SaveRunUsage(rev.Repo, rev.Scope, info.ID, *u); err != nil {
 					log.Printf("run usage: %v", err)
@@ -404,10 +404,11 @@ func (a *app) stopWalk(id string) {
 // deleteWalk deletes a walk and the walks under it, and goes to its
 // parent.
 func (a *app) deleteWalk(w *review.Walk) {
+	walks := slices.Clone(a.rev.Walks)
 	a.rev.DeleteWalk(w.ID)
-	for id, run := range a.walkRuns {
-		if a.rev.Walk(id) == nil {
-			run.cancel()
+	for _, x := range walks {
+		if a.rev.Walk(x.ID) == nil {
+			a.stopWalk(x.ID)
 		}
 	}
 	a.page = "overview"

@@ -475,6 +475,64 @@ func TestStaleOverviewAndStartOver(t *testing.T) {
 	}
 }
 
+// TestStartOverDuringRuns starts over while a thread and a question run.
+// Their late answers do not bring the deleted review back.
+func TestStartOverDuringRuns(t *testing.T) {
+	a := newTestApp(t)
+	root, scope := a.repo.Root, a.scope
+	a.queue = make(chan func(), 64)
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "t1", "Because.")}
+	a.ask(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
+	thread := a.runs[a.rev][0]
+	slow := filepath.Join(t.TempDir(), "claude")
+	write(t, filepath.Dir(slow), "claude", "#!/bin/sh\ncat > /dev/null\nsleep 10\n")
+	if err := os.Chmod(slow, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.cfg.Agent.Binary = slow
+	a.askQuestion("", -1, "What?")
+	runs := slices.Clone(a.runs[a.rev])
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		entries, _ := a.store.ReadRun(root, scope, thread.info.ID)
+		if n := len(entries); n > 0 && entries[n-1].Kind == agent.LogExit {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the thread run did not finish")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	a.startOver()
+	pump(t, a, "the end of both runs", func() bool {
+		return !slices.ContainsFunc(runs, func(r *logRun) bool { return r.running })
+	})
+	if got := a.store.LoadReview(root, scope); len(got.Threads) != 0 || len(got.Walks) != 0 {
+		t.Errorf("deleted review came back: %d threads, %d walks", len(got.Threads), len(got.Walks))
+	}
+	if _, err := os.Stat(filepath.Dir(a.store.RunPath(root, scope, thread.info.ID))); !os.IsNotExist(err) {
+		t.Errorf("run logs of the deleted review came back: %v", err)
+	}
+}
+
+// TestDeleteWalkStopsItsRuns deletes a walk: the runs of the walk and the
+// walks under it stop, and the runs of other walks go on.
+func TestDeleteWalkStopsItsRuns(t *testing.T) {
+	a := newTestApp(t)
+	parent := a.rev.AddWalk("", -1, "Parent?")
+	child := a.rev.AddWalk(parent.ID, -1, "Child?")
+	sibling := a.rev.AddWalk("", -1, "Sibling?")
+	stopped := map[string]bool{}
+	for _, id := range []string{parent.ID, child.ID, sibling.ID, "walk-of-another-review"} {
+		a.walkRuns[id] = &walkRun{cancel: func() { stopped[id] = true }}
+	}
+	a.deleteWalk(parent)
+	if !stopped[parent.ID] || !stopped[child.ID] || stopped[sibling.ID] || stopped["walk-of-another-review"] {
+		t.Errorf("stopped = %v; parent %s, child %s, sibling %s", stopped, parent.ID, child.ID, sibling.ID)
+	}
+}
+
 // TestAgentLog runs a fake Claude that replays a recorded session, then
 // reads the run's log in a new app, as after a restart.
 func TestAgentLog(t *testing.T) {
