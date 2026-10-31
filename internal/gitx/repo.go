@@ -96,34 +96,62 @@ const (
 	commitFields       = 6
 )
 
-// Commits lists the commits of head, newest first: those not on base
-// when base is set. An empty head means HEAD.
-func (r *Repo) Commits(ctx context.Context, base, head string, limit int) ([]Commit, error) {
+// CommitLog is the commits of a branch or a range, newest first, fixed to
+// the commits its refs pointed to when it was made: its pages neither
+// repeat nor skip a commit when the branch moves between them.
+type CommitLog struct {
+	repo *Repo
+	// base and head are commit hashes. An empty head is a repository
+	// without commits.
+	base, head string
+}
+
+// CommitLog fixes the commits of head, those not on base when base is
+// set. An empty head means HEAD.
+func (r *Repo) CommitLog(ctx context.Context, base, head string) (CommitLog, error) {
 	if !r.HasHead(ctx) {
-		return []Commit{}, nil
+		return CommitLog{repo: r}, nil
 	}
-	if limit <= 0 {
-		limit = defaultCommitLimit
-	}
-	args := []string{
-		"log", "-z", "--no-show-signature", "--no-color",
-		"--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%b",
-		"-n", strconv.Itoa(limit),
-	}
-	head = cmp.Or(head, "HEAD")
-	if err := r.verifyRef(ctx, head); err != nil {
-		return nil, err
+	head, err := r.resolveCommit(ctx, cmp.Or(head, "HEAD"))
+	if err != nil {
+		return CommitLog{}, err
 	}
 	if base != "" {
-		if err := r.verifyRef(ctx, base); err != nil {
-			return nil, err
+		if base, err = r.resolveCommit(ctx, base); err != nil {
+			return CommitLog{}, err
 		}
-		args = append(args, base+".."+head)
-	} else {
-		args = append(args, head)
 	}
-	args = append(args, "--")
-	out, err := r.output(ctx, args...)
+	return CommitLog{repo: r, base: base, head: head}, nil
+}
+
+func (l CommitLog) revs() string {
+	if l.base == "" {
+		return l.head
+	}
+	return l.base + ".." + l.head
+}
+
+// Count is the number of commits in the log.
+func (l CommitLog) Count(ctx context.Context) (int, error) {
+	if l.head == "" {
+		return 0, nil
+	}
+	out, err := l.repo.line(ctx, "rev-list", "--count", l.revs(), "--")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(out)
+}
+
+// Page lists up to limit commits of the log after the first skip.
+func (l CommitLog) Page(ctx context.Context, skip, limit int) ([]Commit, error) {
+	if l.head == "" {
+		return []Commit{}, nil
+	}
+	out, err := l.repo.output(ctx,
+		"log", "-z", "--no-show-signature", "--no-color",
+		"--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%b",
+		"--skip="+strconv.Itoa(skip), "-n", strconv.Itoa(limit), l.revs(), "--")
 	if err != nil {
 		return nil, err
 	}
@@ -159,11 +187,6 @@ func splitNUL(out []byte) []string {
 		return nil
 	}
 	return strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00")
-}
-
-func (r *Repo) verifyRef(ctx context.Context, ref string) error {
-	_, err := r.resolveCommit(ctx, ref)
-	return err
 }
 
 func (r *Repo) resolveCommit(ctx context.Context, ref string) (string, error) {

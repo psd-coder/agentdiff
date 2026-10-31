@@ -443,7 +443,12 @@ func (a *app) loadCommits(then func()) {
 	r, gen := a.repo, a.commitsGen
 	base, head := a.listRange()
 	a.async(func() {
-		commits, err := r.Commits(context.Background(), base, head, commitsShown)
+		ctx := context.Background()
+		log, err := r.CommitLog(ctx, base, head)
+		var commits []gitx.Commit
+		if err == nil {
+			commits, err = log.Page(ctx, 0, commitsShown)
+		}
 		a.update(func() {
 			if a.repo != r || gen != a.commitsGen {
 				return
