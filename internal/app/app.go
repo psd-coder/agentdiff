@@ -654,23 +654,29 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 	first := a.firstPaint(rev, page, fresh)
 	a.async(func() {
 		defer cancel()
-		files, err := r.Changes(ctx, s)
-		stat := ""
+		var files []gitx.FileChange
+		var stat string
+		var fp gitx.Fingerprint
+		snap, err := r.Snapshot(ctx, s)
+		// A scope that does not resolve has no fingerprint either.
+		perr := err
 		if err == nil {
-			stat, err = r.DiffStat(ctx, s)
+			fp, perr = snap.Fingerprint(ctx)
+			if files, err = snap.Changes(ctx); err == nil {
+				stat, err = snap.DiffStat(ctx)
+			}
 		}
-		fp, perr := r.Fingerprint(ctx, s)
 		if perr != nil {
 			log.Printf("fingerprint: %v", perr)
 		}
 		found := a.reviews.Read(r.Root, s, before, fp, perr)
 		// readFile reads through one git process for the whole load, or
 		// starts git for each file when that process cannot start.
-		readFile := func(f gitx.FileChange) (string, string, error) { return r.Contents(ctx, s, f) }
+		readFile := func(f gitx.FileChange) (string, string, error) { return snap.Contents(ctx, f) }
 		// The files of the first page, read before it shows.
 		read := map[string]contents{}
 		if err == nil {
-			if cr, cerr := r.NewContentReader(ctx, s); cerr == nil {
+			if cr, cerr := snap.NewContentReader(ctx); cerr == nil {
 				defer func() {
 					if err := cr.Close(); err != nil && ctx.Err() == nil {
 						log.Printf("content reader: %v", err)

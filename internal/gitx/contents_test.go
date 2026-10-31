@@ -20,7 +20,7 @@ type reader struct {
 // ContentReader. Both must give the same result.
 func readers(t *testing.T, r *Repo, s Scope) []reader {
 	t.Helper()
-	cr, err := r.NewContentReader(context.Background(), s)
+	cr, err := snapshot(t, r, s).NewContentReader(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,17 +230,10 @@ func TestContentsUnbornHead(t *testing.T) {
 	}
 }
 
-func TestContentReaderBadScope(t *testing.T) {
-	r := newHistoryFixture(t).open()
-	if _, err := r.NewContentReader(t.Context(), Scope{Kind: ScopeBranch, Base: "no-such-branch"}); err == nil {
-		t.Error("NewContentReader() of an unknown base succeeded")
-	}
-}
-
 func TestContentReaderCancelled(t *testing.T) {
 	r := uncommittedFixture(t).open()
 	ctx, cancel := context.WithCancel(t.Context())
-	cr, err := r.NewContentReader(ctx, Scope{Kind: ScopeUncommitted})
+	cr, err := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +253,7 @@ func TestContentReaderCancelledMidRead(t *testing.T) {
 	r := uncommittedFixture(t).open()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-	cr, err := r.NewContentReader(ctx, Scope{Kind: ScopeUncommitted})
+	cr, err := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -53,10 +53,14 @@ func (v revs) worktree() bool { return v.to == "" }
 func (r *Repo) resolve(ctx context.Context, s Scope) (revs, error) {
 	switch s.Kind {
 	case ScopeUncommitted:
-		if !r.HasHead(ctx) {
+		head, ok, err := r.optionalLine(ctx, "rev-parse", "-q", "--verify", "HEAD^{commit}")
+		if err != nil {
+			return revs{}, err
+		}
+		if !ok {
 			return revs{from: emptyTree}, nil
 		}
-		return revs{from: "HEAD"}, nil
+		return revs{from: head}, nil
 	case ScopeBranch:
 		return r.resolveBranch(ctx, s.Base, cmp.Or(s.Head, "HEAD"))
 	case ScopeCommit:
@@ -120,26 +124,6 @@ func (r *Repo) diff(ctx context.Context, v revs, format ...string) ([]byte, erro
 	args = append(args, format...)
 	args = append(args, v.args()...)
 	return r.output(ctx, append(args, "--")...)
-}
-
-func (r *Repo) Changes(ctx context.Context, s Scope) ([]FileChange, error) {
-	v, err := r.resolve(ctx, s)
-	if err != nil {
-		return nil, err
-	}
-	changes, err := r.trackedChanges(ctx, v)
-	if err != nil {
-		return nil, err
-	}
-	if v.worktree() {
-		untracked, err := r.untrackedChanges(ctx)
-		if err != nil {
-			return nil, err
-		}
-		changes = append(changes, untracked...)
-	}
-	slices.SortFunc(changes, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
-	return changes, nil
 }
 
 func (r *Repo) trackedChanges(ctx context.Context, v revs) ([]FileChange, error) {
@@ -270,10 +254,11 @@ func (r *Repo) untrackedPaths(ctx context.Context) ([]string, error) {
 	return paths, nil
 }
 
-func (r *Repo) untrackedChanges(ctx context.Context) (changes []FileChange, err error) {
-	paths, err := r.untrackedPaths(ctx)
-	if err != nil {
-		return nil, err
+// untrackedChanges counts the lines of the untracked files in paths. A
+// file deleted since paths was listed is left out.
+func (r *Repo) untrackedChanges(paths []string) (changes []FileChange, err error) {
+	if len(paths) == 0 {
+		return nil, nil
 	}
 	root, err := os.OpenRoot(r.Root)
 	if err != nil {
@@ -283,6 +268,9 @@ func (r *Repo) untrackedChanges(ctx context.Context) (changes []FileChange, err 
 	changes = make([]FileChange, 0, len(paths))
 	for _, p := range paths {
 		lines, binary, err := countWorktreeLines(root, p)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}

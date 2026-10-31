@@ -8,30 +8,6 @@ import (
 
 const statWidth = 40
 
-func (r *Repo) DiffStat(ctx context.Context, s Scope) (string, error) {
-	v, err := r.resolve(ctx, s)
-	if err != nil {
-		return "", err
-	}
-	out, err := r.diff(ctx, v, "--stat=200")
-	if err != nil {
-		return "", err
-	}
-	if !v.worktree() {
-		return string(out), nil
-	}
-	untracked, err := r.untrackedChanges(ctx)
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	b.Write(out)
-	for _, c := range untracked {
-		b.WriteString(untrackedStatLine(c))
-	}
-	return b.String(), nil
-}
-
 func untrackedStatLine(c FileChange) string {
 	if c.Binary {
 		return fmt.Sprintf(" %s | Bin (untracked)\n", c.Path)
@@ -53,18 +29,21 @@ func (r *Repo) Patch(ctx context.Context, s Scope, maxBytes int) (string, bool, 
 		return "", false, err
 	}
 	if v.worktree() {
-		if err := r.untrackedPatches(ctx, out); err != nil {
+		paths, err := r.untrackedPaths(ctx)
+		if err != nil {
+			return "", false, err
+		}
+		if err := r.untrackedPatches(ctx, paths, out); err != nil {
 			return "", false, err
 		}
 	}
 	return out.String(), out.truncated, nil
 }
 
-func (r *Repo) untrackedPatches(ctx context.Context, out *cappedBuffer) error {
-	paths, err := r.untrackedPaths(ctx)
-	if err != nil {
-		return err
-	}
+// untrackedPatches writes the untracked files in paths as added ones. git
+// writes nothing and exits with 1 for a file deleted since paths was
+// listed, so that file is left out.
+func (r *Repo) untrackedPatches(ctx context.Context, paths []string, out *cappedBuffer) error {
 	for _, p := range paths {
 		if out.full() {
 			out.truncated = true
