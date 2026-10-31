@@ -109,7 +109,11 @@ func (r *Repo) resolveCommitScope(ctx context.Context, commit string) (revs, err
 	return revs{from: parent, to: sha}, nil
 }
 
-var diffFlags = []string{"--no-color", "--no-ext-diff", "--no-textconv", "-M"}
+// diffFlags pin the a/ and b/ prefixes, which diff.noprefix and
+// diff.mnemonicPrefix change, so that paths and patch IDs stay the same.
+var diffFlags = []string{
+	"--no-color", "--no-ext-diff", "--no-textconv", "-M", "--src-prefix=a/", "--dst-prefix=b/",
+}
 
 func (r *Repo) diff(ctx context.Context, v revs, format ...string) ([]byte, error) {
 	args := append([]string{"diff"}, diffFlags...)
