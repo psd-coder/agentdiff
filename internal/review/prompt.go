@@ -74,8 +74,8 @@ func overviewPrompt(scope, diffstat, newRev string, files []string, questions st
 	return b.String()
 }
 
-// DeeperRequest is what a deeper walkthrough is about.
-type DeeperRequest struct {
+// deeperRequest is what a deeper walkthrough is about.
+type deeperRequest struct {
 	// Step is the step to explain, nil for the parent walkthrough as a
 	// whole.
 	Step     *Step
@@ -90,7 +90,7 @@ type DeeperRequest struct {
 	NewRev  string
 }
 
-func DeeperPrompt(d DeeperRequest) string {
+func deeperPrompt(d deeperRequest) string {
 	var b strings.Builder
 	if !d.Known {
 		b.WriteString(d.Context)
@@ -119,8 +119,8 @@ func DeeperPrompt(d DeeperRequest) string {
 	return b.String()
 }
 
-// FollowupRequest is a follow-up question in a question's conversation.
-type FollowupRequest struct {
+// followupRequest is a follow-up question in a question's conversation.
+type followupRequest struct {
 	Question string
 	// Known is true when the session holds the conversation so far.
 	Known bool
@@ -131,7 +131,7 @@ type FollowupRequest struct {
 	NewRev  string
 }
 
-func FollowupPrompt(f FollowupRequest) string {
+func followupPrompt(f followupRequest) string {
 	var b strings.Builder
 	if !f.Known {
 		b.WriteString(f.Context)
@@ -154,7 +154,7 @@ func FollowupPrompt(f FollowupRequest) string {
 // readOverview turns the agent's answer into an overview: a walkthrough
 // when the answer holds one, else the Markdown and its groups block.
 func readOverview(answer string, files []string) Overview {
-	if w, ok := ParseWalkthrough(answer); ok {
+	if w, ok := parseWalkthrough(answer); ok {
 		groups := NormalizeGroups(w.Groups, files)
 		w.Groups = nil
 		return Overview{Walk: w, Groups: groups}

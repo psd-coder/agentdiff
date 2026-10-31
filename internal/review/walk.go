@@ -87,9 +87,9 @@ func (w *Walk) Turns() []Turn {
 	return append([]Turn{first}, w.More...)
 }
 
-// SetAnswer puts an answer, or the error that came instead, into the
+// setAnswer puts an answer, or the error that came instead, into the
 // latest turn.
-func (w *Walk) SetAnswer(content *Walkthrough, markdown, err string, at time.Time) {
+func (w *Walk) setAnswer(content *Walkthrough, markdown, err string, at time.Time) {
 	if n := len(w.More); n > 0 {
 		t := &w.More[n-1]
 		t.Content, t.Markdown, t.Err, t.Generated = content, markdown, err, at
@@ -239,10 +239,10 @@ func (r *Review) WalkTitle(w *Walk) string {
 
 var jsonFence = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*\\})\\s*```")
 
-// ParseWalkthrough reads the walkthrough JSON out of an agent's answer:
+// parseWalkthrough reads the walkthrough JSON out of an agent's answer:
 // a fenced block, or the outermost braces. It reports false when the
 // answer holds no walkthrough, so the caller can show it as Markdown.
-func ParseWalkthrough(answer string) (*Walkthrough, bool) {
+func parseWalkthrough(answer string) (*Walkthrough, bool) {
 	raw := ""
 	if m := jsonFence.FindAllStringSubmatch(answer, -1); len(m) > 0 {
 		raw = m[len(m)-1][1]
