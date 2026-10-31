@@ -10,7 +10,6 @@ import (
 	"github.com/egoist/mygo/ui/markdown"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
-	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
@@ -231,11 +230,15 @@ func (a *app) extraOf(path string) *extraFile {
 	if f := a.extra[path]; f != nil {
 		return f
 	}
+	// The first load has no snapshot yet. The view asks again once it shows.
+	if a.snap == nil {
+		return &extraFile{loading: true}
+	}
 	f := &extraFile{loading: true}
 	a.extra[path] = f
-	r, s, gen := a.repo, a.scope, a.gen
+	snap, gen := a.snap, a.gen
 	a.async(func() {
-		_, text, err := r.Contents(context.Background(), s, gitx.FileChange{Path: path, Status: gitx.StatusAdded})
+		text, err := snap.File(context.Background(), path)
 		a.update(func() {
 			if gen != a.gen {
 				return

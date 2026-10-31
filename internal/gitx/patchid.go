@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -58,16 +59,31 @@ func (s *Snapshot) Fingerprint(ctx context.Context) (Fingerprint, error) {
 
 // patch is the diff of the snapshot, with the untracked files as added ones.
 func (s *Snapshot) patch(ctx context.Context) ([]byte, error) {
-	out := &cappedBuffer{}
+	var out bytes.Buffer
 	args := append([]string{"diff"}, diffFlags...)
 	args = append(append(args, "-p"), s.revs.args()...)
-	if err := s.repo.run(ctx, out, append(args, "--")...); err != nil {
+	if err := s.repo.run(ctx, &out, append(args, "--")...); err != nil {
 		return nil, err
 	}
-	if err := s.repo.untrackedPatches(ctx, s.untracked, out); err != nil {
+	if err := s.repo.untrackedPatches(ctx, s.untracked, &out); err != nil {
 		return nil, err
 	}
-	return out.buf.Bytes(), nil
+	return out.Bytes(), nil
+}
+
+// untrackedPatches writes the untracked files in paths as added ones. git
+// writes nothing and exits with 1 for a file deleted since paths was
+// listed, so that file is left out.
+func (r *Repo) untrackedPatches(ctx context.Context, paths []string, out io.Writer) error {
+	for _, p := range paths {
+		args := append([]string{"diff"}, diffFlags...)
+		err := r.run(ctx, out, append(args, "--no-index", "--", "/dev/null", p)...)
+		// --no-index exits 1 when the files differ, which is always the case here.
+		if err != nil && exitCode(err) != 1 {
+			return err
+		}
+	}
+	return nil
 }
 
 type fileChunk struct {

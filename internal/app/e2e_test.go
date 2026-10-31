@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -106,11 +107,21 @@ func logWalk(t *testing.T, w *review.Walkthrough) {
 // checkRefs reports references to lines that do not exist on their side.
 func checkRefs(t *testing.T, ctx context.Context, repo *gitx.Repo, scope gitx.Scope, w *review.Walkthrough) {
 	t.Helper()
+	snap, err := repo.Snapshot(ctx, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes, err := snap.Changes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, s := range w.Steps {
 		for _, r := range s.Refs {
-			oldText, newText, err := repo.Contents(ctx, scope, gitx.FileChange{Path: r.File, Status: gitx.StatusModified})
-			if err != nil {
-				_, newText, err = repo.Contents(ctx, scope, gitx.FileChange{Path: r.File, Status: gitx.StatusAdded})
+			var oldText, newText string
+			if i := slices.IndexFunc(changes, func(c gitx.FileChange) bool { return c.Path == r.File }); i >= 0 {
+				oldText, newText, err = snap.Contents(ctx, changes[i])
+			} else {
+				newText, err = snap.File(ctx, r.File)
 			}
 			text := newText
 			if r.Side == review.SideOld {
