@@ -178,7 +178,7 @@ func (a *app) setKeys(id, keys string) (from *command) {
 		a.cfg.Keys = map[string]string{}
 	}
 	if keys != "" {
-		for _, other := range a.commands() {
+		for _, other := range a.cachedCommands() {
 			if other.id != id && sameKeys(a.keysOf(other), keys) {
 				a.cfg.Keys[other.id] = ""
 				from = other

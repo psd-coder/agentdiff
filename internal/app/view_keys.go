@@ -56,7 +56,7 @@ func (a *app) shortcutsTab(c *ui.Context) {
 	t := c.Theme()
 	q := strings.ToLower(strings.TrimSpace(a.keysFilter))
 	var cmds []*command
-	for _, cm := range a.commands() {
+	for _, cm := range a.cachedCommands() {
 		if strings.Contains(strings.ToLower(cm.title), q) || q != "" && strings.Contains(strings.ToLower(keyLabel(a.keysOf(cm))), q) {
 			cmds = append(cmds, cm)
 		}
