@@ -25,12 +25,12 @@ func TestMain(m *testing.M) {
 }
 
 type testRepo struct {
-	t       *testing.T
+	t       testing.TB
 	dir     string
 	commits int
 }
 
-func newTestRepo(t *testing.T) *testRepo {
+func newTestRepo(t testing.TB) *testRepo {
 	t.Helper()
 	tr := &testRepo{t: t, dir: t.TempDir()}
 	tr.git("init", "-q", "-b", "main")

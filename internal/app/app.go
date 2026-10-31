@@ -578,15 +578,24 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 				from = &src
 			}
 		}
+		// readFile reads through one git process for the whole load, or
+		// starts git for each file when that process cannot start.
+		readFile := func(f gitx.FileChange) (string, string, error) { return r.Contents(ctx, s, f) }
 		// The files of the first page, read before it shows.
 		read := map[string]contents{}
 		if err == nil {
+			if cr, cerr := r.NewContentReader(ctx, s); cerr == nil {
+				defer cr.Close()
+				readFile = cr.Contents
+			} else if ctx.Err() == nil {
+				log.Printf("content reader: %v", cerr)
+			}
 			for _, p := range first {
 				f := gitx.FileChange{Path: p, Status: gitx.StatusAdded}
 				if i := slices.IndexFunc(files, func(f gitx.FileChange) bool { return f.Path == p }); i >= 0 {
 					f = files[i]
 				}
-				oldText, newText, cerr := r.Contents(ctx, s, f)
+				oldText, newText, cerr := readFile(f)
 				read[p] = contents{f, oldText, newText, cerr}
 			}
 		}
@@ -667,7 +676,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			if _, ok := read[f.Path]; ok {
 				continue
 			}
-			oldText, newText, cerr := r.Contents(ctx, s, f)
+			oldText, newText, cerr := readFile(f)
 			a.update(func() {
 				if gen != a.gen {
 					return
