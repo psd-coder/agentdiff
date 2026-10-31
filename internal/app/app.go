@@ -476,8 +476,9 @@ func (a *app) checkedOut(branch string, branches []string) {
 		if name == branch {
 			a.head = ""
 		}
-		a.scope = a.branchScopeOf(name, s.Base)
-		a.rev.Scope = a.scope
+		if to := a.branchScopeOf(name, s.Base); a.reviews.Rescope(a.rev, to) {
+			a.scope = to
+		}
 	} else if a.head == branch {
 		a.head = ""
 	}
@@ -584,7 +585,6 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 	rev, page := a.rev, a.nav.page
 	if fresh {
 		rev, page = a.reviews.Of(r.Root, s), overview
-		rev.Scope = s
 	}
 	a.loadingScope = &scopeLoad{s, fresh}
 	entered := !fresh
@@ -598,7 +598,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		a.perLoad = newPerLoad()
 		a.loading = true
 	}
-	before := continuity.BeforeLoad(rev)
+	cont := a.reviews.Begin(r.Root, s, rev)
 	first := a.firstPaint(rev, page, fresh)
 	a.async(func() {
 		defer cancel()
@@ -625,7 +625,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 				log.Printf("commit message: %v", cerr)
 			}
 		}
-		found := a.reviews.Read(r.Root, s, before, fp, perr)
+		cont.Read(fp, perr)
 		var cr *gitx.ContentReader
 		// The files of the first page, read before it shows.
 		read := map[string]contents{}
@@ -667,7 +667,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 				diffs: diffs, extra: map[string]*extraFile{}, commit: commit,
 			}
 			a.shown = true
-			a.settle(a.reviews.Decide(found, a.rev, a.runner.reviewBusy))
+			a.settle(cont.Decide(a.rev, a.runner.reviewBusy))
 			for p, c := range read {
 				if a.diffs[p] != nil {
 					a.setContents(c.change, c.oldText, c.newText, c.err)
@@ -680,13 +680,12 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		if err != nil {
 			return
 		}
-		if found.Searches() && ctx.Err() == nil {
-			moved, probable := found.FindCommits(ctx, r)
+		if located := cont.Locate(ctx, r); located != nil {
 			a.update(func() {
 				if gen != a.gen {
 					return
 				}
-				a.movedTo = a.reviews.Located(found, moved, probable)
+				a.movedTo = located()
 			})
 		}
 		for _, f := range files {
@@ -762,7 +761,6 @@ func (a *app) settle(out continuity.Outcome) {
 		if a.leaveReview() {
 			a.saved(a.store.SaveReview(old))
 		}
-		a.movedTo = ""
 	}
 	a.rev = out.Rev
 	if out.Err != nil {

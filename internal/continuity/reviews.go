@@ -18,7 +18,7 @@ const liveKey = ""
 
 // Reviews keeps the reviews the app has open, one per repository and
 // scope, and the earlier reviews of the uncommitted changes. All its
-// methods run on the UI thread, except Read.
+// methods run on the UI thread.
 type Reviews struct {
 	store store.Store
 	open  map[string]*review.Review
@@ -40,6 +40,8 @@ func key(repo string, s gitx.Scope) string { return repo + "\x00" + s.Key() }
 
 // Of loads the review of a scope once and keeps it, so an agent run that
 // finishes after a scope switch writes into the review the view shows.
+// The review takes s as its scope, which can name the same changes in
+// another way than the scope it was kept for.
 func (rs *Reviews) Of(repo string, s gitx.Scope) *review.Review {
 	k := key(repo, s)
 	r := rs.open[k]
@@ -47,7 +49,19 @@ func (rs *Reviews) Of(repo string, s gitx.Scope) *review.Review {
 		r = rs.store.LoadReview(repo, s)
 		rs.open[k] = r
 	}
+	r.Scope = s
 	return r
+}
+
+// Rescope gives r the scope s when s names the same changes as the scope
+// of r, such as a branch by its name after it was checked out. It reports
+// false and changes nothing when s names other changes.
+func (rs *Reviews) Rescope(r *review.Review, s gitx.Scope) bool {
+	if key(r.Repo, s) != key(r.Repo, r.Scope) {
+		return false
+	}
+	r.Scope = s
+	return true
 }
 
 // Kept returns the review of a scope that the app has open, or nil. It
@@ -101,90 +115,100 @@ func (rs *Reviews) AdoptedFrom() *gitx.Scope { return rs.adoptedFrom }
 // when another scope opens.
 func (rs *Reviews) ClearAdopted() { rs.adoptedFrom = nil }
 
-// Before is what the review of a scope was written for when its load
-// started.
-type Before struct {
-	Empty   bool
-	Written ChangeID
+// Load is what one load of a scope learns about its reviews. Its four
+// phases run in order: Begin on the UI thread, Read on the load
+// goroutine, Decide on the UI thread, and Locate on the load goroutine.
+// The function Locate returns runs on the UI thread, after Decide.
+type Load struct {
+	rs    *Reviews
+	store store.Store
+	repo  string
+	scope gitx.Scope
+	// empty and written are what the review of the scope was when the
+	// load began.
+	empty   bool
+	written ChangeID
+
+	fp      gitx.Fingerprint
+	fpKnown bool
+	from    *review.Review
+	earlier []*Earlier
+	wanted  map[string]ChangeID
+
+	// archived is the ID the review of the scope got in the archive, or
+	// "" while it is not there.
+	archived string
 }
 
-// BeforeLoad reads rev for a load, on the UI thread.
-func BeforeLoad(rev *review.Review) Before {
-	b := Before{Empty: rev.Empty()}
+// Begin starts a load of scope s of repo, whose review is rev.
+func (rs *Reviews) Begin(repo string, s gitx.Scope, rev *review.Review) *Load {
+	l := &Load{rs: rs, store: rs.store, repo: repo, scope: s, empty: rev.Empty()}
 	if ov := rev.Overview; ov != nil {
-		b.Written = changeOf(ov)
+		l.written = changeOf(ov)
 	}
-	return b
+	return l
 }
 
 func changeOf(ov *review.Overview) ChangeID {
 	return ChangeID{Patch: ov.PatchID, Files: ov.WrittenFiles()}
 }
 
-// Found is what a load read from the store for its scope.
-type Found struct {
-	fp      gitx.Fingerprint
-	fpKnown bool
-	from    *review.Review
-	earlier []*Earlier
-	// live holds the commits found for the review of the scope, and goes
-	// to the list when the review goes to the archive.
-	live   *Earlier
-	wanted map[string]ChangeID
-}
-
-// Read reads what the store has for a load of s, whose changes have the
+// Read reads what the store has for the load, whose changes have the
 // fingerprint fp unless fpErr is set: the archived reviews of the
 // uncommitted changes, and a saved review written for the same changes
-// when the review of s is empty or a drifted review of uncommitted
-// changes. It runs on the load goroutine, so it reads the review of s as
-// it was when the load started, and Decide checks the review again.
-func (rs *Reviews) Read(repo string, s gitx.Scope, b Before, fp gitx.Fingerprint, fpErr error) *Found {
-	uncommitted := s.Kind == gitx.ScopeUncommitted
-	f := &Found{fp: fp, fpKnown: fpErr == nil, live: &Earlier{}, wanted: map[string]ChangeID{}}
+// when the review of the scope is empty or a drifted review of
+// uncommitted changes. It reads the review of the scope as it was when
+// the load began, and Decide checks the review again.
+func (l *Load) Read(fp gitx.Fingerprint, fpErr error) {
+	uncommitted := l.scope.Kind == gitx.ScopeUncommitted
+	l.fp, l.fpKnown, l.wanted = fp, fpErr == nil, map[string]ChangeID{}
 	if uncommitted {
-		for _, arch := range rs.store.Archived(repo) {
-			f.earlier = append(f.earlier, &Earlier{Rev: arch})
+		for _, arch := range l.store.Archived(l.repo) {
+			l.earlier = append(l.earlier, &Earlier{Rev: arch})
 		}
 	}
-	written := b.Written.Patch
-	if uncommitted && f.fpKnown && written != "" && written != fp.Patch {
-		f.wanted[liveKey] = b.Written
+	written := l.written.Patch
+	if uncommitted && l.fpKnown && written != "" && written != fp.Patch {
+		l.wanted[liveKey] = l.written
 	}
-	for _, e := range f.earlier {
-		f.wanted[e.ID()] = changeOf(e.Rev.Overview)
+	for _, e := range l.earlier {
+		l.wanted[e.ID()] = changeOf(e.Rev.Overview)
 	}
-	if (b.Empty || uncommitted && written != fp.Patch) && f.fpKnown && fp.Patch != "" {
-		if src, ok := rs.store.FindReview(repo, s, fp.Patch); ok {
-			f.from = src
+	if (l.empty || uncommitted && written != fp.Patch) && l.fpKnown && fp.Patch != "" {
+		if src, ok := l.store.FindReview(l.repo, l.scope, fp.Patch); ok {
+			l.from = src
 		}
 	}
-	return f
 }
 
-// Searches reports whether the load looks for changes in the recent
-// commits.
-func (f *Found) Searches() bool { return len(f.wanted) > 0 }
-
-// FindCommits looks in the recent commits for the changes of the
-// archived reviews and of a drifted review of the scope, on the load
-// goroutine.
-func (f *Found) FindCommits(ctx context.Context, r *gitx.Repo) (moved, probable map[string]string) {
-	return findCommits(ctx, r, f.wanted)
-}
-
-// Located puts the commits FindCommits found into the archived reviews,
-// on the UI thread. It returns the commit that now holds the changes of
-// the review of the scope, unless that review went to the archive.
-func (rs *Reviews) Located(f *Found, moved, probable map[string]string) string {
-	f.live.MovedTo, f.live.Probably = moved[liveKey], probable[liveKey]
-	for _, e := range f.earlier {
-		e.MovedTo, e.Probably = moved[e.ID()], probable[e.ID()]
+// Locate looks in the recent commits for the changes of the archived
+// reviews and of a drifted review of the scope. It returns nil when there
+// is nothing to look for or ctx is done. The function it returns puts the
+// commits into the archived reviews, and returns the commit that now
+// holds the changes of the review of the scope, unless that review went
+// to the archive.
+func (l *Load) Locate(ctx context.Context, r *gitx.Repo) (located func() string) {
+	if len(l.wanted) == 0 || ctx.Err() != nil {
+		return nil
 	}
-	if slices.Contains(rs.earlier, f.live) {
+	moved, probable := findCommits(ctx, r, l.wanted)
+	return func() string { return l.located(moved, probable) }
+}
+
+func (l *Load) located(moved, probable map[string]string) string {
+	for _, e := range l.rs.earlier {
+		k := e.ID()
+		if k == l.archived {
+			k = liveKey
+		}
+		if _, ok := l.wanted[k]; ok {
+			e.MovedTo, e.Probably = moved[k], probable[k]
+		}
+	}
+	if l.archived != "" {
 		return ""
 	}
-	return f.live.MovedTo
+	return moved[liveKey]
 }
 
 // Outcome is what a decision did to the review of the scope.
@@ -204,24 +228,23 @@ type Outcome struct {
 // files is changed any more. rev is the review of the scope, and busy
 // reports whether an agent run writes into a review. While an agent
 // writes into rev or into the saved review, Decide changes nothing.
-func (rs *Reviews) Decide(f *Found, rev *review.Review, busy func(*review.Review) bool) Outcome {
+func (l *Load) Decide(rev *review.Review, busy func(*review.Review) bool) Outcome {
+	rs := l.rs
 	out := Outcome{Rev: rev}
-	// The list gets its own array: deleting from it in place would clear
-	// entries the commit lookup still reads.
-	rs.earlier = slices.Clone(f.earlier)
-	out.Err = rs.decide(&out, f, busy)
+	rs.earlier = l.earlier
+	out.Err = rs.decide(&out, l, busy)
 	if from := rs.adoptedFrom; from != nil {
 		rs.earlier = slices.DeleteFunc(rs.earlier, func(e *Earlier) bool { return e.Rev.Scope == *from })
 	}
 	return out
 }
 
-func (rs *Reviews) decide(out *Outcome, f *Found, busy func(*review.Review) bool) error {
+func (rs *Reviews) decide(out *Outcome, l *Load, busy func(*review.Review) bool) error {
 	rev := out.Rev
-	if !f.fpKnown || busy(rev) {
+	if !l.fpKnown || busy(rev) {
 		return nil
 	}
-	src := f.from
+	src := l.from
 	if rs.startedOver[key(rev.Repo, rev.Scope)] {
 		src = nil
 	}
@@ -231,12 +254,12 @@ func (rs *Reviews) decide(out *Outcome, f *Found, busy func(*review.Review) bool
 	switch {
 	case src != nil && rev.Empty():
 		return rs.adopt(out, src)
-	case !archivable(rev, f.fp):
+	case !archivable(rev, l.fp):
 		return nil
 	case src != nil:
-		return rs.archiveAndAdopt(out, f, src)
-	case rev.Overview.Drift(f.fp.Files).Disjoint():
-		return rs.archive(out, f)
+		return rs.archiveAndAdopt(out, l, src)
+	case rev.Overview.Drift(l.fp.Files).Disjoint():
+		return rs.archive(out, l)
 	}
 	return nil
 }
@@ -333,20 +356,20 @@ func (rs *Reviews) addViewed(r *review.Review, viewed map[string]bool) error {
 
 // archive moves out.Rev, the review of the uncommitted changes, into the
 // archive and starts an empty one.
-func (rs *Reviews) archive(out *Outcome, f *Found) error {
+func (rs *Reviews) archive(out *Outcome, l *Load) error {
 	old := out.Rev
 	to, err := rs.store.ArchiveReview(old.Repo, archiveID(old.Overview))
 	if err != nil {
 		return fmt.Errorf("archive review: %w", err)
 	}
-	rs.archived(out, f, to)
-	return rs.prune(f, old.Repo)
+	rs.archived(out, l, to)
+	return rs.prune(old)
 }
 
 // archiveAndAdopt moves out.Rev, the review of the uncommitted changes,
 // into the archive and takes over the saved review src in its place.
 // When src cannot be taken over, the review comes back from the archive.
-func (rs *Reviews) archiveAndAdopt(out *Outcome, f *Found, src *review.Review) error {
+func (rs *Reviews) archiveAndAdopt(out *Outcome, l *Load, src *review.Review) error {
 	old := out.Rev
 	if rs.store.LoadReview(old.Repo, src.Scope).Empty() {
 		return fmt.Errorf("adopt review: the review of %s is gone", src.Scope.Key())
@@ -359,19 +382,18 @@ func (rs *Reviews) archiveAndAdopt(out *Outcome, f *Found, src *review.Review) e
 	if err != nil {
 		return errors.Join(err, rs.store.MoveReview(old.Repo, to, old.Scope))
 	}
-	rs.archived(out, f, to)
+	rs.archived(out, l, to)
 	err = rs.took(out, src, moved)
-	return errors.Join(err, rs.prune(f, old.Repo))
+	return errors.Join(err, rs.prune(old))
 }
 
-// archived puts out.Rev, which the store archived under scope to, on the
-// list and starts an empty review. f.live holds the commits found for the
-// archived review's changes.
-func (rs *Reviews) archived(out *Outcome, f *Found, to gitx.Scope) {
+// archived starts an empty review in place of out.Rev, which the store
+// archived under scope to.
+func (rs *Reviews) archived(out *Outcome, l *Load, to gitx.Scope) {
 	old := out.Rev
 	scope := old.Scope
 	old.Scope = to
-	f.live.Rev = old
+	l.archived = to.From
 	rs.adoptedFrom = nil
 	out.Rev = review.New(old.Repo, scope)
 	rs.Replace(out.Rev)
@@ -379,23 +401,22 @@ func (rs *Reviews) archived(out *Outcome, f *Found, to gitx.Scope) {
 	out.Dropped = append(out.Dropped, old)
 }
 
-// prune deletes the oldest archived reviews of repo past what the store
-// keeps, and reads the list again from the store. The list keeps the
-// entries of f, which receive the commits the load finds.
-func (rs *Reviews) prune(f *Found, repo string) error {
-	err := rs.store.PruneArchive(repo)
+// prune deletes the oldest archived reviews past what the store keeps,
+// and reads the list again from the store. The list keeps its entries
+// and the review archived just now, so the pages that show them keep
+// the reviews they show.
+func (rs *Reviews) prune(archived *review.Review) error {
+	err := rs.store.PruneArchive(archived.Repo)
 	if err != nil {
 		err = fmt.Errorf("prune archive: %w", err)
 	}
 	listed := map[string]*Earlier{}
-	for _, e := range f.earlier {
+	for _, e := range rs.earlier {
 		listed[e.ID()] = e
 	}
-	if f.live.Rev != nil {
-		listed[f.live.ID()] = f.live
-	}
+	listed[archived.Scope.From] = &Earlier{Rev: archived}
 	rs.earlier = nil
-	for _, r := range rs.store.Archived(repo) {
+	for _, r := range rs.store.Archived(archived.Repo) {
 		e := listed[r.Scope.From]
 		if e == nil {
 			e = &Earlier{Rev: r}

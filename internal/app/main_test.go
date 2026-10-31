@@ -366,7 +366,9 @@ func TestReviewToBiggerCommit(t *testing.T) {
 }
 
 // TestArchiveUncommitted replaces the uncommitted changes with other
-// ones: their review goes to the archive, and comes back with them.
+// ones: their review stays while an agent writes into it, then goes to
+// the list of earlier reviews, and the Restore button brings it back
+// with a banner that counts how its files changed.
 func TestArchiveUncommitted(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
@@ -402,18 +404,6 @@ func TestArchiveUncommitted(t *testing.T) {
 	}
 	snapshot(t, tt, "archived")
 
-	if err := os.Remove(filepath.Join(dir, "output.json")); err != nil {
-		t.Fatal(err)
-	}
-	git(t, dir, "stash", "pop", "-q")
-	reload("the changes back")
-	if !tt.HasText("Moved here from earlier uncommitted changes") || tt.HasText("Earlier reviews") || tt.HasText("This overview was written for") {
-		t.Fatalf("texts %q", tt.Texts())
-	}
-
-	git(t, dir, "stash", "-u", "-q")
-	write(t, dir, "output.json", "{}\n")
-	reload("the other changes again")
 	if err := tt.Click("Lower-case keys."); err != nil {
 		t.Fatal(err)
 	}

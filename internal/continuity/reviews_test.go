@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +35,14 @@ func saved(scope gitx.Scope, label, patch string, files map[string]string) *revi
 	r := review.New(repo, scope)
 	r.Overview = &review.Overview{Markdown: label, PatchID: patch, Files: files, Generated: time.Unix(1, 0)}
 	return r
+}
+
+// load is a load of scope, whose review is cur, that read the changes
+// with the fingerprint fp.
+func load(rs *Reviews, scope gitx.Scope, cur *review.Review, fp gitx.Fingerprint) *Load {
+	l := rs.Begin(repo, scope, cur)
+	l.Read(fp, nil)
+	return l
 }
 
 func current(scope gitx.Scope) *review.Review {
@@ -286,7 +296,7 @@ func TestDecide(t *testing.T) {
 				}
 			}
 			if tc.restore {
-				rs.Decide(rs.Read(repo, tc.scope, BeforeLoad(cur), gitx.Fingerprint{Patch: "pz"}, nil), cur, busy)
+				load(rs, tc.scope, cur, gitx.Fingerprint{Patch: "pz"}).Decide(cur, busy)
 				out := rs.Restore(rs.Earlier()[0], cur, busy)
 				if out.Err != nil {
 					t.Fatal(out.Err)
@@ -298,11 +308,12 @@ func TestDecide(t *testing.T) {
 				}
 			}
 
-			found := rs.Read(repo, tc.scope, BeforeLoad(cur), tc.fp, tc.fpErr)
+			l := rs.Begin(repo, tc.scope, cur)
+			l.Read(tc.fp, tc.fpErr)
 			if tc.afterRead != nil {
 				tc.afterRead(t, rs, s)
 			}
-			out := rs.Decide(found, cur, busy)
+			out := l.Decide(cur, busy)
 
 			if got := label(out.Rev); got != tc.rev {
 				t.Errorf("review = %q, want %q", got, tc.rev)
@@ -382,12 +393,9 @@ func TestLocated(t *testing.T) {
 			}
 			rs := New(s)
 			cur := rs.Of(repo, uncommitted)
-			found := rs.Read(repo, uncommitted, BeforeLoad(cur), tc.fp, nil)
-			if !found.Searches() {
-				t.Fatal("nothing to look for")
-			}
-			rs.Decide(found, cur, func(*review.Review) bool { return false })
-			movedTo := rs.Located(found, map[string]string{"": "c2", "pq": "c3"}, map[string]string{"pq": "c4"})
+			l := load(rs, uncommitted, cur, tc.fp)
+			l.Decide(cur, func(*review.Review) bool { return false })
+			movedTo := l.located(map[string]string{"": "c2", "pq": "c3"}, map[string]string{"pq": "c4"})
 			if movedTo != tc.movedTo {
 				t.Errorf("moved to %q, want %q", movedTo, tc.movedTo)
 			}
@@ -414,7 +422,7 @@ func TestDecideAfterRun(t *testing.T) {
 	busy := func(r *review.Review) bool { return running && r == src }
 	load := func() Outcome {
 		cur := rs.Of(repo, uncommitted)
-		return rs.Decide(rs.Read(repo, uncommitted, BeforeLoad(cur), disjoint, nil), cur, busy)
+		return load(rs, uncommitted, cur, disjoint).Decide(cur, busy)
 	}
 	if out := load(); label(out.Rev) != "current" || out.Archived != nil {
 		t.Fatalf("during the run: review %q, archived %q", label(out.Rev), label(out.Archived))
@@ -422,6 +430,49 @@ func TestDecideAfterRun(t *testing.T) {
 	running = false
 	if out := load(); label(out.Rev) != "commit" || label(out.Archived) != "current" || out.Err != nil {
 		t.Errorf("after the run: review %q, archived %q, err %v", label(out.Rev), label(out.Archived), out.Err)
+	}
+}
+
+// TestArchiveComesBack follows the review of the uncommitted changes
+// while its changes go away and come back: it goes to the archive, comes
+// back with its changes, and once restored stays without them.
+func TestArchiveComesBack(t *testing.T) {
+	s := store.Store{Dir: t.TempDir()}
+	if err := s.SaveReview(current(uncommitted)); err != nil {
+		t.Fatal(err)
+	}
+	rs := New(s)
+	never := func(*review.Review) bool { return false }
+	reload := func(fp gitx.Fingerprint) Outcome {
+		t.Helper()
+		cur := rs.Of(repo, uncommitted)
+		out := load(rs, uncommitted, cur, fp).Decide(cur, never)
+		if out.Err != nil {
+			t.Fatal(out.Err)
+		}
+		return out
+	}
+	ids := func() []string {
+		var out []string
+		for _, e := range rs.Earlier() {
+			out = append(out, e.ID())
+		}
+		return out
+	}
+
+	if out := reload(disjoint); label(out.Archived) != "current" || label(out.Rev) != "empty" || !slices.Equal(ids(), []string{"pa"}) {
+		t.Fatalf("other changes: review %q, archived %q, earlier %q", label(out.Rev), label(out.Archived), ids())
+	}
+	if out := reload(same); label(out.Rev) != "current" || len(ids()) != 0 || rs.AdoptedFrom() == nil || rs.AdoptedFrom().Kind != gitx.ScopeArchived {
+		t.Fatalf("the changes back: review %q, earlier %q, adopted from %v", label(out.Rev), ids(), rs.AdoptedFrom())
+	}
+	reload(disjoint)
+	next := rs.Restore(rs.Find("pa"), rs.Of(repo, uncommitted), never)
+	if next.Err != nil || label(next.Rev) != "current" || len(ids()) != 0 {
+		t.Fatalf("restore: review %q, err %v, earlier %q", label(next.Rev), next.Err, ids())
+	}
+	if out := reload(disjoint); label(out.Rev) != "current" || out.Archived != nil || len(ids()) != 0 {
+		t.Errorf("the restored review without its changes: review %q, archived %q, earlier %q", label(out.Rev), label(out.Archived), ids())
 	}
 }
 
@@ -460,7 +511,7 @@ func TestMoveTo(t *testing.T) {
 				tc.open(open)
 			}
 			cur := rs.Of(repo, uncommitted)
-			rs.Decide(rs.Read(repo, uncommitted, BeforeLoad(cur), same, nil), cur, func(*review.Review) bool { return false })
+			load(rs, uncommitted, cur, same).Decide(cur, func(*review.Review) bool { return false })
 			busy := func(r *review.Review) bool { return tc.busy && r == open }
 
 			next := rs.MoveTo(repo, rs.Find("pb"), commit, busy)
@@ -510,7 +561,7 @@ func TestRestore(t *testing.T) {
 			rs := New(s)
 			open := rs.Of(repo, archived)
 			cur := rs.Of(repo, uncommitted)
-			rs.Decide(rs.Read(repo, uncommitted, BeforeLoad(cur), same, nil), cur, func(*review.Review) bool { return false })
+			load(rs, uncommitted, cur, same).Decide(cur, func(*review.Review) bool { return false })
 			if tc.notEmpty {
 				cur.Overview = &review.Overview{Markdown: "own"}
 			}
@@ -562,7 +613,7 @@ func TestDelete(t *testing.T) {
 			}
 			rs := New(s)
 			cur := rs.Of(repo, uncommitted)
-			rs.Decide(rs.Read(repo, uncommitted, BeforeLoad(cur), same, nil), cur, func(*review.Review) bool { return false })
+			load(rs, uncommitted, cur, same).Decide(cur, func(*review.Review) bool { return false })
 			if tc.broken {
 				// A file in place of the store directory makes every
 				// delete fail.
@@ -585,5 +636,122 @@ func TestDelete(t *testing.T) {
 				t.Errorf("gone from the store: %v", got)
 			}
 		})
+	}
+}
+
+// TestLocate finds the commit that holds the changes of an archived
+// review, and a commit that changes all the files of another one.
+func TestLocate(t *testing.T) {
+	dir := t.TempDir()
+	gitIn(t, dir, "init", "-q", "-b", "main")
+	writeFile(t, dir, "a.go", "package a\n")
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-qm", "first")
+	writeFile(t, dir, "a.go", "package a\n\nvar A = 1\n")
+	gitIn(t, dir, "commit", "-qam", "second")
+	second := gitIn(t, dir, "rev-parse", "HEAD")
+	r, err := gitx.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, err := r.CommitPatchIDs(t.Context(), "", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch := ""
+	for p, sha := range ids {
+		if sha == second {
+			patch = p
+		}
+	}
+	if patch == "" {
+		t.Fatalf("no patch id for the second commit in %v", ids)
+	}
+
+	s := store.Store{Dir: t.TempDir()}
+	for _, rev := range []*review.Review{
+		saved(gitx.ArchivedScope(patch), "moved", patch, map[string]string{"a.go": "x"}),
+		saved(gitx.ArchivedScope("pz"), "edited", "pz", map[string]string{"a.go": "y"}),
+	} {
+		if err := s.SaveReview(rev); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rs := New(s)
+	cur := rs.Of(repo, uncommitted)
+	l := load(rs, uncommitted, cur, same)
+	l.Decide(cur, func(*review.Review) bool { return false })
+
+	located := l.Locate(t.Context(), r)
+	if located == nil {
+		t.Fatal("nothing to look for")
+	}
+	if movedTo := located(); movedTo != "" {
+		t.Errorf("moved to %q for a review that did not drift", movedTo)
+	}
+	if e := rs.Find(patch); e == nil || e.MovedTo != second {
+		t.Errorf("the review with the patch of the second commit: %+v, want moved to %s", e, second)
+	}
+	if e := rs.Find("pz"); e == nil || e.MovedTo != "" || e.Probably != second {
+		t.Errorf("the review of other changes to a.go: %+v, want probably in %s", e, second)
+	}
+
+	commitLoad := load(rs, commit, rs.Of(repo, commit), same)
+	if commitLoad.Locate(t.Context(), r) != nil {
+		t.Error("a commit load without earlier reviews looks for commits")
+	}
+}
+
+// TestRescope gives a review a scope that names the same changes, and
+// refuses one that names other changes.
+func TestRescope(t *testing.T) {
+	long := "0123456789abcdef0123456789abcdef01234567"
+	for _, tc := range []struct {
+		name     string
+		from, to gitx.Scope
+		ok       bool
+	}{
+		{"a checked-out branch by its name", gitx.Scope{Kind: gitx.ScopeBranch, Base: "main", Head: "feat"}, gitx.Scope{Kind: gitx.ScopeBranch, Base: "main", Branch: "feat"}, true},
+		{"a branch that is no longer checked out", gitx.Scope{Kind: gitx.ScopeBranch, Base: "main", Branch: "feat"}, gitx.Scope{Kind: gitx.ScopeBranch, Base: "main", Head: "feat"}, true},
+		{"another branch", gitx.Scope{Kind: gitx.ScopeBranch, Base: "main", Branch: "feat"}, gitx.Scope{Kind: gitx.ScopeBranch, Base: "main", Head: "other"}, false},
+		{"another base", gitx.Scope{Kind: gitx.ScopeBranch, Base: "main", Branch: "feat"}, gitx.Scope{Kind: gitx.ScopeBranch, Base: "dev", Branch: "feat"}, false},
+		{"a commit by its full hash", gitx.Scope{Kind: gitx.ScopeCommit, Commit: long[:12]}, gitx.Scope{Kind: gitx.ScopeCommit, Commit: long}, true},
+		{"another commit", gitx.Scope{Kind: gitx.ScopeCommit, Commit: long[:12]}, gitx.Scope{Kind: gitx.ScopeCommit, Commit: "fedcba9876543210"}, false},
+		{"another kind of scope", uncommitted, gitx.Scope{Kind: gitx.ScopeCommit, Commit: long}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rs := New(store.Store{Dir: t.TempDir()})
+			r := rs.Of(repo, tc.from)
+			if got := rs.Rescope(r, tc.to); got != tc.ok {
+				t.Fatalf("Rescope = %v, want %v", got, tc.ok)
+			}
+			want := tc.from
+			if tc.ok {
+				want = tc.to
+			}
+			if r.Scope != want {
+				t.Errorf("scope %+v, want %+v", r.Scope, want)
+			}
+		})
+	}
+}
+
+func gitIn(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=T", "GIT_AUTHOR_EMAIL=t@e", "GIT_COMMITTER_NAME=T", "GIT_COMMITTER_EMAIL=t@e")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func writeFile(t *testing.T, dir, name, text string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
