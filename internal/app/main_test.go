@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image/png"
 	"math"
@@ -2942,5 +2943,56 @@ func TestOverviewShowsCommitMessage(t *testing.T) {
 	tt.Frame()
 	if tt.HasText("Keys differ only by case in some callers.") {
 		t.Error("the uncommitted changes show the commit body")
+	}
+}
+
+// TestCommitRowShowsOverviewState starts the overview of a commit and
+// opens the uncommitted changes while it runs. The commit's row shows the
+// run, then that the overview is ready, until the user opens the commit.
+func TestCommitRowShowsOverviewState(t *testing.T) {
+	a := newTestApp(t)
+	a.queue = make(chan func(), 64)
+	a.cfg.DeeperAhead = false
+	fake := newFakeAgent(t, a)
+	fake.answer("o1", sessionsAnswer)
+	fake.hold()
+	pump(t, a, "the commit list", func() bool { return len(a.commits.rows) > 0 })
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
+	a.setScope(commit)
+	pump(t, a, "the commit", func() bool { return !a.switching && !a.loading })
+	a.generateOverview()
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
+	if got := a.overviewStateOf(commit); got != overviewWriting {
+		t.Fatalf("state while the overview runs = %d", got)
+	}
+	tt := ui.NewTester(a.view, 1300, 900)
+	tt.Frame()
+	snapshot(t, tt, "commit-row-writing")
+	fake.release()
+	pump(t, a, "the overview", func() bool { return a.overviewStateOf(commit) != overviewWriting })
+	if got := a.overviewStateOf(commit); got != overviewReady {
+		t.Fatalf("state after the overview = %d, want ready", got)
+	}
+	tt.Frame()
+	snapshot(t, tt, "commit-row-ready")
+	if got := a.overviewStateOf(gitx.Scope{Kind: gitx.ScopeUncommitted}); got != overviewQuiet {
+		t.Errorf("uncommitted changes state = %d, want quiet", got)
+	}
+	a.setScope(commit)
+	pump(t, a, "the commit again", func() bool { return !a.switching && !a.loading })
+	if got := a.overviewStateOf(commit); got != overviewQuiet {
+		t.Errorf("state after opening the commit = %d, want quiet", got)
+	}
+
+	fake.fail(errors.New("claude: executable file not found in $PATH"))
+	fake.hold()
+	a.generateOverview()
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
+	fake.release()
+	pump(t, a, "the failed overview", func() bool { return a.overviewStateOf(commit) != overviewWriting })
+	if got := a.overviewStateOf(commit); got != overviewFailed {
+		t.Errorf("state after a failed overview = %d, want failed", got)
 	}
 }

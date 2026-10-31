@@ -50,6 +50,10 @@ func (rs *Reviews) Of(repo string, s gitx.Scope) *review.Review {
 	return r
 }
 
+// Kept returns the review of a scope that the app has open, or nil. It
+// does not read the store.
+func (rs *Reviews) Kept(repo string, s gitx.Scope) *review.Review { return rs.open[key(repo, s)] }
+
 // Replace makes r the review of its scope.
 func (rs *Reviews) Replace(r *review.Review) { rs.open[key(r.Repo, r.Scope)] = r }
 
