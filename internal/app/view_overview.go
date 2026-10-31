@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 
+	"github.com/psd-coder/agentdiff/internal/continuity"
 	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
 )
@@ -71,7 +72,7 @@ func (a *app) earlierList(c *ui.Context) {
 	ui.Text(c, "Reviews of uncommitted changes that are no longer in the working tree. A review comes back here by itself when its changes do.").
 		FontSize(12).TextColor(t.TextMuted)
 	for _, e := range a.archived {
-		row := ui.Row(c.Key("earlier-"+e.id())).Gap(8).Padding(0, 10, 0, 0).Radius(8).Border(1, t.Border).AlignItems(ui.Center)
+		row := ui.Row(c.Key("earlier-"+e.ID())).Gap(8).Padding(0, 10, 0, 0).Radius(8).Border(1, t.Border).AlignItems(ui.Center)
 		row.Children(func() {
 			open := ui.ButtonBase(c).Grow(1).Shrink(1).Padding(10, 14).Gap(4).Column().AlignItems(ui.Stretch)
 			// The whole row shows the hover of its open area, so Delete
@@ -80,13 +81,13 @@ func (a *app) earlierList(c *ui.Context) {
 				row.Background(t.SurfaceHover)
 			}
 			open.Children(func() {
-				ui.Text(c, earlierTitle(e.rev)).Bold().MaxLines(2)
+				ui.Text(c, earlierTitle(e.Rev)).Bold().MaxLines(2)
 				ui.Text(c, strings.Join(a.earlierMeta(e), " · ")).FontSize(12).TextColor(t.TextMuted).SingleLine()
 			})
 			if open.Clicked() {
-				a.goTo("archived:" + e.id())
+				a.goTo("archived:" + e.ID())
 			}
-			a.cmdButton(c, "delete-archived", e.id(), "Delete")
+			a.cmdButton(c, "delete-archived", e.ID(), "Delete")
 		})
 	}
 }
@@ -104,20 +105,20 @@ func earlierTitle(rev *review.Review) string {
 	return "Review without an overview"
 }
 
-func (a *app) earlierMeta(e *earlier) []string {
-	ov := e.rev.Overview
+func (a *app) earlierMeta(e *continuity.Earlier) []string {
+	ov := e.Rev.Overview
 	meta := []string{ov.Generated.Format("Jan 2 15:04")}
 	if ov.Walk != nil {
 		meta = append(meta, plural(len(ov.Walk.Steps), "step"))
 	}
-	if n := len(e.rev.Threads); n > 0 {
+	if n := len(e.Rev.Threads); n > 0 {
 		meta = append(meta, plural(n, "comment"))
 	}
 	switch {
-	case e.movedTo != "":
-		meta = append(meta, "now commit "+shortSHA(e.movedTo))
-	case e.probably != "":
-		meta = append(meta, "probably in commit "+shortSHA(e.probably))
+	case e.MovedTo != "":
+		meta = append(meta, "now commit "+shortSHA(e.MovedTo))
+	case e.Probably != "":
+		meta = append(meta, "probably in commit "+shortSHA(e.Probably))
 	}
 	return meta
 }

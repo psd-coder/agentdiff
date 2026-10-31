@@ -119,28 +119,21 @@ func (s Store) DeleteReview(repo string, scope gitx.Scope) error {
 	return errors.Join(err, os.RemoveAll(s.runDir(repo, scope)))
 }
 
-// FindReview returns the scope of the newest saved review of repo, other
-// than of scope, whose overview was written for the changes with patchID.
-func (s Store) FindReview(repo string, scope gitx.Scope, patchID string) (gitx.Scope, bool) {
+// FindReview returns the newest saved review of repo, other than the one
+// of scope, whose overview was written for the changes with patchID.
+func (s Store) FindReview(repo string, scope gitx.Scope, patchID string) (*review.Review, bool) {
 	paths, _ := filepath.Glob(filepath.Join(filepath.Dir(s.reviewPath(repo, scope)), "*.json"))
-	var found gitx.Scope
-	var newest time.Time
+	var found *review.Review
 	for _, path := range paths {
-		var r struct {
-			Scope    gitx.Scope `json:"scope"`
-			Updated  time.Time  `json:"updated"`
-			Overview *struct {
-				PatchID string `json:"patchId"`
-			} `json:"overview"`
-		}
-		if readJSON(path, &r) != nil || r.Overview == nil || r.Overview.PatchID != patchID || r.Scope.Key() == scope.Key() {
+		r, ok := readReview(path, repo)
+		if !ok || r.Overview == nil || r.Overview.PatchID != patchID || r.Scope.Key() == scope.Key() {
 			continue
 		}
-		if found.Kind == "" || r.Updated.After(newest) {
-			found, newest = r.Scope, r.Updated
+		if found == nil || r.Updated.After(found.Updated) {
+			found = r
 		}
 	}
-	return found, found.Kind != ""
+	return found, found != nil
 }
 
 // MoveReview moves a review and the logs of its runs to another scope.
@@ -197,7 +190,7 @@ const maxArchived = 20
 // gone from the working tree, under id. It deletes the oldest archived
 // reviews past maxArchived.
 func (s Store) ArchiveReview(repo, id string) (gitx.Scope, error) {
-	to := gitx.Scope{Kind: gitx.ScopeArchived, From: id}
+	to := gitx.ArchivedScope(id)
 	if err := s.MoveReview(repo, gitx.Scope{Kind: gitx.ScopeUncommitted}, to); err != nil {
 		return to, err
 	}
@@ -220,18 +213,29 @@ func (s Store) Archived(repo string) []*review.Review {
 	paths, _ := filepath.Glob(pattern)
 	var out []*review.Review
 	for _, path := range paths {
-		r := &review.Review{}
-		if readJSON(path, r) != nil || r.Scope.Kind != gitx.ScopeArchived || r.Overview == nil {
+		r, ok := readReview(path, repo)
+		if !ok || r.Scope.Kind != gitx.ScopeArchived || r.Overview == nil {
 			continue
 		}
-		if r.Viewed == nil {
-			r.Viewed = map[string]bool{}
-		}
-		r.Repo = repo
 		out = append(out, r)
 	}
 	slices.SortFunc(out, func(a, b *review.Review) int { return b.Updated.Compare(a.Updated) })
 	return out
+}
+
+// readReview reads a saved review of repo for a scan of the reviews,
+// which skips a file it cannot read. The review keeps the scope its file
+// names.
+func readReview(path, repo string) (*review.Review, bool) {
+	r := &review.Review{}
+	if readJSON(path, r) != nil {
+		return nil, false
+	}
+	if r.Viewed == nil {
+		r.Viewed = map[string]bool{}
+	}
+	r.Repo = repo
+	return r, true
 }
 
 // setAside moves a file that failed to load with err to path.bad, so the

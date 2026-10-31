@@ -34,6 +34,9 @@ type Scope struct {
 	To     string `json:"to,omitempty"`
 }
 
+// ArchivedScope is the scope of the archived review with id.
+func ArchivedScope(id string) Scope { return Scope{Kind: ScopeArchived, From: id} }
+
 // Key returns a stable id that is safe as a file name, also on case-insensitive file systems.
 func (s Scope) Key() string {
 	switch s.Kind {

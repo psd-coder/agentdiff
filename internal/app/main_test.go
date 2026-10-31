@@ -18,6 +18,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/continuity"
 	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
 	"github.com/psd-coder/agentdiff/internal/store"
@@ -315,10 +316,10 @@ func TestReviewFollowsCommit(t *testing.T) {
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
 	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
-	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].movedTo != "" })
+	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].MovedTo != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if len(a.archived) != 1 || a.archived[0].movedTo != sha || !a.rev.Empty() || !tt.HasText("Earlier reviews") {
+	if len(a.archived) != 1 || a.archived[0].MovedTo != sha || !a.rev.Empty() || !tt.HasText("Earlier reviews") {
 		t.Fatalf("archived %v, want moved to %q; texts %q", a.archived, sha, tt.Texts())
 	}
 
@@ -366,10 +367,10 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	sha := strings.TrimSpace(string(out))
 	a.refresh()
 	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
-	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].probably != "" })
+	pump(t, a, "the commit lookup", func() bool { return len(a.archived) == 1 && a.archived[0].Probably != "" })
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if len(a.archived) != 1 || a.archived[0].movedTo != "" || a.archived[0].probably != sha {
+	if len(a.archived) != 1 || a.archived[0].MovedTo != "" || a.archived[0].Probably != sha {
 		t.Fatalf("archived %v, want probably in %q", a.archived, sha)
 	}
 	if err := tt.Click("s"); err != nil {
@@ -1300,7 +1301,7 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 		}},
 		{"start over", func(a *app) { a.startOver() }},
 		{"archive", func(a *app) {
-			if err := a.archiveCurrent(&earlier{}); err != nil {
+			if err := a.archiveCurrent(&continuity.Earlier{}); err != nil {
 				t.Fatal(err)
 			}
 		}},
@@ -1351,7 +1352,7 @@ func TestArchiveDropsSavedNote(t *testing.T) {
 	if !tt.HasText("Saved to /tmp/feedback.md") {
 		t.Fatal("the note does not show before archiving")
 	}
-	if err := a.archiveCurrent(&earlier{}); err != nil {
+	if err := a.archiveCurrent(&continuity.Earlier{}); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -2763,10 +2764,10 @@ func TestEarlierReviewPage(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "earlier-review")
-	if a.page != "archived:"+a.archived[0].id() || !tt.HasText("    return strings.ToLower(key)") {
+	if a.page != "archived:"+a.archived[0].ID() || !tt.HasText("    return strings.ToLower(key)") {
 		t.Fatalf("page %q; texts %q", a.page, tt.Texts())
 	}
-	if a.applies(a.cmd("restore-archived"), a.archived[0].id()) {
+	if a.applies(a.cmd("restore-archived"), a.archived[0].ID()) {
 		t.Error("restore offered over the review of the current changes")
 	}
 
@@ -2800,7 +2801,7 @@ func TestEarlierReviewInFull(t *testing.T) {
 	}
 	th := rev.AddThread(review.Anchor{Kind: review.AnchorLines, File: "cache/cache.go", Side: review.SideNew, Start: 6, End: 6, Quote: "\treturn strings.ToLower(key)"})
 	th.Messages = []review.Message{{Role: review.RoleUser, Text: "Keep keys as they are."}}
-	a.archived = []*earlier{{rev: rev}}
+	a.archived = []*continuity.Earlier{{Rev: rev}}
 	a.goTo("archived:p1")
 	tt := ui.NewTester(a.view, 1300, 2400)
 	tt.Frame()
