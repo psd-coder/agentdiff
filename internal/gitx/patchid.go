@@ -134,8 +134,8 @@ func chunkPath(text []byte) string {
 			return strings.TrimPrefix(unquotePath(header[i+1:]), "b/")
 		}
 	}
-	if i := strings.LastIndex(header, " b/"); i >= 0 {
-		return header[i+3:]
+	if _, path, ok := strings.CutLast(header, " b/"); ok {
+		return path
 	}
 	return header
 }
