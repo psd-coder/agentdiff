@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -119,6 +120,58 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// ResumedSession is the session that a command logged by commandLine
+// resumed or forked, empty for a new session. Claude takes it after
+// --resume, Codex after resume or fork near the end, before "-".
+func ResumedSession(p Provider, command string) string {
+	words := shellWords(command)
+	if p == Codex {
+		if n := len(words); n >= 3 && words[n-1] == "-" && (words[n-3] == "resume" || words[n-3] == "fork") {
+			return words[n-2]
+		}
+		return ""
+	}
+	if i := slices.Index(words, "--resume"); i >= 0 && i+1 < len(words) {
+		return words[i+1]
+	}
+	return ""
+}
+
+// shellWords splits a command line that shellQuote wrote back into words.
+func shellWords(line string) []string {
+	var words []string
+	var word strings.Builder
+	inWord, quoted := false, false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case quoted && c == '\'':
+			quoted = false
+		case quoted:
+			word.WriteByte(c)
+		case c == '\'':
+			quoted, inWord = true, true
+		case c == '\\' && i+1 < len(line):
+			i++
+			word.WriteByte(line[i])
+			inWord = true
+		case c == ' ':
+			if inWord {
+				words = append(words, word.String())
+				word.Reset()
+				inWord = false
+			}
+		default:
+			word.WriteByte(c)
+			inWord = true
+		}
+	}
+	if inWord {
+		words = append(words, word.String())
+	}
+	return words
+}
+
 // LogItem is one readable step of a run. A log entry gives none when it
 // only repeats another one, as the streamed parts of a message do.
 type LogItem struct {
@@ -127,6 +180,10 @@ type LogItem struct {
 	Failed bool
 	// Usage is set on the item that reports what a run spent.
 	Usage *Usage
+	// result is how the agent ended its answer, on the item of its
+	// result. exit is how the process ended, on the item of its exit.
+	result RunStatus
+	exit   RunStatus
 }
 
 // Usage is the tokens a run spent. Input counts the tokens read without
@@ -213,7 +270,7 @@ func Summarize(p Provider, e LogEntry) []LogItem {
 		}
 		return []LogItem{{Title: "Stderr", Detail: e.Text}}
 	case LogExit:
-		return []LogItem{{Title: e.Text, Failed: e.Text != exitOK}}
+		return []LogItem{{Title: e.Text, Failed: e.Text != exitOK, exit: exitStatus(e.Text)}}
 	case LogStdout:
 		if strings.TrimSpace(e.Text) == "" {
 			return nil
@@ -326,7 +383,7 @@ func claudeItems(raw []byte) []LogItem {
 	case "result":
 		failed := l.IsError || strings.HasPrefix(l.Subtype, "error")
 		u := claudeUsage(l)
-		item := LogItem{Title: "Result: " + firstNonEmpty(l.Subtype, "done"), Detail: claudeStats(l, u), Failed: failed, Usage: &u}
+		item := LogItem{Title: "Result: " + firstNonEmpty(l.Subtype, "done"), Detail: claudeStats(l, u), Failed: failed, Usage: &u, result: failedStatus(failed)}
 		if failed && l.Result != "" {
 			item.Detail = l.Result + "\n" + item.Detail
 		}
@@ -445,9 +502,9 @@ func codexItems(raw []byte) []LogItem {
 		if l.Error != nil {
 			msg = l.Error.Message
 		}
-		return []LogItem{{Title: "Turn failed", Detail: msg, Failed: true}}
+		return []LogItem{{Title: "Turn failed", Detail: msg, Failed: true, result: RunFailed}}
 	case "turn.completed":
-		item := LogItem{Title: "Turn completed"}
+		item := LogItem{Title: "Turn completed", result: RunDone}
 		if c := l.Usage; c != nil {
 			u := Usage{Input: c.Input - c.Cached, CacheRead: c.Cached, Output: c.Output}
 			item.Usage = &u

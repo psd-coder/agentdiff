@@ -371,7 +371,7 @@ func TestArchivedReturnsTheReviewItRead(t *testing.T) {
 func TestRunResumedFromCommand(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	scope := gitx.Scope{Kind: gitx.ScopeUncommitted}
-	w, err := s.CreateRun("/repo", scope, RunInfo{ID: "old"})
+	w, err := s.CreateRun("/repo", scope, RunInfo{ID: "old", Agent: agent.Claude})
 	if err != nil {
 		t.Fatal(err)
 	}

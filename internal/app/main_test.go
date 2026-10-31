@@ -935,16 +935,73 @@ func TestRemoveProject(t *testing.T) {
 }
 
 func TestRunCost(t *testing.T) {
-	a := newTestApp(t)
-	parent := &logRun{info: store.RunInfo{ID: "p", Usage: &agent.Usage{Session: "p", SessionCost: 0.5, CostUSD: 0.5}}}
-	a.runs[a.rev] = []*logRun{parent}
+	at := time.Date(2026, 10, 27, 1, 0, 0, 0, time.UTC)
+	ended := func(sec int, session string, cost float64) *logRun {
+		return &logRun{info: store.RunInfo{Started: at.Add(time.Duration(sec) * time.Second), Usage: &agent.Usage{Session: session, SessionCost: cost}}}
+	}
+	parent := ended(0, "p", 0.5)
+	later := ended(20, "p", 0.55)
 	for _, tc := range []struct {
 		resumed string
 		want    float64
 	}{{"", 0.6}, {"p", 0.1}, {"gone", 0}} {
-		run := &logRun{info: store.RunInfo{Usage: &agent.Usage{Session: "c", SessionCost: 0.6}}}
-		if got := a.runCost(a.rev, run, tc.resumed); math.Abs(got-tc.want) > 1e-9 {
+		run := ended(10, "c", 0.6)
+		run.info.Resumed = tc.resumed
+		if got := runCost([]*logRun{later, run, parent}, run); math.Abs(got-tc.want) > 1e-9 {
 			t.Errorf("resumed %q: cost %v, want %v", tc.resumed, got, tc.want)
+		}
+	}
+}
+
+func TestLoadedRunStatusAndCost(t *testing.T) {
+	a := newTestApp(t)
+	at := time.Date(2026, 10, 27, 1, 0, 0, 0, time.UTC)
+	result := func(session string, cost float64) string {
+		return mustJSON(map[string]any{"type": "result", "subtype": "success", "session_id": session, "total_cost_usd": cost, "usage": map[string]int{"output_tokens": 10}})
+	}
+	saveRun := func(sec int, entries ...agent.LogEntry) string {
+		started := at.Add(time.Duration(sec) * time.Second)
+		info := store.RunInfo{ID: store.NewRunID(started), Title: fmt.Sprint("Run ", sec), Agent: agent.Claude, Started: started}
+		w, err := a.store.CreateRun(a.rev.Repo, a.rev.Scope, info)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if err := w.Write(e); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return info.ID
+	}
+	entry := func(kind agent.LogKind, text string) agent.LogEntry { return agent.LogEntry{Kind: kind, Text: text} }
+	parentID := saveRun(0, entry(agent.LogCommand, "claude -p"), entry(agent.LogStdout, result("p", 0.5)), entry(agent.LogExit, "Exited with status 0"))
+	// Older logs say Stopped when the app cancelled a run after its result. Such a run ended normally.
+	childID := saveRun(10, entry(agent.LogCommand, "claude -p --resume p"), entry(agent.LogStdout, result("c", 0.6)), entry(agent.LogExit, "Stopped"))
+	stoppedID := saveRun(20, entry(agent.LogCommand, "claude -p"), entry(agent.LogExit, "Stopped"))
+
+	byID := map[string]*logRun{}
+	for _, r := range a.runsOf(a.rev) {
+		byID[r.info.ID] = r
+	}
+	parent, child, stopped := byID[parentID], byID[childID], byID[stoppedID]
+	a.loadRun(a.rev, child)
+	if child.info.Usage == nil || child.info.Usage.CostUSD != 0 {
+		t.Fatalf("cost before the resumed run is read: %+v", child.info.Usage)
+	}
+	a.loadRun(a.rev, parent)
+	if u := child.info.Usage; math.Abs(u.CostUSD-0.1) > 1e-9 || !strings.Contains(u.String(), "$0.1000 at API prices") {
+		t.Errorf("child usage = %+v, %q", u, u.String())
+	}
+	if u := parent.info.Usage; u.CostUSD != 0.5 {
+		t.Errorf("parent cost = %v", u.CostUSD)
+	}
+	a.loadRun(a.rev, stopped)
+	for r, want := range map[*logRun]string{parent: "", child: "", stopped: "stopped"} {
+		if got := r.status(); got != want {
+			t.Errorf("%s: status %q, want %q", r.info.Title, got, want)
 		}
 	}
 }

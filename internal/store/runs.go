@@ -10,7 +10,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -168,17 +167,11 @@ func readRunInfo(path string) (info RunInfo, err error) {
 		// command, the entry after the header.
 		var cmd agent.LogEntry
 		if line, err := r.ReadBytes('\n'); err == nil && json.Unmarshal(line, &cmd) == nil && cmd.Kind == agent.LogCommand {
-			if m := resumeArg.FindStringSubmatch(cmd.Text); m != nil {
-				info.Resumed = m[1]
-			}
+			info.Resumed = agent.ResumedSession(info.Agent, cmd.Text)
 		}
 	}
 	return info, nil
 }
-
-// resumeArg finds the session in a command that resumes or forks one:
-// Claude's --resume, Codex's resume and fork.
-var resumeArg = regexp.MustCompile(`(?:--resume|\bresume|\bfork) ([0-9a-f]{8}-[0-9a-f-]{27})`)
 
 // ReadRun returns the log entries of a run. A line cut off by a crash is
 // skipped.
