@@ -16,7 +16,7 @@ import (
 // staleBanner warns when the review was written for other changes, and
 // names the commit that holds those changes now.
 func (a *app) staleBanner(c *ui.Context) {
-	if !a.stale() {
+	if a.freshness() != overviewStale {
 		return
 	}
 	t := c.Theme()

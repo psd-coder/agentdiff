@@ -261,3 +261,27 @@ func readScope(ctx context.Context, r *gitx.Repo, s gitx.Scope, first []string) 
 	}
 	return out, nil
 }
+
+// freshness tells whether the overview was written for the changes the
+// scope has now.
+type freshness uint8
+
+const (
+	// freshnessUnknown is the freshness of an overview that is not done or
+	// that an agent writes, and of any overview while the changes are not
+	// read or cannot be identified.
+	freshnessUnknown freshness = iota
+	overviewFresh
+	overviewStale
+)
+
+func (a *app) freshness() freshness {
+	ov := a.rev.Overview
+	switch {
+	case !ov.Done() || a.loader.firstLoad() || ov.PatchID != "" && !a.patchKnown || a.busy(review.TargetOverview):
+		return freshnessUnknown
+	case ov.Stale(a.fp.Patch, a.fileNames()):
+		return overviewStale
+	}
+	return overviewFresh
+}

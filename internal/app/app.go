@@ -697,16 +697,6 @@ func (a *app) showNext(next continuity.Next, failed string) {
 	}
 }
 
-// stale reports whether the overview was written for other changes than
-// the scope has now.
-func (a *app) stale() bool {
-	ov := a.rev.Overview
-	if !ov.Done() || a.loader.firstLoad() || (ov.PatchID != "" && !a.patchKnown) || a.busy(store.TargetOverview) {
-		return false
-	}
-	return ov.Stale(a.fp.Patch, a.fileNames())
-}
-
 func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error) {
 	d := a.diffs[f.Path]
 	if d == nil {
@@ -739,8 +729,7 @@ func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error)
 // review shows this code after the changes are gone. It reports whether
 // it saved any.
 func (a *app) keepSnippets() bool {
-	ov := a.rev.Overview
-	if a.loader.firstLoad() || !ov.Done() || ov.PatchID != "" && !a.patchKnown || a.busy(store.TargetOverview) || a.stale() {
+	if a.freshness() != overviewFresh {
 		return false
 	}
 	kept := false

@@ -141,7 +141,7 @@ func (a *app) commands() []*command {
 			run: func(*ui.Context, string) { a.confirmStartOver() }},
 
 		{id: "open-moved-commit", title: "Open Commit That Holds These Changes",
-			can: func(string) bool { return a.movedTo != "" && a.stale() },
+			can: func(string) bool { return a.movedTo != "" && a.freshness() == overviewStale },
 			run: func(*ui.Context, string) { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.movedTo}) }},
 		{id: "open-archived-commit", title: "Open Commit of the Earlier Review", target: a.targetArchived,
 			can: func(id string) bool { return a.reviews.Find(id).MovedTo != "" },
