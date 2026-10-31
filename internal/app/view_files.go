@@ -432,7 +432,7 @@ func (a *app) threadMeta(th *review.Thread) string {
 		}
 	}
 	switch {
-	case a.threadBusy(th.ID):
+	case a.busy(th.ID):
 		parts = append(parts, "agent is answering…")
 	case replies > 0:
 		parts = append(parts, fmt.Sprintf("%d agent replies", replies))

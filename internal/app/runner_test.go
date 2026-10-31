@@ -18,7 +18,7 @@ import (
 func settled(t *testing.T, a *app, rev *review.Review) {
 	t.Helper()
 	pump(t, a, "the ended runs", func() bool {
-		for _, r := range a.runsOf(rev) {
+		for _, r := range a.logsOf(rev) {
 			if r.running {
 				return false
 			}
@@ -43,11 +43,11 @@ func TestSameWalkInReviewAndCopy(t *testing.T) {
 	a.runWalk(a.rev, w, false)
 	fake.set(fakeReply{session: "s2", answer: "In the copy.", hold: true})
 	a.runWalk(cp, wc, false)
-	if a.running(a.rev, w.ID) == nil || a.running(cp, w.ID) == nil {
+	if a.runner.run(a.rev, w.ID) == nil || a.runner.run(cp, w.ID) == nil {
 		t.Fatal("the walk does not run in both reviews")
 	}
 	fake.release()
-	pump(t, a, "both answers", func() bool { return a.running(a.rev, w.ID) == nil && a.running(cp, w.ID) == nil })
+	pump(t, a, "both answers", func() bool { return a.runner.run(a.rev, w.ID) == nil && a.runner.run(cp, w.ID) == nil })
 	if w.Markdown != "In the review." || w.Err != "" {
 		t.Errorf("walk of the review: markdown %q, err %q", w.Markdown, w.Err)
 	}
@@ -67,7 +67,7 @@ func TestStopOverviewKeepsOldContent(t *testing.T) {
 	fake.hold()
 	a.generateOverview()
 	a.stopOverview()
-	if a.overviewRunning() != nil || a.reviewBusy(a.rev) {
+	if a.busy(store.TargetOverview) || a.runner.reviewBusy(a.rev) {
 		t.Fatal("the overview still runs after Stop")
 	}
 	settled(t, a, a.rev)
@@ -96,8 +96,8 @@ func TestStopWalkRecordsStoppedOnce(t *testing.T) {
 	fake.hold()
 	a.runWalk(a.rev, w, false)
 	a.stopWalk(w.ID)
-	if a.walkBusy(w.ID) || w.Err != "Stopped" {
-		t.Fatalf("busy %v, err %q right after Stop", a.walkBusy(w.ID), w.Err)
+	if a.busy(w.ID) || w.Err != "Stopped" {
+		t.Fatalf("busy %v, err %q right after Stop", a.busy(w.ID), w.Err)
 	}
 	stopped := w.Generated
 	settled(t, a, a.rev)
@@ -116,7 +116,7 @@ func TestStopThreadRecordsStoppedOnce(t *testing.T) {
 	fake.hold()
 	a.ask(a.rev, th, "Why?")
 	a.stopThread(th)
-	if a.threadBusy(th.ID) {
+	if a.busy(th.ID) {
 		t.Fatal("the thread is busy after Stop")
 	}
 	settled(t, a, a.rev)
@@ -137,7 +137,7 @@ func TestRegenerateAfterReloadInDialog(t *testing.T) {
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
 	old := a.rev
 	step := old.AddWalk("", 0, "")
 	var confirmed func()
@@ -156,9 +156,9 @@ func TestRegenerateAfterReloadInDialog(t *testing.T) {
 	if old.Walk(step.ID) == nil {
 		t.Error("the archived review lost its step walk")
 	}
-	if a.running(a.rev, store.TargetOverview) == nil || a.running(old, store.TargetOverview) != nil {
+	if a.runner.run(a.rev, store.TargetOverview) == nil || a.runner.run(old, store.TargetOverview) != nil {
 		t.Errorf("overview runs on screen %v, in the archived review %v",
-			a.running(a.rev, store.TargetOverview) != nil, a.running(old, store.TargetOverview) != nil)
+			a.runner.run(a.rev, store.TargetOverview) != nil, a.runner.run(old, store.TargetOverview) != nil)
 	}
 }
 
@@ -193,13 +193,13 @@ func TestQuestionSkipsWriteAheadQueue(t *testing.T) {
 	walks := writeAhead(t, a, 4)
 	a.askQuestion("", -1, "Why?")
 	q := a.rev.Walks[len(a.rev.Walks)-1]
-	if a.running(a.rev, q.ID) == nil {
+	if a.runner.run(a.rev, q.ID) == nil {
 		t.Fatal("the question waits")
 	}
-	if n := a.aheadCount(); n != 3 {
+	if n := a.runner.aheadCount(); n != 3 {
 		t.Errorf("%d write-ahead walks run, want 3", n)
 	}
-	if !a.queued(a.rev, walks[3].ID) {
+	if !a.runner.queued(a.rev, walks[3].ID) {
 		t.Error("the fourth step left the queue")
 	}
 }
@@ -218,11 +218,11 @@ func TestOtherReviewTakesNoWriteAheadSlot(t *testing.T) {
 	}
 	walks := writeAhead(t, a, 4)
 	for _, w := range walks[:3] {
-		if a.running(a.rev, w.ID) == nil {
+		if a.runner.run(a.rev, w.ID) == nil {
 			t.Errorf("step %d waits", w.Step)
 		}
 	}
-	if !a.queued(a.rev, walks[3].ID) {
+	if !a.runner.queued(a.rev, walks[3].ID) {
 		t.Error("the fourth step does not wait")
 	}
 }
@@ -231,7 +231,7 @@ func TestOtherReviewTakesNoWriteAheadSlot(t *testing.T) {
 func aheadRunning(a *app, walks []*review.Walk) []bool {
 	var out []bool
 	for _, w := range walks {
-		out = append(out, a.running(a.rev, w.ID) != nil)
+		out = append(out, a.runner.run(a.rev, w.ID) != nil)
 	}
 	return out
 }
@@ -246,8 +246,8 @@ func TestWriteAheadQueueStartsInOrder(t *testing.T) {
 		t.Fatalf("running %v", got)
 	}
 	a.stopWalk(w[1].ID)
-	if got := aheadRunning(a, w); !slices.Equal(got, []bool{true, false, true, true, false}) || !a.queued(a.rev, w[4].ID) {
-		t.Errorf("after stopping step 1: running %v, step 4 queued %v", got, a.queued(a.rev, w[4].ID))
+	if got := aheadRunning(a, w); !slices.Equal(got, []bool{true, false, true, true, false}) || !a.runner.queued(a.rev, w[4].ID) {
+		t.Errorf("after stopping step 1: running %v, step 4 queued %v", got, a.runner.queued(a.rev, w[4].ID))
 	}
 }
 
@@ -258,11 +258,11 @@ func TestStopQueuedWalk(t *testing.T) {
 	heldAgent(t, a)
 	w := writeAhead(t, a, 4)
 	a.stopWalk(w[3].ID)
-	if a.queued(a.rev, w[3].ID) || w[3].Err != "" {
-		t.Errorf("stopped queued step: queued %v, err %q", a.queued(a.rev, w[3].ID), w[3].Err)
+	if a.runner.queued(a.rev, w[3].ID) || w[3].Err != "" {
+		t.Errorf("stopped queued step: queued %v, err %q", a.runner.queued(a.rev, w[3].ID), w[3].Err)
 	}
 	a.stopWalk(w[0].ID)
-	if a.running(a.rev, w[3].ID) != nil {
+	if a.runner.run(a.rev, w[3].ID) != nil {
 		t.Error("the stopped step started when a slot freed")
 	}
 }
@@ -279,7 +279,7 @@ func TestOtherReviewWriteAheadSharesSlots(t *testing.T) {
 	cp.Overview = &review.Overview{Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{{Title: "A"}, {Title: "B"}, {Title: "C"}}}}
 	a.deeperAhead(cp)
 	w := writeAhead(t, a, 1)
-	if !a.queued(a.rev, w[0].ID) {
+	if !a.runner.queued(a.rev, w[0].ID) {
 		t.Error("the walk on screen does not wait for the other review's walks")
 	}
 }
@@ -291,10 +291,47 @@ func TestUserRunFreesWriteAheadSlot(t *testing.T) {
 	heldAgent(t, a)
 	w := writeAhead(t, a, 4)
 	a.runWalk(a.rev, w[0], false)
-	if a.running(a.rev, w[0].ID) == nil {
+	if a.runner.run(a.rev, w[0].ID) == nil {
 		t.Fatal("the user's run does not go on")
 	}
-	if a.running(a.rev, w[3].ID) == nil {
+	if a.runner.run(a.rev, w[3].ID) == nil {
 		t.Error("the fourth step still waits")
 	}
+}
+
+// TestStreamingRunsShowProgress holds an overview, a walk and a thread
+// answer while they stream: each screen shows what the agent does now,
+// and the overview and the thread show the text written so far.
+func TestStreamingRunsShowProgress(t *testing.T) {
+	a := newTestApp(t)
+	a.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, a)
+	tt := ui.NewTester(a.view, 1300, 800)
+	streaming := func(what, streamed, activity string, start func(), shown ...string) {
+		t.Helper()
+		fake.set(fakeReply{session: "s", answer: "Done.", hold: true, streamed: streamed, activity: activity})
+		start()
+		pump(t, a, what, func() bool {
+			tt.Frame()
+			return tt.HasText(activity)
+		})
+		// Streamed Markdown fades in.
+		tt.Advance(time.Second)
+		for _, want := range shown {
+			if !tt.HasText(want) {
+				t.Errorf("%s: view lacks %q", what, want)
+			}
+		}
+		snapshot(t, tt, what)
+	}
+
+	streaming("overview-streaming", "## Summary\nKeys are lower-cased now.", "Reading cache/cache.go", a.generateOverview, "Keys are lower-cased now.")
+
+	w := a.rev.AddWalk("", -1, "Why lower-case?")
+	a.goTo("walk:" + w.ID)
+	streaming("walk-streaming", "Partial walkthrough", "Searching for callers", func() { a.runWalk(a.rev, w, false) })
+
+	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	a.openThread(th.ID)
+	streaming("thread-streaming", "The tests cover upper-case keys.", "Running go test", func() { a.ask(a.rev, th, "And the tests?") }, "The tests cover upper-case keys.")
 }

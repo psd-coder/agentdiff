@@ -10,6 +10,7 @@ import (
 	"github.com/psd-coder/agentdiff/internal/continuity"
 	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 // staleBanner warns when the review was written for other changes, and
@@ -139,7 +140,7 @@ func (a *app) commitName(sha string) string {
 func (a *app) overviewPage(c *ui.Context) {
 	t := c.Theme()
 	cfg := a.cfg.Agent
-	run := a.overviewRunning()
+	run := a.runner.run(a.rev, store.TargetOverview)
 	ov := a.rev.Overview
 	a.pageScroll(c, "overview").Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
@@ -273,7 +274,7 @@ func (a *app) sectionThreads(c *ui.Context, title, body string) {
 	threads := a.rev.ThreadsOnSection(title)
 	for _, th := range threads {
 		label := "Thread"
-		if a.threadBusy(th.ID) {
+		if a.busy(th.ID) {
 			label = "Answering…"
 		} else if len(th.Messages) > 0 {
 			label = excerpt(th.Messages[0].Text, 24)

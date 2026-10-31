@@ -40,7 +40,7 @@ func (a *app) logPanel(c *ui.Context) {
 			ui.Text(c, a.logTargetLabel()).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1).Grow(1)
 			if total, ok := a.logUsage(); ok {
 				label, tip := agent.Count(total.Total())+" tokens processed", total.String()
-				if n, ok := spentContext(a.runsOf(rev), a.inLog); ok {
+				if n, ok := spentContext(a.logsOf(rev), a.inLog); ok {
 					label = agent.Count(n) + " tokens of context"
 					tip = "The context the runs built up. A run that resumes or forks an earlier session starts with its context, so it counts only what it added.\n" + tip
 				}
@@ -52,7 +52,7 @@ func (a *app) logPanel(c *ui.Context) {
 		ui.Scroll(c).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Gap(6).Padding(10, 12).Children(func() {
 				n := 0
-				for _, r := range a.runsOf(rev) {
+				for _, r := range a.logsOf(rev) {
 					if a.logTarget != "" && r.info.Target != a.logTarget {
 						continue
 					}
@@ -73,7 +73,7 @@ func (a *app) logPanel(c *ui.Context) {
 func (a *app) logUsage() (agent.Usage, bool) {
 	var total agent.Usage
 	known := false
-	for _, r := range a.runsOf(a.rev) {
+	for _, r := range a.logsOf(a.rev) {
 		if r.info.Usage != nil && a.inLog(r) {
 			total.Add(*r.info.Usage)
 			known = true

@@ -132,6 +132,9 @@ func ThreadExchange(r *Review, t *Thread, cfg agent.Config, diffstat, question s
 // Review is the review the exchange writes into.
 func (e *Exchange) Review() *Review { return e.rev }
 
+// Reply is where the answer goes in the messages of the thread.
+func (e *Exchange) Reply() int { return e.reply }
+
 // Config is the agent and the model the exchange runs with.
 func (e *Exchange) Config() agent.Config { return e.cfg }
 

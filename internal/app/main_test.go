@@ -300,7 +300,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
 
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "Agent work")
@@ -340,7 +340,7 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
 
 	write(t, dir, "extra.go", "package extra\n")
 	git(t, dir, "add", "-A")
@@ -374,7 +374,7 @@ func TestArchiveUncommitted(t *testing.T) {
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
 	tt := ui.NewTester(a.view, 1300, 800)
 	reload := func(what string) {
 		t.Helper()
@@ -393,7 +393,7 @@ func TestArchiveUncommitted(t *testing.T) {
 		t.Fatal("archived a review an agent writes into")
 	}
 	a.stopOverview()
-	pump(t, a, "the stopped overview", func() bool { return !a.runsOf(a.rev)[0].running })
+	pump(t, a, "the stopped overview", func() bool { return !a.logsOf(a.rev)[0].running })
 	reload("the other changes")
 	if !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") || !tt.HasText("Get a walkthrough of these changes") {
 		t.Fatalf("texts %q", tt.Texts())
@@ -531,10 +531,10 @@ func TestStartOverDuringRuns(t *testing.T) {
 	fake := newFakeAgent(t, a)
 	fake.answer("t1", "Because.")
 	a.ask(a.rev, a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
-	thread := a.runs[a.rev][0]
+	thread := a.runner.logs[a.rev][0]
 	fake.hold()
 	a.askQuestion("", -1, "What?")
-	runs := slices.Clone(a.runs[a.rev])
+	runs := slices.Clone(a.runner.logs[a.rev])
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		entries, _ := a.store.ReadRun(root, scope, thread.info.ID)
@@ -575,7 +575,7 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 	tt.Type("Why?")
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	tt.Frame()
-	if n := len(a.runs[a.rev]); n != 1 {
+	if n := len(a.runner.logs[a.rev]); n != 1 {
 		t.Fatalf("runs after the first question = %d", n)
 	}
 	if !tt.HasText("Thinking…") {
@@ -606,7 +606,7 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 	if d := a.drafts[th.ID]; !strings.Contains(d, "And the tests?") {
 		t.Errorf("draft after asking again = %q", d)
 	}
-	if !a.reviewBusy(a.rev) {
+	if !a.runner.reviewBusy(a.rev) {
 		t.Error("the review is not busy while the thread runs")
 	}
 
@@ -616,7 +616,7 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 	if err := tt.Click("Stop"); err != nil {
 		t.Fatal(err)
 	}
-	pump(t, a, "the stopped answer", func() bool { return !a.threadBusy(th.ID) })
+	pump(t, a, "the stopped answer", func() bool { return !a.busy(th.ID) })
 	if a.applies(a.cmd("stop-thread"), th.ID) {
 		t.Error("stop-thread applies after the answer ended")
 	}
@@ -660,10 +660,10 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 		a.runWalk(a.rev, w, false)
 	}
 	a.deleteWalk(parent)
-	pump(t, a, "the stopped runs", func() bool { return !a.walkBusy(parent.ID) && !a.walkBusy(child.ID) })
-	otherBusy := a.running(otherRev, other.ID) != nil
-	if parent.Err != "Stopped" || child.Err != "Stopped" || !a.walkBusy(sibling.ID) || !otherBusy {
-		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, a.walkBusy(sibling.ID), otherBusy)
+	pump(t, a, "the stopped runs", func() bool { return !a.busy(parent.ID) && !a.busy(child.ID) })
+	otherBusy := a.runner.run(otherRev, other.ID) != nil
+	if parent.Err != "Stopped" || child.Err != "Stopped" || !a.busy(sibling.ID) || !otherBusy {
+		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, a.busy(sibling.ID), otherBusy)
 	}
 }
 
@@ -678,7 +678,7 @@ func TestThreadOfReviewOffScreen(t *testing.T) {
 	other := review.New(t.TempDir(), gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
 	th := other.AddThread(review.Anchor{Kind: review.AnchorGeneral})
 	a.ask(other, th, "Why?")
-	pump(t, a, "the answer", func() bool { return a.running(other, th.ID) == nil })
+	pump(t, a, "the answer", func() bool { return a.runner.run(other, th.ID) == nil })
 	req := fake.received()[0]
 	if req.Dir != other.Repo {
 		t.Errorf("dir %q, want %q", req.Dir, other.Repo)
@@ -792,7 +792,7 @@ func TestGroupsFollowChanges(t *testing.T) {
 	want("overview written", "Docs first", "Other changes")
 
 	a.regenerate("")
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
 	want("regenerate", "Cache keys", "Other changes")
 
 	a.startOver()
@@ -985,7 +985,7 @@ func TestLoadedRunStatusAndCost(t *testing.T) {
 	stoppedID := saveRun(20, entry(agent.LogCommand, "claude -p"), entry(agent.LogExit, "Stopped"))
 
 	byID := map[string]*logRun{}
-	for _, r := range a.runsOf(a.rev) {
+	for _, r := range a.logsOf(a.rev) {
 		byID[r.info.ID] = r
 	}
 	parent, child, stopped := byID[parentID], byID[childID], byID[stoppedID]
@@ -1127,7 +1127,7 @@ func TestWalkthrough(t *testing.T) {
 	if w.Parent != "" || w.Step != 0 || a.page != "walk:"+w.ID {
 		t.Fatalf("walk = %+v, page %q", w, a.page)
 	}
-	pump(t, a, "the deeper walkthrough", func() bool { return a.running(a.rev, w.ID) == nil })
+	pump(t, a, "the deeper walkthrough", func() bool { return a.runner.run(a.rev, w.ID) == nil })
 	if w.Err != "" || w.Sessions[agent.Claude] != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
 		t.Fatalf("walk = %+v", w)
 	}
@@ -1160,9 +1160,9 @@ func TestDeeperAhead(t *testing.T) {
 	a.cfg.Agent = agent.Config{Provider: agent.Claude, Effort: "high", AutoEffort: "low"}
 	a.queue = make(chan func(), 256)
 	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
-	if len(a.rev.Walks) != 4 || a.aheadCount() != maxAhead || !a.queued(a.rev, a.rev.Walks[3].ID) {
-		t.Fatalf("%d walks, %d write-ahead walks running", len(a.rev.Walks), a.aheadCount())
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
+	if len(a.rev.Walks) != 4 || a.runner.aheadCount() != maxAhead || !a.runner.queued(a.rev, a.rev.Walks[3].ID) {
+		t.Fatalf("%d walks, %d write-ahead walks running", len(a.rev.Walks), a.runner.aheadCount())
 	}
 	for i, w := range a.rev.Walks {
 		if w.Step != i || w.Question != "" {
@@ -1170,12 +1170,12 @@ func TestDeeperAhead(t *testing.T) {
 		}
 	}
 	pump(t, a, "the deeper walkthroughs", func() bool {
-		for _, r := range a.runsOf(a.rev) {
+		for _, r := range a.logsOf(a.rev) {
 			if r.running {
 				return false
 			}
 		}
-		return !a.reviewBusy(a.rev)
+		return !a.runner.reviewBusy(a.rev)
 	})
 	for _, w := range a.rev.Walks {
 		if w.Content == nil || w.Sessions[agent.Claude] != "s1" {
@@ -1215,8 +1215,8 @@ func TestDeeperAhead(t *testing.T) {
 	snapshot(t, tt, "deeper-ahead")
 
 	a.askQuestion("", -1, "Why?")
-	pump(t, a, "the question", func() bool { return !a.reviewBusy(a.rev) })
-	if r := a.runsOf(a.rev)[0]; r.info.Effort != "high" {
+	pump(t, a, "the question", func() bool { return !a.runner.reviewBusy(a.rev) })
+	if r := a.logsOf(a.rev)[0]; r.info.Effort != "high" {
 		t.Errorf("a question ran at %q effort, want the main one", r.info.Effort)
 	}
 }
@@ -1275,7 +1275,7 @@ func TestQuestionPanel(t *testing.T) {
 	if w == nil || w.Question != "Why lower-case?" || w.Step != 0 || a.page != "overview" {
 		t.Fatalf("question = %+v, page %q", w, a.page)
 	}
-	pump(t, a, "the answer", func() bool { return !a.walkBusy(w.ID) })
+	pump(t, a, "the answer", func() bool { return !a.busy(w.ID) })
 	tt.Frame()
 	for _, want := range []string{"Why lower-case?", "Callers pass mixed case.", "1. Caller", "cache/cache.go:6 (+)"} {
 		if !tt.HasText(want) {
@@ -1284,7 +1284,7 @@ func TestQuestionPanel(t *testing.T) {
 	}
 
 	a.askMore(a.rev, w, "And the tests?")
-	pump(t, a, "the follow-up", func() bool { return !a.walkBusy(w.ID) })
+	pump(t, a, "the follow-up", func() bool { return !a.busy(w.ID) })
 	if len(w.More) != 1 || w.More[0].Content == nil || w.Sessions[agent.Claude] != "q1" {
 		t.Fatalf("follow-up = %+v", w.More)
 	}
@@ -1454,7 +1454,7 @@ func TestRegenerateClosesAskPanelOfItsStepWalk(t *testing.T) {
 	deeper := a.rev.AddWalk(parent.ID, 0, "")
 	a.askAbout(deeper.ID, 0)
 	a.regenerate(parent.ID)
-	pump(t, a, "the regenerated walk", func() bool { return !a.walkBusy(parent.ID) })
+	pump(t, a, "the regenerated walk", func() bool { return !a.busy(parent.ID) })
 	if a.rev.Walk(deeper.ID) != nil || a.questionOpen() {
 		t.Errorf("deeper walk kept %v, panel open %v", a.rev.Walk(deeper.ID) != nil, a.questionOpen())
 	}
@@ -2756,14 +2756,14 @@ func TestEarlierReviewPage(t *testing.T) {
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	a.refresh()
 	pump(t, a, "the other changes", func() bool { return !a.loading && !a.switching })
 	fake.answer("s2", "```json\n"+`{"summary": "Other change.", "steps": [{"title": "B", "text": "b"}], "groups": []}`+"\n```")
 	a.generateOverview()
-	pump(t, a, "the second overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the second overview", func() bool { return !a.busy(store.TargetOverview) })
 	tt := ui.NewTester(a.view, 1300, 900)
 	tt.Frame()
 	if !tt.HasText("Other change.") || !tt.HasText("Earlier reviews") {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/psd-coder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 // finishOverview runs an overview that answers with the groups in
@@ -15,7 +16,7 @@ func finishOverview(t *testing.T, a *app, groupsJSON string) {
 	newFakeAgent(t, a).answer("s1", answer)
 	a.cfg.DeeperAhead = false
 	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
 }
 
 // TestGroupPageKeepsGroupAfterOverview opens a directory group page and

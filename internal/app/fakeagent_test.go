@@ -29,6 +29,10 @@ type fakeReply struct {
 	err     error
 	// hold keeps the run going until release or until it is cancelled.
 	hold bool
+	// streamed and activity reach the app before the hold, as text the
+	// agent writes and as what it does now.
+	streamed string
+	activity string
 }
 
 func newFakeAgent(t *testing.T, a *app) *fakeAgent {
@@ -120,6 +124,12 @@ func (f *fakeAgent) run(ctx context.Context, cfg agent.Config, req agent.Request
 		}
 		log(agent.LogCommand, string(cfg.Provider))
 		log(agent.LogStdin, req.Prompt)
+		if r.streamed != "" {
+			ch <- agent.Event{Kind: agent.EventText, Text: r.streamed}
+		}
+		if r.activity != "" {
+			ch <- agent.Event{Kind: agent.EventActivity, Text: r.activity}
+		}
 		if release != nil {
 			select {
 			case <-release:

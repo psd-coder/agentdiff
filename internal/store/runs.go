@@ -59,6 +59,11 @@ func (s Store) RunPath(repo string, scope gitx.Scope, id string) string {
 
 func usagePath(log string) string { return strings.TrimSuffix(log, ".jsonl") + ".usage.json" }
 
+// RemoveRun deletes the log of a run.
+func (s Store) RemoveRun(repo string, scope gitx.Scope, id string) error {
+	return os.Remove(s.RunPath(repo, scope, id))
+}
+
 func (s Store) SaveRunUsage(repo string, scope gitx.Scope, id string, u agent.Usage) error {
 	return writeJSON(usagePath(s.RunPath(repo, scope, id)), u)
 }
