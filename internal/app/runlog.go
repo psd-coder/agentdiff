@@ -88,14 +88,17 @@ func (r *logRun) label() string {
 // text is the run as plain text, for the clipboard.
 func (r *logRun) text() string {
 	var b strings.Builder
-	b.WriteString(r.label() + "\n")
+	b.WriteString(r.label())
+	b.WriteString("\n")
 	if r.info.Note != "" {
-		b.WriteString(r.info.Note + "\n")
+		b.WriteString(r.info.Note)
+		b.WriteString("\n")
 	}
 	for _, it := range r.items {
 		fmt.Fprintf(&b, "\n[%s] %s\n", it.time.Format("15:04:05"), it.Title)
 		if it.Detail != "" {
-			b.WriteString(it.Detail + "\n")
+			b.WriteString(it.Detail)
+			b.WriteString("\n")
 		}
 	}
 	return b.String()

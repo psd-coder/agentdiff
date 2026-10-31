@@ -1165,8 +1165,6 @@ func (a *app) newThread(anchor review.Anchor) {
 	a.openThread(t.ID)
 }
 
-func (a *app) diffOf(path string) *fileDiff { return a.diffs[path] }
-
 // quoteLines returns lines start..end (1-based) of a side of a file.
 func (a *app) quoteLines(path string, side review.Side, start, end int) string {
 	d := a.diffs[path]

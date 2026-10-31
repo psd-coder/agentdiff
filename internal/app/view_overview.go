@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -352,5 +351,3 @@ func excerpt(s string, n int) string {
 	}
 	return string(r[:n]) + "…"
 }
-
-func fileName(p string) string { return path.Base(p) }

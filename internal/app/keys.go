@@ -58,7 +58,8 @@ func accelerator(mods ui.Modifiers, key ui.Key) string {
 	var b strings.Builder
 	for _, m := range modNames {
 		if mods&m.mod != 0 {
-			b.WriteString(m.name + "+")
+			b.WriteString(m.name)
+			b.WriteString("+")
 		}
 	}
 	return b.String() + name
