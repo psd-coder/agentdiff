@@ -202,14 +202,14 @@ func TestEmptyThreadDroppedOnClose(t *testing.T) {
 
 func TestScopeSwitchToCommit(t *testing.T) {
 	a := newTestApp(t)
-	if len(a.commits) != 1 {
-		t.Fatalf("commits = %+v", a.commits)
+	if len(a.commits.rows) != 1 {
+		t.Fatalf("commits = %+v", a.commits.rows)
 	}
 	tt := ui.NewTester(a.view, 1300, 800)
 	if err := tt.Click("Initial commit"); err != nil {
 		t.Fatal(err)
 	}
-	if a.scope.Commit != a.commits[0].SHA || len(a.files) != 2 {
+	if a.scope.Commit != a.commits.rows[0].SHA || len(a.files) != 2 {
 		t.Errorf("scope = %+v, files = %+v", a.scope, a.files)
 	}
 }
@@ -304,7 +304,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "Agent work")
-	sha := headSHA(t, dir)
+	sha := revSHA(t, dir, "HEAD")
 	a.refresh()
 	tt := ui.NewTester(a.view, 1300, 800)
 	waitText(t, a, tt, "now commit "+shortSHA(sha))
@@ -345,7 +345,7 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	write(t, dir, "extra.go", "package extra\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "Agent work and more")
-	sha := headSHA(t, dir)
+	sha := revSHA(t, dir, "HEAD")
 	a.refresh()
 	tt := ui.NewTester(a.view, 1300, 800)
 	waitText(t, a, tt, "probably in commit "+shortSHA(sha))
@@ -832,8 +832,8 @@ func TestCompareBranches(t *testing.T) {
 	if len(a.files) != 1 || a.files[0].Path != "feature.go" {
 		t.Errorf("files = %+v", a.files)
 	}
-	if len(a.commits) != 1 || a.commits[0].Subject != "Add feature" {
-		t.Errorf("commits = %+v", a.commits)
+	if len(a.commits.rows) != 1 || a.commits.rows[0].Subject != "Add feature" {
+		t.Errorf("commits = %+v", a.commits.rows)
 	}
 	tt.Frame()
 	if !tt.HasText("Commits on agent") || !tt.HasText("All changes") || tt.HasText("Uncommitted changes") {
@@ -869,7 +869,7 @@ func TestCompareBranches(t *testing.T) {
 	}
 	a.base = "agent"
 	a.pickBranch("agent")
-	if a.scope.Kind != gitx.ScopeCommit || len(a.commits) == 0 || a.scope.Commit != a.commits[0].SHA {
+	if a.scope.Kind != gitx.ScopeCommit || len(a.commits.rows) == 0 || a.scope.Commit != a.commits.rows[0].SHA {
 		t.Errorf("other branch against itself: scope = %+v", a.scope)
 	}
 }
@@ -889,8 +889,8 @@ func TestCustomRange(t *testing.T) {
 	if a.scope.Kind != gitx.ScopeRange || len(a.files) != 2 {
 		t.Fatalf("scope = %+v, files = %+v", a.scope, a.files)
 	}
-	if len(a.commits) != 1 || a.commits[0].Subject != "Second" {
-		t.Errorf("commits = %+v", a.commits)
+	if len(a.commits.rows) != 1 || a.commits.rows[0].Subject != "Second" {
+		t.Errorf("commits = %+v", a.commits.rows)
 	}
 	tt.Frame()
 	if !tt.HasText("Commits in HEAD~1..HEAD") || tt.HasText("Uncommitted changes") {
@@ -1050,12 +1050,12 @@ func TestReviewFollowsBranch(t *testing.T) {
 func TestRefreshListsNewCommits(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
-	before := len(a.commits)
+	before := len(a.commits.rows)
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-qm", "Commit the work")
 	a.refresh()
-	if len(a.commits) != before+1 || a.commits[0].Subject != "Commit the work" {
-		t.Fatalf("commits after refresh = %+v", a.commits)
+	if len(a.commits.rows) != before+1 || a.commits.rows[0].Subject != "Commit the work" {
+		t.Fatalf("commits after refresh = %+v", a.commits.rows)
 	}
 }
 
@@ -1068,10 +1068,10 @@ func waitText(t *testing.T, a *app, tt *ui.Tester, text string) {
 	})
 }
 
-// headSHA is the commit that HEAD names in the repository at dir.
-func headSHA(t *testing.T, dir string) string {
+// revSHA is the commit that rev names in the repository at dir.
+func revSHA(t *testing.T, dir, rev string) string {
 	t.Helper()
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	out, err := exec.Command("git", "-C", dir, "rev-parse", rev).Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2360,7 +2360,7 @@ func TestScopeShowsAtOnce(t *testing.T) {
 
 	// A new scope shows once its changes are read.
 	old := a.scope
-	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits[0].SHA}
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
 	a.setScope(commit)
 	if a.scope != old || a.chosen != commit || !a.switching {
 		t.Fatalf("scope %+v, chosen %+v, switching %v", a.scope, a.chosen, a.switching)
@@ -2375,7 +2375,7 @@ func TestScopeShowsAtOnce(t *testing.T) {
 // and refreshes while the commit is.
 func TestScopeLoadsInOrder(t *testing.T) {
 	a := newTestApp(t)
-	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits[0].SHA}
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
 	a.queue = make(chan func(), 64)
 	a.openRepo(a.repo.Root)
 	a.setScope(commit)

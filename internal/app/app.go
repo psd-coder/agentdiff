@@ -69,24 +69,7 @@ type app struct {
 	worktrees []gitx.Worktree
 	// branchesErr is why git could not list the branches or worktrees.
 	branchesErr string
-	commits     []gitx.Commit
-	commitsErr  string
-	commitsGen  int
-	// commitLog is where the commit list reads its next pages, and
-	// commitsTotal is how many commits the whole list has.
-	commitLog    gitx.CommitLog
-	commitsTotal int
-	// commitsFor is the range the commit list was read for.
-	commitsFor string
-	// commitsReading is set while git reads the commit list or a page of
-	// it. Only one read runs at a time.
-	commitsReading bool
-	// commitsFailedAt is the last row in view when a page failed. The
-	// list reads the page again once it scrolls away from that row.
-	commitsFailedAt int
-	// commitsShown is the commitsGen of the commits the list of changes
-	// showed in the last frame.
-	commitsShown int
+	commits     commitList
 	// changeList is the place of the list of changes in the sidebar.
 	changeList ui.ListState
 
@@ -295,9 +278,8 @@ func (a *app) openRepo(path string) {
 	a.watch(r)
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
-	a.branch, a.head, a.base, a.branches, a.commits = "", "", "", nil, nil
-	a.commitsTotal, a.commitLog, a.commitsFor = 0, gitx.CommitLog{}, ""
-	a.commitsErr, a.commitsFailedAt = "", 0
+	a.branch, a.head, a.base, a.branches = "", "", "", nil
+	a.commits.reset()
 	a.shown = false
 	a.baseSet, a.rng, a.worktrees = false, nil, nil
 	if a.win != nil {
@@ -315,7 +297,7 @@ func (a *app) openRepo(path string) {
 			}
 			a.branch, a.base, a.branches, a.worktrees = branch, base, branches, trees
 			a.branchesErr = errText(err)
-			a.loadCommits(nil)
+			a.loadCommits()
 		})
 	})
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
@@ -328,7 +310,7 @@ func (a *app) closeRepo() {
 	a.cancelLoad()
 	a.gen++
 	a.projectsOpen, a.shown = false, false
-	a.commitsErr, a.commitsFailedAt = "", 0
+	a.commits.reset()
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff")
 	}
@@ -383,28 +365,22 @@ func (a *app) pickBranch(branch string) {
 	if branch == a.branch {
 		a.head = ""
 	}
-	if s, ok := a.allScope(); ok {
-		a.loadCommits(nil)
+	s, all := a.allScope()
+	a.commits.newest = !all && a.head != ""
+	a.loadCommits()
+	switch {
+	case all:
 		a.setScope(s)
-		return
-	}
-	if a.head == "" {
-		a.loadCommits(nil)
+	case a.head == "":
 		a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-		return
 	}
-	a.loadCommits(func() {
-		if len(a.commits) > 0 {
-			a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits[0].SHA})
-		}
-	})
 }
 
 // setRange reviews the changes between two revisions.
 func (a *app) setRange(from, to string) {
 	s := gitx.Scope{Kind: gitx.ScopeRange, From: from, To: to}
 	a.rng = &s
-	a.loadCommits(nil)
+	a.loadCommits()
 	a.setScope(s)
 }
 
@@ -491,7 +467,7 @@ func (a *app) checkedOut(branch string, branches []string) {
 	} else if a.head == branch {
 		a.head = ""
 	}
-	a.loadCommits(nil)
+	a.loadCommits()
 	a.reload()
 }
 
@@ -500,25 +476,15 @@ func (a *app) refresh() {
 		return
 	}
 	a.reload()
-	a.loadCommits(nil)
+	a.loadCommits()
 	a.syncBranch()
 }
 
-// loadCommits reads the commit list again, then runs then, if given.
-// For the same range it reads as many commits as the list already has,
-// so the list keeps its rows and its place.
-func (a *app) loadCommits(then func()) {
-	a.commitsGen++
-	r, gen := a.repo, a.commitsGen
+// loadCommits reads the commit list again, for the range in view.
+func (a *app) loadCommits() {
+	r := a.repo
 	base, head := a.listRange()
-	key := r.Root + "\x00" + base + ".." + cmp.Or(head, a.branch)
-	fresh := key != a.commitsFor
-	limit := commitPage
-	if !fresh {
-		limit = max(limit, len(a.commits))
-	}
-	a.commitsFor = key
-	a.commitsReading = true
+	gen, limit := a.commits.read(r.Root + "\x00" + base + ".." + cmp.Or(head, a.branch))
 	a.async(func() {
 		ctx := context.Background()
 		cl, err := r.CommitLog(ctx, base, head)
@@ -531,63 +497,29 @@ func (a *app) loadCommits(then func()) {
 			commits, err = cl.Page(ctx, 0, limit)
 		}
 		a.update(func() {
-			if a.repo != r || gen != a.commitsGen {
-				return
-			}
-			if err != nil {
-				commits, total = nil, 0
-			}
-			a.commits, a.commitsTotal, a.commitLog, a.commitsErr = commits, total, cl, errText(err)
-			a.commitsReading = false
-			if fresh {
-				a.changeList.ScrollTo(0, ui.Start)
-			}
-			if then != nil {
-				then()
+			if sha := a.commits.listed(gen, cl, commits, total, err); sha != "" {
+				a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha})
 			}
 		})
 	})
-}
-
-// loadMoreCommits reads the next page of the commit list when last, the
-// last commit in view, is near the end of the commits read. The rows in
-// view count once the list has shown the commits read last.
-func (a *app) loadMoreCommits(last int) {
-	n := len(a.commits)
-	if a.commitsShown != a.commitsGen || n >= a.commitsTotal || last < n-commitsAhead ||
-		a.commitsErr != "" && last == a.commitsFailedAt {
-		return
-	}
-	a.readCommitPage(last)
 }
 
 // readCommitPage reads the page after the commits read, unless a read
 // runs. last is the last commit in view.
 func (a *app) readCommitPage(last int) {
-	if a.commitsReading {
+	gen, from, ok := a.commits.readPage(last)
+	if !ok {
 		return
 	}
-	n := len(a.commits)
-	a.commitsReading = true
-	r, gen, cl := a.repo, a.commitsGen, a.commitLog
+	cl := a.commits.log
 	a.async(func() {
-		page, err := cl.Page(context.Background(), n, commitPage)
-		a.update(func() {
-			if a.repo != r || gen != a.commitsGen {
-				return
-			}
-			a.commitsReading = false
-			a.commitsErr, a.commitsFailedAt = errText(err), last
-			if err == nil && len(page) < commitPage {
-				// A short page ends the log, whatever git counted.
-				a.commitsTotal = n + len(page)
-			}
-			a.commits = append(a.commits, page...)
-		})
+		page, err := cl.Page(context.Background(), from, commitPage)
+		a.update(func() { a.commits.paged(gen, page, err) })
 	})
 }
 
 func (a *app) setScope(s gitx.Scope) {
+	a.commits.newest = false
 	a.chosen = s
 	a.load(s, true)
 }
@@ -1133,7 +1065,7 @@ func (a *app) saved(err error) {
 
 func (a *app) scopeLabel() string {
 	if a.scope.Kind == gitx.ScopeCommit {
-		for _, c := range a.commits {
+		for _, c := range a.commits.rows {
 			if c.SHA == a.scope.Commit {
 				return fmt.Sprintf("%s %s", c.Short, c.Subject)
 			}
