@@ -31,7 +31,7 @@ func sessionsApp(t *testing.T) (*app, *fakeAgent) {
 func idle(t *testing.T, a *app, what string) {
 	t.Helper()
 	pump(t, a, what, func() bool {
-		for _, r := range a.runsOf(a.rev) {
+		for _, r := range a.logsOf(a.rev) {
 			if r.running {
 				return false
 			}
@@ -42,7 +42,7 @@ func idle(t *testing.T, a *app, what string) {
 
 // lastResumed is the session the latest run resumed or forked, empty for a
 // new session.
-func lastResumed(a *app) string { return a.runsOf(a.rev)[0].info.Resumed }
+func lastResumed(a *app) string { return a.logsOf(a.rev)[0].info.Resumed }
 
 // goDeeper starts the walkthrough of a step as Go deeper does.
 func goDeeper(a *app, parent string, step int) {

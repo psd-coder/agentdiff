@@ -82,7 +82,7 @@ func (a *app) commands() []*command {
 			can: func(id string) bool { return !a.rev.Thread(id).Excluded },
 			run: func(_ *ui.Context, id string) { a.setExcluded(id, true) }},
 		{id: "stop-thread", title: "Stop the Agent in the Thread", target: a.targetThread,
-			can: a.threadBusy,
+			can: a.busy,
 			run: func(_ *ui.Context, id string) { a.stopThread(a.rev.Thread(id)) }},
 		{id: "thread-log", title: "Show Log of the Thread", tip: "What the agent did in this thread", target: a.targetThread,
 			can: func(id string) bool { return a.rev.Thread(id).Agent != "" },
@@ -102,10 +102,10 @@ func (a *app) commands() []*command {
 			a.saveReview()
 		}},
 
-		{id: "stop-walk", title: "Stop Walkthrough", target: a.targetWalk, can: a.walkBusy,
+		{id: "stop-walk", title: "Stop Walkthrough", target: a.targetWalk, can: a.busy,
 			run: func(_ *ui.Context, id string) { a.stopWalk(id) }},
 		{id: "regenerate-walk", title: "Regenerate Walkthrough", target: a.targetWalk,
-			can: func(id string) bool { return !a.walkBusy(id) },
+			can: func(id string) bool { return !a.busy(id) },
 			run: func(_ *ui.Context, id string) { a.regenerate(id) }},
 		{id: "walk-log", title: "Show Log of the Walkthrough", tip: "What the agent did for this walkthrough", target: a.targetWalk,
 			run: func(_ *ui.Context, id string) { a.showLog(id) }},
@@ -126,15 +126,15 @@ func (a *app) commands() []*command {
 			}},
 
 		{id: "explain", title: "Explain Changes", can: func(string) bool {
-			return a.overviewRunning() == nil && !a.rev.Overview.Done() && len(a.files) > 0
+			return !a.busy(store.TargetOverview) && !a.rev.Overview.Done() && len(a.files) > 0
 		}, run: func(*ui.Context, string) { a.generateOverview() }},
-		{id: "stop-overview", title: "Stop Overview", can: func(string) bool { return a.overviewRunning() != nil },
+		{id: "stop-overview", title: "Stop Overview", can: func(string) bool { return a.busy(store.TargetOverview) },
 			run: func(*ui.Context, string) { a.stopOverview() }},
 		{id: "regenerate-overview", title: "Regenerate Overview", can: func(string) bool {
-			return a.overviewRunning() == nil && a.rev.Overview.Done() && len(a.files) > 0
+			return !a.busy(store.TargetOverview) && a.rev.Overview.Done() && len(a.files) > 0
 		}, run: func(*ui.Context, string) { a.regenerate("") }},
 		{id: "overview-log", title: "Show Log of the Overview", tip: "What the agent did to write the overview",
-			can: func(string) bool { return a.overviewRunning() != nil || a.rev.Overview != nil },
+			can: func(string) bool { return a.busy(store.TargetOverview) || a.rev.Overview != nil },
 			run: func(*ui.Context, string) { a.showLog(store.TargetOverview) }},
 		{id: "start-over", title: "Start Over", tip: "Delete the overview and comments of this scope",
 			can: func(string) bool { return a.rev.Overview != nil || len(a.rev.Threads) > 0 || len(a.rev.Walks) > 0 },

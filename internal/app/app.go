@@ -125,7 +125,6 @@ type app struct {
 	movedTo string
 
 	reviews   *continuity.Reviews
-	runs      map[*review.Review][]*logRun
 	logOpen   bool
 	logTarget string
 	logPct    float32
@@ -193,10 +192,9 @@ func newApp(s store.Store) *app {
 		diffs:       map[string]*fileDiff{},
 		folded:      map[string]bool{},
 		reviews:     continuity.New(s),
-		runs:        map[*review.Review][]*logRun{},
 		logPct:      50,
 		drafts:      map[string]string{},
-		runner:      runner{runs: map[runKey]*agentRun{}},
+		runner:      newRunner(),
 		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},
 		sidebarW:    280,
@@ -654,7 +652,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			a.shown = true
 			a.files, a.diffstat = files, stat
 			a.patch, a.patchKnown, a.fileIDs = fp.Patch, perr == nil, fp.Files
-			a.settle(a.reviews.Decide(found, a.rev, a.reviewBusy))
+			a.settle(a.reviews.Decide(found, a.rev, a.runner.reviewBusy))
 			for _, f := range files {
 				a.diffs[f.Path] = &fileDiff{change: f, loading: true}
 			}
@@ -758,8 +756,7 @@ func (a *app) firstPaint(rev *review.Review, page string, fresh bool) []string {
 // the notice, which stays, because a load runs it each time.
 func (a *app) settle(out continuity.Outcome) {
 	for _, r := range out.Dropped {
-		a.dropRuns(r)
-		delete(a.runs, r)
+		a.release(r)
 	}
 	if old := out.Archived; old != nil && a.leaveReview() {
 		a.saved(a.store.SaveReview(old))
@@ -788,7 +785,7 @@ func (a *app) dropEarlier(e *continuity.Earlier) {
 // restoreArchived brings an archived review back to the uncommitted
 // scope, which keeps it from then on.
 func (a *app) restoreArchived(e *continuity.Earlier) {
-	a.showNext(e, a.reviews.Restore(e, a.rev, a.reviewBusy), "Could not restore the review")
+	a.showNext(e, a.reviews.Restore(e, a.rev, a.runner.reviewBusy), "Could not restore the review")
 }
 
 // moveArchived moves an archived review to the commit that probably
@@ -796,7 +793,7 @@ func (a *app) restoreArchived(e *continuity.Earlier) {
 // opens the commit.
 func (a *app) moveArchived(e *continuity.Earlier) {
 	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: e.Probably}
-	a.showNext(e, a.reviews.MoveTo(a.repo.Root, e, to, a.reviewBusy), "Could not move the review")
+	a.showNext(e, a.reviews.MoveTo(a.repo.Root, e, to, a.runner.reviewBusy), "Could not move the review")
 }
 
 func (a *app) deleteArchived(e *continuity.Earlier) {
@@ -830,7 +827,7 @@ func (a *app) showNext(e *continuity.Earlier, next continuity.Next, failed strin
 // the scope has now.
 func (a *app) stale() bool {
 	ov := a.rev.Overview
-	if !ov.Done() || a.loading || (ov.PatchID != "" && !a.patchKnown) || a.overviewRunning() != nil {
+	if !ov.Done() || a.loading || (ov.PatchID != "" && !a.patchKnown) || a.busy(store.TargetOverview) {
 		return false
 	}
 	return ov.Stale(a.patch, a.fileNames())
@@ -869,7 +866,7 @@ func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error)
 // it saved any.
 func (a *app) keepSnippets() bool {
 	ov := a.rev.Overview
-	if a.loading || !ov.Done() || ov.PatchID != "" && !a.patchKnown || a.overviewRunning() != nil || a.stale() {
+	if a.loading || !ov.Done() || ov.PatchID != "" && !a.patchKnown || a.busy(store.TargetOverview) || a.stale() {
 		return false
 	}
 	kept := false
@@ -1006,8 +1003,7 @@ func (a *app) startOver() {
 		a.showError("Could not start the review over", err)
 		return
 	}
-	a.dropRuns(a.rev)
-	delete(a.runs, a.rev)
+	a.release(a.rev)
 	a.leaveReview()
 	a.rev = rev
 	a.resetNav()

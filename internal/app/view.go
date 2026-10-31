@@ -11,6 +11,7 @@ import (
 
 	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
+	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 func (a *app) view(c *ui.Context) {
@@ -384,7 +385,7 @@ func (a *app) reviewNav(c *ui.Context) {
 	nav := ui.Sidebar(c, &page, func() {
 		sidebarHeading(c, "Review", nil)
 		ov := ui.SidebarItem(c, "overview", overviewIcon, "Overview")
-		if a.overviewRunning() != nil {
+		if a.busy(store.TargetOverview) {
 			ov.Children(func() { ui.Spinner(c).Size(12, 12) })
 		}
 		a.walkItems(c, "", 1)
@@ -489,7 +490,7 @@ func (a *app) walkItems(c *ui.Context, parent string, depth int) {
 			continue
 		}
 		item := ui.SidebarItem(c, "walk:"+w.ID, nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))
-		if a.walkBusy(w.ID) {
+		if a.busy(w.ID) {
 			item.Children(func() { ui.Spinner(c).Size(12, 12) })
 		}
 		if depth < 8 {

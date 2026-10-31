@@ -24,26 +24,38 @@ type agentFunc func(context.Context, agent.Config, agent.Request) <-chan agent.E
 // the log of rev, in memory and in the run's file.
 func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, rev *review.Review, info store.RunInfo, fn func(agent.Event)) {
 	info.Resumed = req.ResumeID
-	run, w := a.startRun(rev, info)
+	run := a.startRun(rev, info)
+	file := &runFile{}
 	var mu sync.Mutex
 	var logged []logItem
 	req.Log = func(e agent.LogEntry) {
-		if w != nil {
-			if err := w.Write(e); err != nil {
-				log.Printf("run log: %v", err)
-				if err := w.Close(); err != nil {
-					log.Printf("run log: %v", err)
-				}
-				w = nil
-			}
-		}
+		file.write(e)
 		items := logItems(cfg.Provider, e)
 		mu.Lock()
 		logged = append(logged, items...)
 		mu.Unlock()
 	}
 	events := a.startAgent(ctx, cfg, req)
+	repo, scope := rev.Repo, rev.Scope
 	go func() {
+		w, err := a.store.CreateRun(repo, scope, info)
+		file.opened(w)
+		a.update(func() {
+			if err != nil {
+				run.err = err.Error()
+			}
+			// A Start Over or an archive that came while the file was
+			// created leaves it in the folder of the review that took the
+			// place of rev.
+			if w != nil && a.reviews.Obsolete(rev) {
+				a.async(func() {
+					file.close()
+					if err := a.store.RemoveRun(repo, scope, info.ID); err != nil && !store.IsNotExist(err) {
+						log.Printf("run log: %v", err)
+					}
+				})
+			}
+		})
 		var pending strings.Builder
 		last := time.Now()
 		flush := func() {
@@ -76,15 +88,11 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 			a.update(func() { fn(ev) })
 		}
 		flush()
-		if w != nil {
-			if err := w.Close(); err != nil {
-				log.Printf("run log: %v", err)
-			}
-		}
+		file.close()
 		a.update(func() {
 			run.running = false
 			if u := run.info.Usage; u != nil && !a.reviews.Obsolete(rev) {
-				u.CostUSD = runCost(a.runsOf(rev), run)
+				u.CostUSD = runCost(a.logsOf(rev), run)
 				if err := a.store.SaveRunUsage(rev.Repo, rev.Scope, info.ID, *u); err != nil {
 					log.Printf("run usage: %v", err)
 				}
@@ -92,8 +100,6 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 		})
 	}()
 }
-
-func (a *app) overviewRunning() *agentRun { return a.running(a.rev, store.TargetOverview) }
 
 func (a *app) generateOverview() {
 	if a.rev == nil || len(a.files) == 0 {
@@ -205,10 +211,6 @@ func (a *app) deeperAhead(rev *review.Review) {
 	}
 }
 
-// walkBusy reports whether a walk of the review on screen is being
-// written or waits for its turn.
-func (a *app) walkBusy(id string) bool { return a.running(a.rev, id) != nil || a.queued(a.rev, id) }
-
 // runWalk asks the agent for a walk's walkthrough. Walks next to each
 // other stay apart, because each forks the session of the walkthrough
 // above. An auto walk is one the app writes ahead of the reviewer.
@@ -228,7 +230,7 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 // askMore asks a follow-up question in a question's conversation.
 func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 	q = strings.TrimSpace(q)
-	if q == "" || a.running(rev, w.ID) != nil || a.queued(rev, w.ID) {
+	if q == "" || a.runner.busy(rev, w.ID) {
 		return
 	}
 	cfg := a.cfg.Agent
@@ -284,18 +286,13 @@ func (a *app) comment(t *review.Thread, text string) {
 // scope of rev.
 func (a *app) ask(rev *review.Review, t *review.Thread, text string) {
 	text = strings.TrimSpace(text)
-	if text == "" || a.running(rev, t.ID) != nil {
+	if text == "" || a.runner.busy(rev, t.ID) {
 		return
 	}
 	cfg := a.cfg.Agent
 	ex := review.ThreadExchange(rev, t, cfg, a.diffstatOf(rev), text)
-	run := &agentRun{kind: threadKind, ex: ex, reply: len(t.Messages)}
-	a.launch(run, newRunInfo(t.ID, t.Anchor.Label(), excerpt(text, 160), cfg))
+	a.launch(&agentRun{kind: threadKind, ex: ex}, newRunInfo(t.ID, t.Anchor.Label(), excerpt(text, 160), cfg))
 }
-
-// threadBusy reports whether the agent answers in a thread of the review
-// on screen.
-func (a *app) threadBusy(id string) bool { return a.running(a.rev, id) != nil }
 
 func (a *app) stopThread(t *review.Thread) { a.stopRun(a.rev, t.ID) }
 

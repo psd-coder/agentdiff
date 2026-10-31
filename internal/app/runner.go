@@ -26,20 +26,19 @@ const (
 )
 
 // agentRun is an answer the agent writes for the overview, a walk or a
-// thread. reply is where a thread's answer goes in its messages.
+// thread. text and activity are what it streamed so far.
 type agentRun struct {
 	kind     runKind
 	text     string
 	activity string
 	started  time.Time
-	reply    int
 	// ahead marks a walk the app writes ahead of the reviewer. Only
 	// these runs count toward maxAhead.
 	ahead  bool
 	ex     *review.Exchange
 	cancel context.CancelFunc
 	// ended runs once on the main thread after endRun wrote the result.
-	// A run that a new run with the same key replaces, or that dropRuns
+	// A run that a new run with the same key replaces, or that release
 	// drops, ends without it.
 	ended func(answered bool)
 }
@@ -48,14 +47,20 @@ type agentRun struct {
 // reviewer, over all reviews.
 const maxAhead = 3
 
-// runner holds every agent run and the write-ahead walks that wait for a
-// free slot. A run belongs to the review it was started for, so switching
-// scopes leaves it running.
+// runner holds every agent run, the write-ahead walks that wait for a
+// free slot, and the run logs of each review. A run belongs to the review
+// it was started for, so switching scopes leaves it running.
 type runner struct {
 	runs map[runKey]*agentRun
 	// waiting is oldest first. start builds the request when the walk
 	// leaves the queue, from the review as it is then.
 	waiting []waitingRun
+	// logs is the run log of each review, newest first, in memory.
+	logs map[*review.Review][]*logRun
+}
+
+func newRunner() runner {
+	return runner{runs: map[runKey]*agentRun{}, logs: map[*review.Review][]*logRun{}}
 }
 
 type waitingRun struct {
@@ -63,14 +68,21 @@ type waitingRun struct {
 	start func()
 }
 
-func (a *app) running(rev *review.Review, target string) *agentRun {
-	return a.runner.runs[runKey{rev, target}]
+// run is the run that writes into rev for target, nil when there is none.
+func (r *runner) run(rev *review.Review, target string) *agentRun {
+	return r.runs[runKey{rev, target}]
+}
+
+// busy reports whether a run writes into rev for target, or waits in the
+// queue to.
+func (r *runner) busy(rev *review.Review, target string) bool {
+	return r.run(rev, target) != nil || r.queued(rev, target)
 }
 
 // aheadCount counts the write-ahead walks that run now.
-func (a *app) aheadCount() int {
+func (r *runner) aheadCount() int {
 	n := 0
-	for _, run := range a.runner.runs {
+	for _, run := range r.runs {
 		if run.ahead {
 			n++
 		}
@@ -86,7 +98,7 @@ func (a *app) runAhead(rev *review.Review, target string, start func()) {
 }
 
 func (a *app) startWaiting() {
-	for len(a.runner.waiting) > 0 && a.aheadCount() < maxAhead {
+	for len(a.runner.waiting) > 0 && a.runner.aheadCount() < maxAhead {
 		next := a.runner.waiting[0]
 		a.runner.waiting = a.runner.waiting[1:]
 		next.start()
@@ -94,18 +106,18 @@ func (a *app) startWaiting() {
 }
 
 // queued reports whether a write-ahead run waits for its slot.
-func (a *app) queued(rev *review.Review, target string) bool {
-	return slices.ContainsFunc(a.runner.waiting, func(q waitingRun) bool { return q.key == runKey{rev, target} })
+func (r *runner) queued(rev *review.Review, target string) bool {
+	return slices.ContainsFunc(r.waiting, func(q waitingRun) bool { return q.key == runKey{rev, target} })
 }
 
 // reviewBusy reports whether an agent run writes into rev or waits to.
-func (a *app) reviewBusy(rev *review.Review) bool {
-	for key := range a.runner.runs {
+func (r *runner) reviewBusy(rev *review.Review) bool {
+	for key := range r.runs {
 		if key.rev == rev {
 			return true
 		}
 	}
-	return slices.ContainsFunc(a.runner.waiting, func(q waitingRun) bool { return q.key.rev == rev })
+	return slices.ContainsFunc(r.waiting, func(q waitingRun) bool { return q.key.rev == rev })
 }
 
 // launch asks the agent for ex. A run with the same key stops without
@@ -154,6 +166,10 @@ func (a *app) launch(run *agentRun, info store.RunInfo) {
 	}
 }
 
+// busy reports whether a run writes into the review on screen for
+// target, or waits in the queue to.
+func (a *app) busy(target string) bool { return a.runner.busy(a.rev, target) }
+
 func (a *app) stopRun(rev *review.Review, target string) { a.stopRuns(rev, []string{target}) }
 
 // stopRuns ends the runs of rev for targets at once with "Stopped". The
@@ -176,9 +192,10 @@ func (a *app) unqueue(rev *review.Review, targets []string) {
 	})
 }
 
-// dropRuns stops every run of rev, and the walks queued for it, without
-// writing into rev. Queued walks of other reviews take the free places.
-func (a *app) dropRuns(rev *review.Review) {
+// release forgets rev: it stops every run of rev and the walks queued
+// for it without writing into rev, and drops its run log from memory.
+// Queued walks of other reviews take the free places.
+func (a *app) release(rev *review.Review) {
 	for key, run := range a.runner.runs {
 		if key.rev == rev {
 			run.cancel()
@@ -186,6 +203,7 @@ func (a *app) dropRuns(rev *review.Review) {
 		}
 	}
 	a.runner.waiting = slices.DeleteFunc(a.runner.waiting, func(q waitingRun) bool { return q.key.rev == rev })
+	delete(a.runner.logs, rev)
 	a.startWaiting()
 }
 

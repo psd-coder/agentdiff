@@ -136,7 +136,7 @@ func (a *app) turnView(c *ui.Context, w *review.Walk, turn review.Turn, last boo
 	t := c.Theme()
 	ui.Column(c).Gap(8).Children(func() {
 		ui.Text(c, turn.Question).Selectable().Padding(8, 10).Radius(8).Background(t.Surface)
-		if run := a.running(a.rev, w.ID); run != nil && last {
+		if run := a.runner.run(a.rev, w.ID); run != nil && last {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c).Size(12, 12)
 				ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
@@ -181,7 +181,7 @@ func (a *app) compactWalk(c *ui.Context, w *review.Walkthrough) {
 
 func (a *app) questionComposer(c *ui.Context, w *review.Walk, target *askTarget) {
 	t := c.Theme()
-	busy := w != nil && a.walkBusy(w.ID)
+	busy := w != nil && a.busy(w.ID)
 	key := a.questionDraftKey(w, *target)
 	draft := a.drafts[key]
 	send := func(text string) {

@@ -45,14 +45,14 @@ func (a *app) threadPanel(c *ui.Context) {
 				if len(th.Messages) == 0 {
 					ui.Text(c, "Write a comment for the coding agent, or ask the review agent a question. Each thread is a separate conversation.").TextColor(t.TextMuted)
 				}
-				run := a.running(a.rev, th.ID)
+				run := a.runner.run(a.rev, th.ID)
 				for i := range th.Messages {
-					if run != nil && run.reply == i {
+					if run != nil && run.ex.Reply() == i {
 						a.pendingReply(c, th, run)
 					}
 					a.message(c, th, i)
 				}
-				if run != nil && run.reply == len(th.Messages) {
+				if run != nil && run.ex.Reply() == len(th.Messages) {
 					a.pendingReply(c, th, run)
 				}
 			})
@@ -122,7 +122,7 @@ func (a *app) message(c *ui.Context, th *review.Thread, i int) {
 func (a *app) composer(c *ui.Context, th *review.Thread) {
 	t := c.Theme()
 	draft := a.drafts[th.ID]
-	busy := a.threadBusy(th.ID)
+	busy := a.busy(th.ID)
 	ui.Column(c).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
 		placeholder := "Comment, or question for the agent"
 		if len(th.Messages) > 0 {
@@ -130,7 +130,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 		}
 		in := ui.TextArea(c.Key("draft-"+th.ID), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
 			OnTextKey(func(k ui.TextKey) bool {
-				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !a.threadBusy(th.ID) {
+				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !a.busy(th.ID) {
 					a.ask(a.rev, th, k.Text())
 					k.SetText("")
 					a.drafts[th.ID] = ""

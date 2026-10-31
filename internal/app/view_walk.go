@@ -64,7 +64,7 @@ func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			if deeper != nil {
 				ui.Button(c, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { a.goTo("walk:" + deeper.ID) })
-				if a.walkBusy(deeper.ID) {
+				if a.busy(deeper.ID) {
 					ui.Spinner(c).Size(12, 12)
 				}
 			} else {
@@ -89,7 +89,7 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 		ui.Text(c, "›").TextColor(t.Accent)
 		ui.Text(c, a.rev.WalkTitle(w)).SingleLine().Shrink(1).Grow(1)
 		switch {
-		case a.walkBusy(w.ID):
+		case a.busy(w.ID):
 			ui.Spinner(c).Size(12, 12)
 		case w.Err != "":
 			ui.Text(c, "failed").FontSize(11).TextColor(t.Danger)
@@ -344,7 +344,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 		a.overviewPage(c)
 		return
 	}
-	run := a.running(a.rev, w.ID)
+	run := a.runner.run(a.rev, w.ID)
 	path := a.rev.WalkPath(w.ID)
 	a.pageScroll(c, "walk:"+w.ID).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
@@ -379,7 +379,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
 				})
-			case a.queued(a.rev, w.ID):
+			case a.runner.queued(a.rev, w.ID):
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(t.TextMuted)
@@ -400,7 +400,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 					a.answerView(c, turn)
 				})
 			}
-			if w.Question != "" && run == nil && !a.queued(a.rev, w.ID) {
+			if w.Question != "" && run == nil && !a.runner.queued(a.rev, w.ID) {
 				ui.Button(c, "Ask a follow-up").Tooltip("Continue this conversation in the side panel").OnClick(func() { a.openQuestion(w.ID) })
 			}
 			if w.Err != "" && run == nil {

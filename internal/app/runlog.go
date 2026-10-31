@@ -2,7 +2,9 @@ package app
 
 import (
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
@@ -121,17 +123,17 @@ func (r *logRun) text() string {
 	return b.String()
 }
 
-// runsOf returns the runs of a review, newest first, reading the list
+// logsOf returns the runs of a review, newest first, reading the list
 // from the store the first time.
-func (a *app) runsOf(rev *review.Review) []*logRun {
-	if runs, ok := a.runs[rev]; ok {
+func (a *app) logsOf(rev *review.Review) []*logRun {
+	if runs, ok := a.runner.logs[rev]; ok {
 		return runs
 	}
 	var runs []*logRun
 	for _, info := range a.store.Runs(rev.Repo, rev.Scope) {
 		runs = append(runs, &logRun{info: info})
 	}
-	a.runs[rev] = runs
+	a.runner.logs[rev] = runs
 	return runs
 }
 
@@ -151,7 +153,7 @@ func (a *app) loadRun(rev *review.Review, r *logRun) {
 			r.loaded, r.loading = true, false
 			if u := r.add(items); r.info.Usage == nil && u != nil {
 				r.info.Usage = u
-				fillCosts(a.runsOf(rev))
+				fillCosts(a.logsOf(rev))
 			}
 			if err != nil {
 				r.err = err.Error()
@@ -160,19 +162,71 @@ func (a *app) loadRun(rev *review.Review, r *logRun) {
 	})
 }
 
-// startRun adds a run to the log of a review and opens a file for it.
-// The returned writer is nil when the file could not be created; the run
-// then only lives in memory.
-func (a *app) startRun(rev *review.Review, info store.RunInfo) (*logRun, *store.RunWriter) {
+// startRun adds a run to the log of a review in memory.
+func (a *app) startRun(rev *review.Review, info store.RunInfo) *logRun {
 	run := &logRun{info: info, loaded: true, running: true}
-	runs := append([]*logRun{run}, a.runsOf(rev)...)
-	a.runs[rev] = runs[:min(len(runs), store.MaxRuns)]
-	w, err := a.store.CreateRun(rev.Repo, rev.Scope, info)
-	if err != nil {
-		run.err = err.Error()
-		return run, nil
+	runs := append([]*logRun{run}, a.logsOf(rev)...)
+	a.runner.logs[rev] = runs[:min(len(runs), store.MaxRuns)]
+	return run
+}
+
+// runFile writes the log entries of a run to its file. The file is
+// created away from the main thread, so the entries that come before it
+// exists wait in memory.
+type runFile struct {
+	mu      sync.Mutex
+	created bool
+	w       *store.RunWriter
+	early   []agent.LogEntry
+}
+
+// write writes e, or keeps it until the file is created.
+func (f *runFile) write(e agent.LogEntry) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.created {
+		f.early = append(f.early, e)
+		return
 	}
-	return run, w
+	f.writeLocked(e)
+}
+
+// opened writes the entries that waited into w. A nil w is a file that
+// could not be created: the entries then only live in memory.
+func (f *runFile) opened(w *store.RunWriter) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.created, f.w = true, w
+	for _, e := range f.early {
+		f.writeLocked(e)
+	}
+	f.early = nil
+}
+
+func (f *runFile) writeLocked(e agent.LogEntry) {
+	if f.w == nil {
+		return
+	}
+	if err := f.w.Write(e); err != nil {
+		log.Printf("run log: %v", err)
+		f.closeLocked()
+	}
+}
+
+func (f *runFile) close() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closeLocked()
+}
+
+func (f *runFile) closeLocked() {
+	if f.w == nil {
+		return
+	}
+	if err := f.w.Close(); err != nil {
+		log.Printf("run log: %v", err)
+	}
+	f.w = nil
 }
 
 func (a *app) showLog(target string) {
