@@ -35,3 +35,15 @@ _Avoid_: status, run state
 **Unseen**:
 A run target whose run ended while the reviewer was not looking at it, until the reviewer opens it. A write-ahead walkthrough and a stopped run do not make a target unseen.
 _Avoid_: unread, new
+
+**Scope loader**:
+The part of the app that reads the changes of a scope and the files the first page shows, and shows them at once. Only the latest load shows anything: a new load or a closed project drops the loads before it.
+_Avoid_: loader state, load manager
+
+**Load handle**:
+What one load of a scope learns about the reviews: the saved review that has the same changes, the earlier reviews, and the commits that now hold their changes. It takes its steps in a fixed order.
+_Avoid_: found, search
+
+**Freshness**:
+Whether the overview was written for the changes the scope has now: fresh, stale, or unknown while the changes are not read or an agent writes the overview.
+_Avoid_: staleness check, drift state
