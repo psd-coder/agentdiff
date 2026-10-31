@@ -8,12 +8,20 @@ AgentDiff is a native macOS app in Go, built on [MyGo](https://mygo.egoist.dev) 
 - `go tool mygo dev`: development build that restarts on every change, opened on this repository.
 - `go tool mygo build`: `AgentDiff.app` and a `.dmg` in `build/darwin-<arch>/`.
 - `CGO_ENABLED=0 go test ./...`: all tests, with no network and no agent calls. One test: `go test -run TestName ./internal/app`.
-- `go tool mygo vet ./internal/app`: go vet plus checks for UI elements kept past their build pass and goroutine captures. Run it after UI changes.
-- `golangci-lint run ./...`: the linters in `.golangci.yml`. `.github/workflows/ci.yml` runs it with the other checks.
+- `go tool mygo vet ./internal/app`: go vet plus checks for UI elements kept past their build pass and goroutine captures.
+- `golangci-lint run ./...`: the linters and gofmt, configured in `.golangci.yml`.
 - `AGENTDIFF_SNAPSHOTS=<existing dir> go test ./internal/app`: also writes headless PNG screenshots of the main screens.
 - `AGENTDIFF_E2E=claude|codex go test -run TestEndToEnd -v ./internal/app`: real agent run on the user's subscription. Run it only when the user asks.
 
 Release: set `version` in `mygo.json`, commit, push tag `v<version>`. `.github/workflows/release.yml` fails when tag and version differ.
+
+## Validate
+
+The `validate` skill (`.agents/skills/validate/validate.sh`) runs golangci-lint with its fixes, `mygo vet`, `go mod tidy -diff`, deadcode and the tests:
+
+- While iterating on code changes, run it with `--quick`. It skips the tests, so it takes seconds.
+- Before you say a task is done, run it with no flags.
+- Before a commit, pass `--pre-commit`. It only reports and never rewrites staged files.
 
 ## Architecture
 
