@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -21,12 +22,13 @@ func finishOverview(t *testing.T, a *app, groupsJSON string) {
 
 // TestGroupPageKeepsGroupAfterOverview opens a directory group page and
 // lets an overview with other groups finish: the page keeps the group
-// with its title, and turns into the Overview when the title is gone.
+// with its title, and turns into the Overview when the title is gone,
+// which Back does not return to.
 func TestGroupPageKeepsGroupAfterOverview(t *testing.T) {
 	a := newTestApp(t)
 	a.queue = make(chan func(), 64)
-	a.goTo("group:api")
-	a.goTo("group:cache")
+	a.nav.goTo(page{kindGroup, "api"})
+	a.nav.goTo(page{kindGroup, "cache"})
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText("2. cache") {
@@ -35,24 +37,17 @@ func TestGroupPageKeepsGroupAfterOverview(t *testing.T) {
 
 	finishOverview(t, a, `[{"title": "cache", "files": ["cache/cache.go"]}, {"title": "Handler", "files": ["api/handler.go"]}]`)
 	tt.Frame()
-	if a.page != "group:cache" || !tt.HasText("1. cache") {
-		t.Fatalf("page %q, texts %q", a.page, tt.Texts())
+	if a.nav.page != (page{kindGroup, "cache"}) || !tt.HasText("1. cache") {
+		t.Fatalf("page %q, texts %q", a.nav.page.String(), tt.Texts())
 	}
 
 	finishOverview(t, a, `[{"title": "Keys", "files": ["cache/cache.go"]}, {"title": "Handler", "files": ["api/handler.go"]}]`)
 	tt.Frame()
-	if a.page != "overview" || !shows(tt, "Review order") {
-		t.Fatalf("page %q, texts %q", a.page, tt.Texts())
+	if a.nav.page != overview || !shows(tt, "Review order") {
+		t.Fatalf("page %q, texts %q", a.nav.page.String(), tt.Texts())
 	}
-	// Back skips the gone group pages and returns to the first page.
-	a.goTo("file:api/handler.go")
-	a.goBack()
-	if a.page != "overview" {
-		t.Errorf("back from the file: %q", a.page)
-	}
-	a.goBack()
-	if a.page != "overview" || len(a.history) != 0 {
-		t.Errorf("back again: %q, history %q", a.page, a.history)
+	if !slices.Equal(a.nav.history, []page{overview}) {
+		t.Errorf("history %+v keeps the gone group pages", a.nav.history)
 	}
 }
 
@@ -61,15 +56,15 @@ func TestGroupPageKeepsGroupAfterOverview(t *testing.T) {
 func TestGroupPageKeepsGroupAfterReload(t *testing.T) {
 	a := newTestApp(t)
 	a.queue = make(chan func(), 64)
-	a.goTo("group:cache")
+	a.nav.goTo(page{kindGroup, "cache"})
 	write(t, a.repo.Root, "app/main.go", "package main\n")
 	a.refresh()
 	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
 	drain(a)
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if a.page != "group:cache" || !tt.HasText("3. cache") || !shows(tt, "cache.go") {
-		t.Fatalf("page %q, texts %q", a.page, tt.Texts())
+	if a.nav.page != (page{kindGroup, "cache"}) || !tt.HasText("3. cache") || !shows(tt, "cache.go") {
+		t.Fatalf("page %q, texts %q", a.nav.page.String(), tt.Texts())
 	}
 }
 
@@ -89,7 +84,7 @@ func TestDuplicateTitlesGetOwnPageAndOpenState(t *testing.T) {
 	if shows(tt, "cache.go") || !shows(tt, "handler.go") {
 		t.Fatalf("one group hidden: %q", tt.Texts())
 	}
-	a.goTo("group:Tests #2")
+	a.nav.goTo(page{kindGroup, "Tests #2"})
 	tt.Frame()
 	if !tt.HasText("2. Tests") || tt.HasText("1. Tests") {
 		t.Errorf("second group page: %q", tt.Texts())

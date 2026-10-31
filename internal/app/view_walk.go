@@ -62,7 +62,7 @@ func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 		}
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			if deeper != nil {
-				ui.Button(c, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { a.goTo("walk:" + deeper.ID) })
+				ui.Button(c, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { a.nav.goTo(page{kindWalk, deeper.ID}) })
 				if a.busy(deeper.ID) {
 					ui.Spinner(c).Size(12, 12)
 				}
@@ -98,7 +98,7 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 		if w.Question != "" {
 			a.openQuestion(w.ID)
 		} else {
-			a.goTo("walk:" + w.ID)
+			a.nav.goTo(page{kindWalk, w.ID})
 		}
 	}
 }
@@ -311,7 +311,7 @@ func (a *app) openRef(r review.Ref) {
 	if d == nil || d.state == nil {
 		return
 	}
-	a.goTo("file:" + r.File)
+	a.nav.goTo(page{kindFile, r.File})
 	d.state.SetSelectedLines(editor.DiffLineRange{Side: diffSide(r.Side), Start: r.Start - 1, End: r.End - 1}, true)
 	a.reveal = &reveal{file: r.File, hunk: nearestHunk(d.state.Hunks(), r)}
 }
@@ -349,19 +349,19 @@ func (a *app) walkPage(c *ui.Context, id string) {
 	}
 	run := a.runner.run(a.rev, w.ID)
 	path := a.rev.WalkPath(w.ID)
-	a.pageScroll(c, "walk:"+w.ID).Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, page{kindWalk, w.ID}).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
-				crumb := func(label, page string) {
+				crumb := func(label string, p page) {
 					link := textLink(c, excerpt(label, 40), func(e ui.Element) { e.FontSize(12) }).Tooltip(label)
 					if link.Clicked() {
-						a.goTo(page)
+						a.nav.goTo(p)
 					}
 					ui.Text(c, "›").FontSize(12).TextColor(t.TextMuted)
 				}
-				crumb("Overview", "overview")
+				crumb("Overview", overview)
 				for _, p := range path[:len(path)-1] {
-					crumb(a.rev.WalkTitle(p), "walk:"+p.ID)
+					crumb(a.rev.WalkTitle(p), page{kindWalk, p.ID})
 				}
 				ui.Text(c, excerpt(a.rev.WalkTitle(w), 40)).FontSize(12).TextColor(t.TextMuted)
 			})

@@ -111,7 +111,7 @@ func (a *app) generateOverview() {
 	ex := review.OverviewExchange(rev, changes, cfg, a.cfg.Questions)
 	a.launch(&agentRun{kind: overviewKind, ex: ex, ended: func(answered bool) {
 		if rev == a.rev {
-			a.leaveGoneGroup()
+			a.leaveGone()
 		}
 		if answered {
 			a.deeperAhead(rev)
@@ -154,6 +154,7 @@ func (a *app) regenerate(parent string) {
 		a.stopRuns(rev, steps)
 		rev.DeleteStepWalks(parent)
 		a.closeGoneQuestion()
+		a.leaveGone()
 		if parent == "" {
 			a.generateOverview()
 		} else if w := rev.Walk(parent); w != nil {
@@ -173,7 +174,7 @@ func (a *app) stopOverview() { a.stopRun(a.rev, store.TargetOverview) }
 // steps, or about the question for step -1.
 func (a *app) deeper(parent string, step int, question string) {
 	w := a.rev.AddWalk(parent, step, question)
-	a.goTo("walk:" + w.ID)
+	a.nav.goTo(page{kindWalk, w.ID})
 	a.runWalk(a.rev, w, false)
 }
 
@@ -262,13 +263,10 @@ func (a *app) deleteWalk(w *review.Walk) {
 	}
 	a.stopRuns(a.rev, gone)
 	a.closeGoneQuestion()
-	a.page = "overview"
 	if w.Parent != "" {
-		a.page = "walk:" + w.Parent
+		a.nav.replace(page{kindWalk, w.Parent})
 	}
-	if n := len(a.history); n > 0 && a.history[n-1] == a.page {
-		a.history = a.history[:n-1]
-	}
+	a.leaveGone()
 	a.saveReview()
 }
 

@@ -2,7 +2,6 @@ package app
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -119,10 +118,9 @@ func (a *app) toggleLog() {
 // first one from a page that shows no file.
 func (a *app) stepFile(delta int) {
 	files := a.fileOrder()
-	cur, ok := strings.CutPrefix(a.page, "file:")
 	i := -1
-	if ok {
-		i = slices.Index(files, cur)
+	if p := a.nav.page; p.kind == kindFile {
+		i = slices.Index(files, p.key)
 	}
 	if i < 0 {
 		// From before the first file, the next one is the first listed.
@@ -132,7 +130,7 @@ func (a *app) stepFile(delta int) {
 	// the full order and skips the files the sidebar hides.
 	for i += delta; i >= 0 && i < len(files); i += delta {
 		if a.listed(files[i]) {
-			a.goTo("file:" + files[i])
+			a.nav.goTo(page{kindFile, files[i]})
 			return
 		}
 	}

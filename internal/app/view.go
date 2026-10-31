@@ -385,30 +385,30 @@ func (a *app) scopeHeader(c *ui.Context) {
 }
 
 func (a *app) reviewNav(c *ui.Context) {
-	page := a.page
-	nav := ui.Sidebar(c, &page, func() {
+	chosen := a.nav.page.String()
+	nav := ui.Sidebar(c, &chosen, func() {
 		sidebarHeading(c, "Review", nil)
-		ov := ui.SidebarItem(c, "overview", overviewIcon, "Overview")
+		ov := ui.SidebarItem(c, overview.String(), overviewIcon, "Overview")
 		if a.busy(store.TargetOverview) {
 			ov.Children(func() { ui.Spinner(c).Size(12, 12) })
 		}
 		a.walkItems(c, "", 1)
-		ui.SidebarItem(c, "all", filesIcon, "All files diff")
+		ui.SidebarItem(c, page{kind: kindAll}.String(), filesIcon, "All files diff")
 		threads := len(a.rev.Threads)
-		ui.SidebarItem(c, "threads", messageIcon, "Questions & comments").Children(func() {
+		ui.SidebarItem(c, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Children(func() {
 			if threads > 0 {
 				ui.Badge(c, fmt.Sprint(threads))
 			}
 		})
 		feedback := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
-		ui.SidebarItem(c, "feedback", sendIcon, "Feedback").Children(func() {
+		ui.SidebarItem(c, page{kind: kindFeedback}.String(), sendIcon, "Feedback").Children(func() {
 			if feedback > 0 {
 				ui.Badge(c, fmt.Sprint(feedback))
 			}
 		})
 	}).Shrink(0).Label("Review")
 	if nav.Changed() {
-		a.goTo(page)
+		a.nav.goTo(parsePage(chosen))
 	}
 }
 
@@ -416,7 +416,7 @@ func (a *app) reviewNav(c *ui.Context) {
 // that choose how.
 func (a *app) fileNav(c *ui.Context) {
 	t := c.Theme()
-	page := a.page
+	chosen := a.nav.page.String()
 	groups := a.groups()
 	threads := a.rev.ThreadCounts()
 	ui.Column(c).Padding(0, 10).Children(func() {
@@ -427,7 +427,7 @@ func (a *app) fileNav(c *ui.Context) {
 			a.cmdCheckbox(c, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
 		})
 	})
-	nav := ui.Sidebar(c, &page, func() {
+	nav := ui.Sidebar(c, &chosen, func() {
 		if a.cfg.FlatFiles {
 			for _, f := range a.files {
 				if a.listed(f.Path) {
@@ -470,9 +470,9 @@ func (a *app) fileNav(c *ui.Context) {
 	}).Grow(1).Shrink(1).MinHeight(0).Label("Files")
 	a.takeFocus(nav, "files")
 	// Left and Right close and open the group chosen, as in a tree.
-	if gi, ok := strings.CutPrefix(page, "group:"); ok {
-		if _, ok := a.groupIndex(gi); ok {
-			open := a.groupOpen(gi)
+	if p := parsePage(chosen); p.kind == kindGroup {
+		if _, ok := a.groupIndex(p.key); ok {
+			open := a.groupOpen(p.key)
 			switch {
 			case *open && nav.Shortcut(0, ui.KeyLeft):
 				*open = false
@@ -482,7 +482,7 @@ func (a *app) fileNav(c *ui.Context) {
 		}
 	}
 	if nav.Changed() {
-		a.goTo(page)
+		a.nav.goTo(parsePage(chosen))
 	}
 }
 
@@ -493,7 +493,7 @@ func (a *app) walkItems(c *ui.Context, parent string, depth int) {
 		if w.Parent != parent || w.Question != "" {
 			continue
 		}
-		item := ui.SidebarItem(c, "walk:"+w.ID, nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))
+		item := ui.SidebarItem(c, page{kindWalk, w.ID}.String(), nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))
 		if a.busy(w.ID) {
 			item.Children(func() { ui.Spinner(c).Size(12, 12) })
 		}
@@ -517,7 +517,7 @@ func (a *app) groupOpen(id string) *bool {
 // the group page, and its chevron shows and hides the group's files.
 func (a *app) groupItem(c *ui.Context, id, title string, files int, open *bool) {
 	t := c.Theme()
-	ui.SidebarItem(c, "group:"+id, nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
+	ui.SidebarItem(c, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
 		ui.Text(c, fmt.Sprint(files)).FontSize(11).TextColor(t.TextMuted)
 		label := "Hide files"
 		if !*open {
@@ -544,7 +544,7 @@ func (a *app) groupItem(c *ui.Context, id, title string, files int, open *bool) 
 func (a *app) fileItem(c *ui.Context, file string, threads int) ui.Element {
 	t := c.Theme()
 	viewed := a.rev.Viewed[file]
-	item := ui.SidebarItem(c, "file:"+file, nil, path.Base(file)).Tooltip(file)
+	item := ui.SidebarItem(c, page{kindFile, file}.String(), nil, path.Base(file)).Tooltip(file)
 	dir := path.Dir(file)
 	folder := a.cfg.FlatFiles && dir != "."
 	if folder {
@@ -553,7 +553,7 @@ func (a *app) fileItem(c *ui.Context, file string, threads int) ui.Element {
 		// width, and the name is cut only when the row is too narrow.
 		item.Grid().ColumnTracks(ui.Fr(1), ui.FitContent()).AlignItems(ui.Center).GapY(1)
 	}
-	if viewed && a.page != "file:"+file {
+	if viewed && a.nav.page != (page{kindFile, file}) {
 		item.TextColor(t.TextMuted)
 	}
 	d := a.diffs[file]
@@ -595,25 +595,23 @@ func (a *app) main(c *ui.Context) {
 			a.errorState(c, "Could not read the changes", a.loadErr)
 			return
 		}
-		switch {
-		case a.page == "overview":
+		switch p := a.nav.page; p.kind {
+		case kindOverview:
 			a.overviewPage(c)
-		case a.page == "threads":
+		case kindThreads:
 			a.threadsPage(c)
-		case a.page == "feedback":
+		case kindFeedback:
 			a.feedbackPage(c)
-		case a.page == "all":
+		case kindAll:
 			a.allPage(c)
-		case strings.HasPrefix(a.page, "archived:"):
-			a.archivedPage(c, strings.TrimPrefix(a.page, "archived:"))
-		case strings.HasPrefix(a.page, "file:"):
-			a.filePage(c, strings.TrimPrefix(a.page, "file:"))
-		case strings.HasPrefix(a.page, "walk:"):
-			a.walkPage(c, strings.TrimPrefix(a.page, "walk:"))
-		case strings.HasPrefix(a.page, "group:"):
-			a.groupPage(c, strings.TrimPrefix(a.page, "group:"))
-		default:
-			a.overviewPage(c)
+		case kindArchived:
+			a.archivedPage(c, p.key)
+		case kindFile:
+			a.filePage(c, p.key)
+		case kindWalk:
+			a.walkPage(c, p.key)
+		case kindGroup:
+			a.groupPage(c, p.key)
 		}
 	})
 }

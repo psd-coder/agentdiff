@@ -2,7 +2,6 @@ package app
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -92,13 +91,14 @@ func (a *app) commands() []*command {
 		{id: "close-question", title: "Close Question", tip: "Escape", target: a.targetQuestion, run: func(*ui.Context, string) { a.closeQuestion() }},
 		{id: "question-page", title: "Open Question as Page", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) {
 			a.closeQuestion()
-			a.goTo("walk:" + id)
+			a.nav.goTo(page{kindWalk, id})
 		}},
 		{id: "question-log", title: "Show Log of the Question", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) { a.showLog(id) }},
 		{id: "delete-question", title: "Delete Question", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) {
 			a.stopWalk(id)
 			a.rev.DeleteWalk(id)
 			a.closeQuestion()
+			a.leaveGone()
 			a.saveReview()
 		}},
 
@@ -193,10 +193,10 @@ func (a *app) commands() []*command {
 			run: func(*ui.Context, string) { a.toggleLog() }},
 		{id: "back", title: "Back", keys: "CmdOrCtrl+[", run: func(*ui.Context, string) { a.goBack() }},
 		{id: "forward", title: "Forward", keys: "CmdOrCtrl+]", run: func(*ui.Context, string) { a.goForward() }},
-		{id: "go-overview", title: "Overview", keys: "CmdOrCtrl+1", run: func(*ui.Context, string) { a.openPage("overview") }},
-		{id: "go-threads", title: "Questions & Comments", keys: "CmdOrCtrl+2", run: func(*ui.Context, string) { a.openPage("threads") }},
-		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { a.openPage("feedback") }},
-		{id: "go-all", title: "All Files Diff", keys: "CmdOrCtrl+4", run: func(*ui.Context, string) { a.openPage("all") }},
+		{id: "go-overview", title: "Overview", keys: "CmdOrCtrl+1", run: func(*ui.Context, string) { a.openPage(overview) }},
+		{id: "go-threads", title: "Questions & Comments", keys: "CmdOrCtrl+2", run: func(*ui.Context, string) { a.openPage(page{kind: kindThreads}) }},
+		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { a.openPage(page{kind: kindFeedback}) }},
+		{id: "go-all", title: "All Files Diff", keys: "CmdOrCtrl+4", run: func(*ui.Context, string) { a.openPage(page{kind: kindAll}) }},
 		{id: "next-file", title: "Next File", keys: "Alt+CmdOrCtrl+Down", run: func(*ui.Context, string) { a.stepFile(1) }},
 		{id: "previous-file", title: "Previous File", keys: "Alt+CmdOrCtrl+Up", run: func(*ui.Context, string) { a.stepFile(-1) }},
 		{id: "shortcuts", overlay: true, title: "Keyboard Shortcuts", keys: "CmdOrCtrl+/", run: func(*ui.Context, string) { a.shortcutsOpen = true }},
@@ -400,25 +400,25 @@ func (a *app) focusFiles() {
 	}
 	for _, f := range a.fileOrder() {
 		if a.listed(f) {
-			a.goTo("file:" + f)
+			a.nav.goTo(page{kindFile, f})
 			return
 		}
 	}
 }
 
 func (a *app) targetFile() (string, bool) {
-	f, ok := strings.CutPrefix(a.page, "file:")
-	return f, ok && a.diffs[f] != nil
+	p := a.nav.page
+	return p.key, p.kind == kindFile && !a.pageGone(p)
 }
 
 func (a *app) targetGroup() (string, bool) {
-	g, ok := strings.CutPrefix(a.page, "group:")
-	return g, ok && a.groupFiles(g) != nil
+	p := a.nav.page
+	return p.key, p.kind == kindGroup && !a.pageGone(p)
 }
 
 func (a *app) targetWalk() (string, bool) {
-	id, ok := strings.CutPrefix(a.page, "walk:")
-	return id, ok && a.rev.Walk(id) != nil
+	p := a.nav.page
+	return p.key, p.kind == kindWalk && !a.pageGone(p)
 }
 
 func (a *app) targetThread() (string, bool) {
@@ -434,13 +434,13 @@ func (a *app) targetQuestionWalk() (string, bool) {
 	return id, open && a.rev.Walk(id) != nil
 }
 
-func (a *app) targetFeedback() (string, bool) { return "", a.page == "feedback" }
+func (a *app) targetFeedback() (string, bool) { return "", a.nav.page.kind == kindFeedback }
 
-func (a *app) targetAll() (string, bool) { return "", a.page == "all" && len(a.files) > 0 }
+func (a *app) targetAll() (string, bool) { return "", a.nav.page.kind == kindAll && len(a.files) > 0 }
 
 func (a *app) targetArchived() (string, bool) {
-	id, ok := strings.CutPrefix(a.page, "archived:")
-	return id, ok && a.reviews.Find(id) != nil
+	p := a.nav.page
+	return p.key, p.kind == kindArchived && !a.pageGone(p)
 }
 
 func (a *app) hasFeedback(string) bool {
@@ -448,7 +448,7 @@ func (a *app) hasFeedback(string) bool {
 }
 
 // groupIndex finds the group with the id g, the part of a group page
-// name after "group:", and reports whether the group exists.
+// key, and reports whether the group exists.
 func (a *app) groupIndex(g string) (int, bool) {
 	a.groups()
 	i := slices.Index(a.grouped.ids, g)

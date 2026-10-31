@@ -2,86 +2,39 @@ package app
 
 import (
 	"path"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
 
-// maxHistory is how many pages Back can return through.
-const maxHistory = 50
+func (a *app) goBack() { a.nav.back(a.pageGone) }
 
-// goTo opens a page and remembers the one it leaves, for Back.
-func (a *app) goTo(page string) {
-	if page == a.page {
-		return
+func (a *app) goForward() { a.nav.forward(a.pageGone) }
+
+// pageGone reports whether the target of p is gone: a deleted walk, a
+// file out of the changes, a group that no longer exists or a dropped
+// earlier review.
+func (a *app) pageGone(p page) bool {
+	switch p.kind {
+	case kindWalk:
+		return a.rev.Walk(p.key) == nil
+	case kindFile:
+		return a.diffs[p.key] == nil
+	case kindArchived:
+		return a.reviews.Find(p.key) == nil
+	case kindGroup:
+		_, found := a.groupIndex(p.key)
+		return !found
+	case kindOverview, kindThreads, kindFeedback, kindAll:
 	}
-	a.history = push(a.history, a.page)
-	a.forward = nil
-	a.page = page
+	return false
 }
 
-func push(pages []string, page string) []string {
-	pages = append(pages, page)
-	if len(pages) > maxHistory {
-		pages = pages[1:]
-	}
-	return pages
-}
-
-// goBack returns to the last page that still exists.
-func (a *app) goBack() {
-	if page, ok := a.pop(&a.history); ok {
-		a.forward = push(a.forward, a.page)
-		a.page = page
-	}
-}
-
-// goForward opens again the page Back left.
-func (a *app) goForward() {
-	if page, ok := a.pop(&a.forward); ok {
-		a.history = push(a.history, a.page)
-		a.page = page
-	}
-}
-
-// pop takes the last page that still exists off pages.
-func (a *app) pop(pages *[]string) (string, bool) {
-	for len(*pages) > 0 {
-		page := (*pages)[len(*pages)-1]
-		*pages = (*pages)[:len(*pages)-1]
-		if a.pageExists(page) {
-			return page, true
-		}
-	}
-	return "", false
-}
-
-func (a *app) pageExists(page string) bool {
-	if id, ok := strings.CutPrefix(page, "walk:"); ok {
-		return a.rev.Walk(id) != nil
-	}
-	if f, ok := strings.CutPrefix(page, "file:"); ok {
-		return a.diffs[f] != nil
-	}
-	if id, ok := strings.CutPrefix(page, "archived:"); ok {
-		return a.reviews.Find(id) != nil
-	}
-	if g, ok := strings.CutPrefix(page, "group:"); ok {
-		if _, found := a.groupIndex(g); !found {
-			return false
-		}
-	}
-	return page != a.page
-}
-
-// leaveGoneGroup replaces an open group page with the Overview when the
-// groups have changed and none has its id any more. History does not
-// keep the gone page.
-func (a *app) leaveGoneGroup() {
-	if g, ok := strings.CutPrefix(a.page, "group:"); ok {
-		if _, found := a.groupIndex(g); !found {
-			a.page = "overview"
-		}
+// leaveGone forgets the gone pages in Back and Forward, and replaces a
+// gone page on screen with the Overview.
+func (a *app) leaveGone() {
+	a.nav.forget(a.pageGone)
+	if a.pageGone(a.nav.page) {
+		a.nav.replace(overview)
 	}
 }
 
@@ -100,75 +53,75 @@ func (a *app) takeFocus(e ui.Element, name string) {
 }
 
 // openPage goes to the page and puts the keyboard focus on it.
-func (a *app) openPage(page string) {
-	a.goTo(page)
+func (a *app) openPage(p page) {
+	a.nav.goTo(p)
 	a.refocus = "page"
 }
 
 // pageScroll is the scroll of a page, which keeps its place. It takes the
 // keyboard focus that Focus Page and Cmd+1 to Cmd+3 move to the page, so
 // that the arrows and Page Up and Page Down scroll it.
-func (a *app) pageScroll(c *ui.Context, page string) ui.Element {
-	s := ui.Scroll(c.Key("page-" + page)).TrackScroll(a.scrollOf(page)).Focusable().FocusRing(false)
+func (a *app) pageScroll(c *ui.Context, p page) ui.Element {
+	s := ui.Scroll(c.Key("page-" + p.String())).TrackScroll(a.scrollOf(p.String())).Focusable().FocusRing(false)
 	a.takeFocus(s, "page")
 	return s
 }
 
-// scrollOf is the scroll place of a page, so that a page opened again
-// shows where the reviewer left it.
-func (a *app) scrollOf(page string) *ui.ScrollState {
-	s := a.scrolls[page]
+// scrollOf is the scroll place of a page or a panel, by its key, so that
+// a page opened again shows where the reviewer left it.
+func (a *app) scrollOf(key string) *ui.ScrollState {
+	s := a.scrolls[key]
 	if s == nil {
 		s = &ui.ScrollState{}
-		a.scrolls[page] = s
+		a.scrolls[key] = s
 	}
 	return s
 }
 
 // cardsOf is the place of a page of file cards, as scrollOf is of a page
 // that scrolls.
-func (a *app) cardsOf(page string) *cardPage {
-	p := a.lists[page]
-	if p == nil {
-		p = &cardPage{}
-		a.lists[page] = p
+func (a *app) cardsOf(p page) *cardPage {
+	cards := a.lists[p]
+	if cards == nil {
+		cards = &cardPage{}
+		a.lists[p] = cards
 	}
-	return p
+	return cards
 }
 
-func (a *app) pageLabel(page string) string {
-	switch {
-	case page == "overview":
+func (a *app) pageLabel(p page) string {
+	switch p.kind {
+	case kindOverview:
 		return "Overview"
-	case page == "threads":
+	case kindThreads:
 		return "Comments"
-	case page == "feedback":
+	case kindFeedback:
 		return "Feedback"
-	case page == "all":
+	case kindAll:
 		return "All files diff"
-	case strings.HasPrefix(page, "archived:"):
+	case kindArchived:
 		return "Earlier review"
-	case strings.HasPrefix(page, "walk:"):
-		if w := a.rev.Walk(strings.TrimPrefix(page, "walk:")); w != nil {
+	case kindWalk:
+		if w := a.rev.Walk(p.key); w != nil {
 			return excerpt(a.rev.WalkTitle(w), 48)
 		}
-	case strings.HasPrefix(page, "file:"):
-		return path.Base(strings.TrimPrefix(page, "file:"))
-	case strings.HasPrefix(page, "group:"):
-		if i, ok := a.groupIndex(strings.TrimPrefix(page, "group:")); ok {
+	case kindFile:
+		return path.Base(p.key)
+	case kindGroup:
+		if i, ok := a.groupIndex(p.key); ok {
 			return a.groups()[i].Title
 		}
 	}
 	return "previous page"
 }
 
-// backBar leads back to the page the reviewer came from.
+// backBar leads back to the page Back opens.
 func (a *app) backBar(c *ui.Context) {
 	t := c.Theme()
-	if len(a.history) == 0 {
+	prev, ok := a.nav.prev(a.pageGone)
+	if !ok {
 		return
 	}
-	prev := a.history[len(a.history)-1]
 	ui.Row(c).Gap(8).Padding(8, pageInset).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 		a.cmdButton(c, "back", "", "‹ Back to "+a.pageLabel(prev))
 	})

@@ -50,7 +50,7 @@ func (a *app) groupPage(c *ui.Context, gi string) {
 	}
 	g := a.groups()[i]
 	rows := a.cardRows([]pageRow{{kind: titleRow}}, g.Files)
-	a.cardList(c, "group:"+gi, rows, func(pageRow) {
+	a.cardList(c, page{kindGroup, gi}, rows, func(pageRow) {
 		pageTitle(c).AlignItems(ui.Start).Children(func() {
 			ui.Column(c).Gap(6).Grow(1).Shrink(1).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
@@ -83,7 +83,7 @@ func (a *app) allPage(c *ui.Context) {
 			rows = a.cardRows(append(rows, pageRow{kind: groupRow, group: i}), g.Files)
 		}
 	}
-	a.cardList(c, "all", rows, func(r pageRow) {
+	a.cardList(c, page{kind: kindAll}, rows, func(r pageRow) {
 		if r.kind == groupRow {
 			g := groups[r.group]
 			ui.Text(c, fmt.Sprintf("%d. %s", r.group+1, g.Title)).FontSize(16).Bold().Padding(4, 20, cardGap/2, 20)
@@ -152,9 +152,9 @@ type cardPage struct {
 // cardList shows the cards of a page, building only the rows in view, as
 // a page with thousands of changed lines lays out slowly. other builds the
 // rows that are not cards.
-func (a *app) cardList(c *ui.Context, page string, rows []pageRow, other func(pageRow)) {
+func (a *app) cardList(c *ui.Context, pg page, rows []pageRow, other func(pageRow)) {
 	t := c.Theme()
-	p := a.cardsOf(page)
+	p := a.cardsOf(pg)
 	s := &p.list
 	// A card folded under its pinned header would leave the page where
 	// its diff ended: the folded card goes to the top instead.
@@ -166,7 +166,7 @@ func (a *app) cardList(c *ui.Context, page string, rows []pageRow, other func(pa
 	p.pinned = ""
 	s.Key = func(i int) any { return rows[i] }
 	s.Header = func(i int) bool { return rows[i].kind == headRow || rows[i].kind == gapRow }
-	list := ui.List(c.Key("page-"+page), s, len(rows)).Grow(1).FillWidth().Focusable().FocusRing(false)
+	list := ui.List(c.Key("page-"+pg.String()), s, len(rows)).Grow(1).FillWidth().Focusable().FocusRing(false)
 	top := list.LayoutBounds().Y
 	list.Rows(func(lr ui.ListRow) {
 		r := rows[lr.Index]
@@ -242,21 +242,21 @@ func statusLabel(f gitx.FileChange) string {
 	return string(f.Status)
 }
 
-func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) ui.Element {
+func (a *app) fileHeader(c *ui.Context, d *fileDiff, onPage bool) ui.Element {
 	t := c.Theme()
 	f := d.change
 	head := ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface)
-	if page {
+	if onPage {
 		head.BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
 	}
 	head.Children(func() {
-		if !page {
+		if !onPage {
 			a.foldButton(c, f.Path)
 		}
-		if page {
+		if onPage {
 			ui.Text(c, f.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
 		} else if textLink(c, f.Path, func(e ui.Element) { e.Font("monospace").Bold().TextColor(t.Text) }).Tooltip("Open the file on its own page").Clicked() {
-			a.goTo("file:" + f.Path)
+			a.nav.goTo(page{kindFile, f.Path})
 		}
 		ui.Badge(c, statusLabel(f))
 		ui.Text(c, fmt.Sprintf("+%d", f.Additions)).FontSize(12).TextColor(t.Success)
@@ -277,7 +277,7 @@ func (a *app) fileHeader(c *ui.Context, d *fileDiff, page bool) ui.Element {
 			}
 		}
 		a.cmdButton(c, "comment-file", f.Path, "Comment on file")
-		if page {
+		if onPage {
 			a.layoutSwitch(c)
 		}
 		a.cmdCheckbox(c, "mark-viewed", "mark-not-viewed", f.Path, "Viewed")
