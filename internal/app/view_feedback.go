@@ -67,7 +67,7 @@ func (a *app) saveFeedback(s ui.Services) {
 			return
 		}
 		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
-			mygo.Dialog.Error("Could not save the feedback", err.Error())
+			a.showError("Could not save the feedback", err)
 			return
 		}
 		a.update(func() {

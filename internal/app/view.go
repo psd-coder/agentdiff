@@ -25,6 +25,7 @@ func (a *app) view(c *ui.Context) {
 	a.keys(c)
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)
+		a.saveNotice(c)
 		ui.Split(c, &a.sidebarW, func() { a.sidebar(c) }, func() {
 			var panel func()
 			switch {
@@ -395,6 +396,19 @@ func (a *app) main(c *ui.Context) {
 		default:
 			a.overviewPage(c)
 		}
+	})
+}
+
+// saveNotice says that the review or the settings could not be saved,
+// above every page, until a later save works.
+func (a *app) saveNotice(c *ui.Context) {
+	if a.saveErr == "" {
+		return
+	}
+	t := c.Theme()
+	ui.Column(c).Gap(2).Padding(8, 14).Background(t.Danger.Alpha(0.15)).BorderWidth(0, 0, 1, 0).BorderColor(t.Danger).Children(func() {
+		ui.Text(c, "Could not save your changes. AgentDiff tries again on the next change.").Bold()
+		ui.Text(c, a.saveErr).FontSize(12).TextColor(t.TextMuted).Selectable()
 	})
 }
 

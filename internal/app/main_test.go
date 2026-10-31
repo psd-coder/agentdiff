@@ -475,6 +475,56 @@ func TestStaleOverviewAndStartOver(t *testing.T) {
 	}
 }
 
+// TestFailedSaveShowsNotice saves while the store cannot be written: the
+// window says so until a later save works.
+func TestFailedSaveShowsNotice(t *testing.T) {
+	a := newTestApp(t)
+	good := a.store
+	notADir := filepath.Join(t.TempDir(), "file")
+	write(t, filepath.Dir(notADir), "file", "")
+	a.store = store.Store{Dir: notADir}
+	a.setViewed([]string{"cache/cache.go"}, true)
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if !tt.HasText("Could not save your changes. AgentDiff tries again on the next change.") || !tt.HasText("not a directory") {
+		t.Fatalf("save error not shown: %q", tt.Texts())
+	}
+	snapshot(t, tt, "save-error")
+
+	a.store = good
+	a.setViewed([]string{"cache/cache.go"}, false)
+	tt.Frame()
+	if tt.HasText("Could not save your changes") {
+		t.Errorf("save error shown after a save that worked: %q", tt.Texts())
+	}
+}
+
+// TestStartOverKeepsReviewWhenDeleteFails starts over while the saved
+// review cannot be deleted: the review stays, in the window and on disk.
+func TestStartOverKeepsReviewWhenDeleteFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root deletes files in a read-only directory")
+	}
+	a := newTestApp(t)
+	a.comment(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "keep me")
+	dirs, err := filepath.Glob(filepath.Join(a.store.Dir, "reviews", "*"))
+	if err != nil || len(dirs) != 1 {
+		t.Fatalf("review dirs %q: %v", dirs, err)
+	}
+	if err := os.Chmod(dirs[0], 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dirs[0], 0o755) })
+
+	a.startOver()
+	if len(a.rev.Threads) != 1 {
+		t.Errorf("threads after a failed start over = %d", len(a.rev.Threads))
+	}
+	if got := a.store.LoadReview(a.repo.Root, a.scope); len(got.Threads) != 1 {
+		t.Errorf("saved threads after a failed start over = %d", len(got.Threads))
+	}
+}
+
 // TestStartOverDuringRuns starts over while a thread and a question run.
 // Their late answers do not bring the deleted review back.
 func TestStartOverDuringRuns(t *testing.T) {

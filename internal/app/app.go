@@ -165,6 +165,9 @@ type app struct {
 	recordStart bool
 	keysFilter  string
 	keysNote    string
+	// saveErr is why the last write of a review or the settings failed;
+	// it clears once a later write works.
+	saveErr string
 }
 
 func newApp(s store.Store) *app {
@@ -384,6 +387,14 @@ func (a *app) syncBranch() {
 	})
 }
 
+// errText is the message of err, or "" when err is nil.
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
 // checkedOut moves the app to a newly checked-out branch. A branch scope
 // keeps reviewing the same branch, so its review stays.
 func (a *app) checkedOut(branch string, branches []string) {
@@ -587,14 +598,21 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			// The list gets its own array: deleting from it in place
 			// would clear entries the commit lookup below still reads.
 			a.archived = slices.Clone(archived)
+			// These run on every load, so a failure goes to the notice,
+			// which stays, instead of a dialog each time.
+			var serr error
 			switch {
 			case from != nil && a.rev.Empty():
-				a.adopt(*from)
+				serr = a.adopt(*from)
 			case from != nil && a.archivable():
-				a.archiveCurrent(live)
-				a.adopt(*from)
+				if serr = a.archiveCurrent(live); serr == nil {
+					serr = a.adopt(*from)
+				}
 			case a.archivable() && a.rev.Overview.Drift(a.fileIDs).Disjoint():
-				a.archiveCurrent(live)
+				serr = a.archiveCurrent(live)
+			}
+			if serr != nil {
+				a.saveErr = serr.Error()
 			}
 			if from := a.adoptedFrom; from != nil {
 				a.archived = slices.DeleteFunc(a.archived, func(e *earlier) bool { return e.rev.Scope == *from })
@@ -706,14 +724,14 @@ func (a *app) firstPaint(rev *review.Review, page string, fresh bool) []string {
 // same changes as the current scope has. A review of uncommitted changes
 // moves, because those changes are gone from the working tree; any other
 // one is copied.
-func (a *app) adopt(src gitx.Scope) {
+func (a *app) adopt(src gitx.Scope) error {
 	if !a.rev.Empty() {
-		return
+		return nil
 	}
 	srcKey := reviewKey(a.repo.Root, src)
 	from := a.reviews[srcKey]
 	if from != nil && a.reviewBusy(from) {
-		return
+		return nil
 	}
 	move := src.Kind == gitx.ScopeUncommitted || src.Kind == gitx.ScopeArchived
 	var err error
@@ -723,8 +741,7 @@ func (a *app) adopt(src gitx.Scope) {
 		err = a.store.CopyReview(a.repo.Root, src, a.scope)
 	}
 	if err != nil {
-		log.Printf("adopt review: %v", err)
-		return
+		return fmt.Errorf("adopt review: %w", err)
 	}
 	if move && from != nil {
 		delete(a.reviews, srcKey)
@@ -734,6 +751,7 @@ func (a *app) adopt(src gitx.Scope) {
 	a.rev = a.store.LoadReview(a.repo.Root, a.scope)
 	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
 	a.adoptedFrom = &src
+	return nil
 }
 
 // archivable reports whether the review of the uncommitted changes can
@@ -815,12 +833,11 @@ func (a *app) dropEarlier(e *earlier) {
 // archiveCurrent moves the review of the uncommitted changes into the
 // archive and starts an empty one. e holds the commits found for the
 // review's changes.
-func (a *app) archiveCurrent(e *earlier) {
+func (a *app) archiveCurrent(e *earlier) error {
 	old := a.rev
 	to, err := a.store.ArchiveReview(a.repo.Root, archiveID(old.Overview))
 	if err != nil {
-		log.Printf("archive review: %v", err)
-		return
+		return fmt.Errorf("archive review: %w", err)
 	}
 	delete(a.runs, old)
 	old.Scope = to
@@ -831,6 +848,7 @@ func (a *app) archiveCurrent(e *earlier) {
 	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
 	a.thread = ""
 	a.resetNav()
+	return nil
 }
 
 // restoreArchived brings an archived review back to the uncommitted
@@ -839,8 +857,11 @@ func (a *app) restoreArchived(e *earlier) {
 	if !a.rev.Empty() {
 		return
 	}
+	if err := a.adopt(e.rev.Scope); err != nil {
+		a.showError("Could not restore the review", err)
+		return
+	}
 	a.kept[archiveID(e.rev.Overview)] = true
-	a.adopt(e.rev.Scope)
 	a.adoptedFrom = nil
 	a.dropEarlier(e)
 	a.openPage("overview")
@@ -853,7 +874,7 @@ func (a *app) moveArchived(e *earlier) {
 	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: e.probably}
 	if a.store.LoadReview(a.repo.Root, to).Empty() {
 		if err := a.store.MoveReview(a.repo.Root, e.rev.Scope, to); err != nil {
-			log.Printf("move archived review: %v", err)
+			a.showError("Could not move the review", err)
 			return
 		}
 		delete(a.reviews, reviewKey(a.repo.Root, to))
@@ -864,7 +885,7 @@ func (a *app) moveArchived(e *earlier) {
 
 func (a *app) deleteArchived(e *earlier) {
 	if err := a.store.DeleteReview(a.repo.Root, e.rev.Scope); err != nil {
-		log.Printf("delete archived review: %v", err)
+		a.showError("Could not delete the review", err)
 		return
 	}
 	a.dropEarlier(e)
@@ -1007,15 +1028,16 @@ func (a *app) groups() []review.Group {
 // startOver forgets the review of the current scope: its overview,
 // threads and viewed files.
 func (a *app) startOver() {
+	if err := a.store.DeleteReview(a.repo.Root, a.scope); err != nil {
+		a.showError("Could not start the review over", err)
+		return
+	}
 	a.stopOverview()
 	for _, t := range a.rev.Threads {
 		a.stopThread(t)
 	}
 	for _, w := range a.rev.Walks {
 		a.stopWalk(w.ID)
-	}
-	if err := a.store.DeleteReview(a.repo.Root, a.scope); err != nil {
-		log.Printf("delete review: %v", err)
 	}
 	delete(a.runs, a.rev)
 	a.rev = review.New(a.repo.Root, a.scope)
@@ -1048,6 +1070,21 @@ func (a *app) confirm(message, detail, button string, fn func()) {
 	}()
 }
 
+// showError tells the user that an action failed, in an error dialog.
+// Without a window, in tests, it logs the error.
+func (a *app) showError(message string, err error) {
+	if a.win == nil {
+		log.Printf("%s: %v", message, err)
+		return
+	}
+	go func() {
+		_, _ = mygo.Dialog.Message(mygo.MessageOptions{
+			Parent: a.win, Type: mygo.MessageError,
+			Message: message, Detail: err.Error(),
+		})
+	}()
+}
+
 func (a *app) saveReview() {
 	if a.rev != nil {
 		a.saveReviewOf(a.rev)
@@ -1064,9 +1101,7 @@ func (a *app) saveReviewOf(r *review.Review) {
 	if r == a.rev {
 		a.keepSnippets()
 	}
-	if err := a.store.SaveReview(r); err != nil {
-		log.Printf("save review: %v", err)
-	}
+	a.saved(a.store.SaveReview(r))
 }
 
 // obsolete reports whether r is no longer the review the app keeps for
@@ -1076,9 +1111,13 @@ func (a *app) obsolete(r *review.Review) bool {
 }
 
 func (a *app) saveConfig() {
-	if err := a.store.SaveConfig(a.cfg); err != nil {
-		log.Printf("save config: %v", err)
-	}
+	a.saved(a.store.SaveConfig(a.cfg))
+}
+
+// saved keeps the error of a write for the notice, or clears the notice
+// when the write worked.
+func (a *app) saved(err error) {
+	a.saveErr = errText(err)
 }
 
 func (a *app) scopeLabel() string {

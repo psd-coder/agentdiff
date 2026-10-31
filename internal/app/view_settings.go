@@ -299,6 +299,9 @@ func (a *app) welcome(c *ui.Context) {
 		if a.repoErr != "" {
 			ui.Text(c, a.repoErr).TextColor(t.Danger).MaxWidth(480).Selectable()
 		}
+		if a.saveErr != "" {
+			ui.Text(c, "Could not save the settings: "+a.saveErr).TextColor(t.Danger).MaxWidth(480).Selectable()
+		}
 		if len(a.cfg.Recent) > 0 {
 			ui.Column(c).Gap(4).Width(420).Margin(12, 0, 0, 0).Children(func() {
 				ui.Text(c, "Recent").FontSize(12).Bold().TextColor(t.TextMuted).Padding(0, 8)
