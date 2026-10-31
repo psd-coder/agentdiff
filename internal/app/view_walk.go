@@ -90,7 +90,7 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 		switch {
 		case a.busy(w.ID):
 			ui.Spinner(c).Size(12, 12)
-		case w.Err != "":
+		case w.Failed():
 			ui.Text(c, "failed").FontSize(11).TextColor(t.Danger)
 		}
 	})
