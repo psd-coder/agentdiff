@@ -429,9 +429,11 @@ func writtenBy(p agent.Provider, model, when string) string {
 // questions asked before.
 func (a *app) askWalk(c *ui.Context, parent string) {
 	t := c.Theme()
+	key := a.questionDraftKey(nil, askTarget{parent, -1})
+	draft := a.drafts[key]
 	submit := func() {
-		if q := strings.TrimSpace(a.askDraft); q != "" {
-			a.askDraft = ""
+		if q := strings.TrimSpace(draft); q != "" {
+			a.drafts[key] = ""
 			a.askQuestion(parent, -1, q)
 		}
 	}
@@ -439,8 +441,11 @@ func (a *app) askWalk(c *ui.Context, parent string) {
 		ui.Text(c, "Ask about the changes").FontSize(18).Bold()
 		ui.Text(c, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.").FontSize(12).TextColor(t.TextMuted)
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.TextInput(c.Key("ask-"+parent), &a.askDraft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
-			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(a.askDraft) == "").OnClick(submit)
+			in := ui.TextInput(c.Key("ask-"+key), &draft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
+			if in.Changed() {
+				a.drafts[key] = draft
+			}
+			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(draft) == "").OnClick(submit)
 		})
 		for _, w := range a.rev.WalksOn(parent, -1) {
 			a.walkRow(c, w)

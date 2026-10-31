@@ -30,6 +30,25 @@ func (a *app) askAbout(parent string, step int) {
 
 func (a *app) closeQuestion() { a.question, a.asking = "", nil }
 
+// closeGoneQuestion closes the side panel when the walk it asks about,
+// or the question it shows, was deleted.
+func (a *app) closeGoneQuestion() {
+	gone := func(id string) bool { return id != "" && a.rev.Walk(id) == nil }
+	if a.asking != nil && gone(a.asking.parent) || gone(a.question) {
+		a.closeQuestion()
+	}
+}
+
+// questionDraftKey names the unsent text of a question in drafts: a
+// follow-up in the conversation of walk, or a new question about target
+// in the review the window shows when walk is nil.
+func (a *app) questionDraftKey(w *review.Walk, target askTarget) string {
+	if w != nil {
+		return "question:" + w.ID
+	}
+	return fmt.Sprintf("ask:%s:%s:%d", reviewKey(a.rev.Repo, a.rev.Scope), target.parent, target.step)
+}
+
 func (a *app) questionOpen() bool {
 	return a.asking != nil || (a.question != "" && a.rev.Walk(a.question) != nil)
 }
@@ -163,11 +182,13 @@ func (a *app) compactWalk(c *ui.Context, w *review.Walkthrough) {
 func (a *app) questionComposer(c *ui.Context, w *review.Walk, target *askTarget) {
 	t := c.Theme()
 	busy := w != nil && a.walkBusy(w.ID)
+	key := a.questionDraftKey(w, *target)
+	draft := a.drafts[key]
 	send := func(text string) {
 		if strings.TrimSpace(text) == "" || busy {
 			return
 		}
-		a.paneDraft = ""
+		a.drafts[key] = ""
 		if w == nil {
 			a.askQuestion(target.parent, target.step, text)
 			return
@@ -179,7 +200,7 @@ func (a *app) questionComposer(c *ui.Context, w *review.Walk, target *askTarget)
 		if w != nil {
 			placeholder = "Follow-up question"
 		}
-		ui.TextArea(c.Key("pane-draft-"+a.question), &a.paneDraft).Lines(2, 8).Placeholder(placeholder).AutoFocus().
+		in := ui.TextArea(c.Key("pane-"+key), &draft).Lines(2, 8).Placeholder(placeholder).AutoFocus().
 			OnTextKey(func(k ui.TextKey) bool {
 				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd {
 					send(k.Text())
@@ -188,12 +209,15 @@ func (a *app) questionComposer(c *ui.Context, w *review.Walk, target *askTarget)
 				}
 				return false
 			})
+		if in.Changed() {
+			a.drafts[key] = draft
+		}
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Cmd+Enter asks").FontSize(11).TextColor(t.TextMuted).Grow(1)
 			if busy {
 				ui.Button(c, "Stop").OnClick(func() { a.stopWalk(w.ID) })
 			}
-			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(a.paneDraft) == "" || busy).OnClick(func() { send(a.paneDraft) })
+			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).OnClick(func() { send(draft) })
 		})
 	})
 }
