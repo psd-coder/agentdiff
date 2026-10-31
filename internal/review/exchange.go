@@ -129,6 +129,12 @@ func ThreadExchange(r *Review, t *Thread, cfg agent.Config, diffstat, question s
 	return &Exchange{Request: req, rev: r, cfg: cfg, thread: t, reply: len(t.Messages)}
 }
 
+// Review is the review the exchange writes into.
+func (e *Exchange) Review() *Review { return e.rev }
+
+// Config is the agent and the model the exchange runs with.
+func (e *Exchange) Config() agent.Config { return e.cfg }
+
 // Started records the session the agent started for the run. A walk or a
 // thread keeps it at once, so a run that fails later still leaves the
 // session to go on from.

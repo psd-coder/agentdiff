@@ -231,7 +231,7 @@ func (a *app) overviewIntro(c *ui.Context, agentName string) {
 	})
 }
 
-func (a *app) streamingOverview(c *ui.Context, run *overviewRun) {
+func (a *app) streamingOverview(c *ui.Context, run *agentRun) {
 	t := c.Theme()
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		ui.Spinner(c).Size(14, 14)

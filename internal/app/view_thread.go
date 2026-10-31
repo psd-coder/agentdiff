@@ -45,7 +45,7 @@ func (a *app) threadPanel(c *ui.Context) {
 				if len(th.Messages) == 0 {
 					ui.Text(c, "Write a comment for the coding agent, or ask the review agent a question. Each thread is a separate conversation.").TextColor(t.TextMuted)
 				}
-				run := a.threadRuns[th.ID]
+				run := a.running(a.rev, th.ID)
 				for i := range th.Messages {
 					if run != nil && run.reply == i {
 						a.pendingReply(c, th, run)
@@ -83,7 +83,7 @@ func messageHeader(c *ui.Context, who string, at time.Time) {
 }
 
 // pendingReply is the answer the agent writes in the thread now.
-func (a *app) pendingReply(c *ui.Context, th *review.Thread, run *threadRun) {
+func (a *app) pendingReply(c *ui.Context, th *review.Thread, run *agentRun) {
 	t := c.Theme()
 	ui.Column(c.Key("pending")).Gap(4).Children(func() {
 		messageHeader(c, providerName(th.Agent), run.started)

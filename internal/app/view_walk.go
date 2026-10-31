@@ -344,7 +344,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 		a.overviewPage(c)
 		return
 	}
-	run := a.walkRuns[w.ID]
+	run := a.running(a.rev, w.ID)
 	path := a.rev.WalkPath(w.ID)
 	a.pageScroll(c, "walk:"+w.ID).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
@@ -379,7 +379,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
 				})
-			case a.queued(w.ID):
+			case a.queued(a.rev, w.ID):
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(t.TextMuted)
@@ -400,7 +400,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 					a.answerView(c, turn)
 				})
 			}
-			if w.Question != "" && run == nil && !a.queued(w.ID) {
+			if w.Question != "" && run == nil && !a.queued(a.rev, w.ID) {
 				ui.Button(c, "Ask a follow-up").Tooltip("Continue this conversation in the side panel").OnClick(func() { a.openQuestion(w.ID) })
 			}
 			if w.Err != "" && run == nil {

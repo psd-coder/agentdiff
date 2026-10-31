@@ -36,14 +36,6 @@ type fileDiff struct {
 	loading bool
 }
 
-// overviewRun is an overview being written; it belongs to the review it
-// was started for, so switching scopes leaves it running.
-type overviewRun struct {
-	text     string
-	activity string
-	cancel   context.CancelFunc
-}
-
 type app struct {
 	win *mygo.Window
 	// queue takes the updates of a window-less app when a test wants to
@@ -58,6 +50,8 @@ type app struct {
 	stopWatch  context.CancelFunc
 	// startAgent starts every agent run.
 	startAgent agentFunc
+	// askConfirm replaces the confirm dialog in tests, when set.
+	askConfirm func(message, detail, button string, fn func())
 
 	repo    *gitx.Repo
 	repoErr string
@@ -136,17 +130,17 @@ type app struct {
 	logTarget string
 	logPct    float32
 
-	page       string
-	history    []string
-	forward    []string
-	scrolls    map[string]*ui.ScrollState
-	lists      map[string]*cardPage
-	thread     string
-	drafts     map[string]string
-	overviews  map[*review.Review]*overviewRun
-	threadRuns map[string]*threadRun
-	walkRuns   map[string]*walkRun
-	ahead      []queuedWalk
+	page    string
+	history []string
+	forward []string
+	scrolls map[string]*ui.ScrollState
+	lists   map[string]*cardPage
+	thread  string
+	drafts  map[string]string
+	// agentRuns holds every agent run. A run belongs to the review it
+	// was started for, so switching scopes leaves it running.
+	agentRuns map[runKey]*agentRun
+	ahead     []queuedWalk
 
 	sidebarW    float32
 	scopePct    float32
@@ -205,9 +199,7 @@ func newApp(s store.Store) *app {
 		runs:        map[*review.Review][]*logRun{},
 		logPct:      50,
 		drafts:      map[string]string{},
-		overviews:   map[*review.Review]*overviewRun{},
-		threadRuns:  map[string]*threadRun{},
-		walkRuns:    map[string]*walkRun{},
+		agentRuns:   map[runKey]*agentRun{},
 		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},
 		sidebarW:    280,
@@ -769,6 +761,7 @@ func (a *app) firstPaint(rev *review.Review, page string, fresh bool) []string {
 // the notice, which stays, because a load runs it each time.
 func (a *app) settle(out continuity.Outcome) {
 	for _, r := range out.Dropped {
+		a.dropRuns(r)
 		delete(a.runs, r)
 	}
 	if old := out.Archived; old != nil && a.leaveReview() {
@@ -837,20 +830,12 @@ func (a *app) deleteArchived(e *continuity.Earlier) {
 
 // reviewBusy reports whether an agent run writes into rev.
 func (a *app) reviewBusy(rev *review.Review) bool {
-	if a.overviews[rev] != nil || slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev }) {
-		return true
-	}
-	for _, w := range rev.Walks {
-		if a.walkRuns[w.ID] != nil {
+	for key := range a.agentRuns {
+		if key.rev == rev {
 			return true
 		}
 	}
-	for _, t := range rev.Threads {
-		if a.threadBusy(t.ID) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev })
 }
 
 // stale reports whether the overview was written for other changes than
@@ -1032,13 +1017,7 @@ func (a *app) startOver() {
 		a.showError("Could not start the review over", err)
 		return
 	}
-	a.stopOverview()
-	for _, t := range a.rev.Threads {
-		a.stopThread(t)
-	}
-	for _, w := range a.rev.Walks {
-		a.stopWalk(w.ID)
-	}
+	a.dropRuns(a.rev)
 	delete(a.runs, a.rev)
 	a.leaveReview()
 	a.rev = review.New(a.repo.Root, a.scope)
@@ -1051,9 +1030,13 @@ func (a *app) confirmStartOver() {
 	a.confirm("Start this review over?", "The overview, the deeper walkthroughs, all comments and threads, and the viewed marks of this scope are deleted.", "Start Over", a.startOver)
 }
 
-// confirm runs fn after the user agrees in a warning dialog. Without a
-// window, in tests, it runs fn at once.
+// confirm runs fn after the user agrees in a warning dialog. A test can
+// set askConfirm in place of the dialog. Without both, fn runs at once.
 func (a *app) confirm(message, detail, button string, fn func()) {
+	if a.askConfirm != nil {
+		a.askConfirm(message, detail, button, fn)
+		return
+	}
 	if a.win == nil {
 		fn()
 		return

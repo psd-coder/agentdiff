@@ -675,8 +675,9 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 	fake.hold()
 	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
 	pump(t, a, "the commit", func() bool { return !a.switching })
-	other := a.rev.AddWalk("", -1, "Other review?")
-	a.runWalk(a.rev, other, false)
+	otherRev := a.rev
+	other := otherRev.AddWalk("", -1, "Other review?")
+	a.runWalk(otherRev, other, false)
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	pump(t, a, "the uncommitted changes", func() bool { return !a.switching })
 	parent := a.rev.AddWalk("", -1, "Parent?")
@@ -687,8 +688,9 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 	}
 	a.deleteWalk(parent)
 	pump(t, a, "the stopped runs", func() bool { return !a.walkBusy(parent.ID) && !a.walkBusy(child.ID) })
-	if parent.Err != "Stopped" || child.Err != "Stopped" || !a.walkBusy(sibling.ID) || !a.walkBusy(other.ID) {
-		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, a.walkBusy(sibling.ID), a.walkBusy(other.ID))
+	otherBusy := a.running(otherRev, other.ID) != nil
+	if parent.Err != "Stopped" || child.Err != "Stopped" || !a.walkBusy(sibling.ID) || !otherBusy {
+		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, a.walkBusy(sibling.ID), otherBusy)
 	}
 }
 
@@ -703,7 +705,7 @@ func TestThreadOfReviewOffScreen(t *testing.T) {
 	other := review.New(t.TempDir(), gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
 	th := other.AddThread(review.Anchor{Kind: review.AnchorGeneral})
 	a.ask(other, th, "Why?")
-	pump(t, a, "the answer", func() bool { return !a.threadBusy(th.ID) })
+	pump(t, a, "the answer", func() bool { return a.running(other, th.ID) == nil })
 	req := fake.received()[0]
 	if req.Dir != other.Repo {
 		t.Errorf("dir %q, want %q", req.Dir, other.Repo)
@@ -1133,7 +1135,7 @@ func TestWalkthrough(t *testing.T) {
 	if w.Parent != "" || w.Step != 0 || a.page != "walk:"+w.ID {
 		t.Fatalf("walk = %+v, page %q", w, a.page)
 	}
-	pump(t, a, "the deeper walkthrough", func() bool { return a.walkRuns[w.ID] == nil })
+	pump(t, a, "the deeper walkthrough", func() bool { return a.running(a.rev, w.ID) == nil })
 	if w.Err != "" || w.Sessions[agent.Claude] != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
 		t.Fatalf("walk = %+v", w)
 	}
@@ -1167,8 +1169,8 @@ func TestDeeperAhead(t *testing.T) {
 	a.queue = make(chan func(), 256)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
-	if len(a.rev.Walks) != 4 || len(a.walkRuns) != maxAhead || !a.queued(a.rev.Walks[3].ID) {
-		t.Fatalf("%d walks, %d running", len(a.rev.Walks), len(a.walkRuns))
+	if len(a.rev.Walks) != 4 || a.walkRunCount() != maxAhead || !a.queued(a.rev, a.rev.Walks[3].ID) {
+		t.Fatalf("%d walks, %d running", len(a.rev.Walks), a.walkRunCount())
 	}
 	for i, w := range a.rev.Walks {
 		if w.Step != i || w.Question != "" {
@@ -1181,7 +1183,7 @@ func TestDeeperAhead(t *testing.T) {
 				return false
 			}
 		}
-		return len(a.walkRuns) == 0 && len(a.ahead) == 0
+		return a.walkRunCount() == 0 && len(a.ahead) == 0
 	})
 	for _, w := range a.rev.Walks {
 		if w.Content == nil || w.Sessions[agent.Claude] != "s1" {
@@ -1221,7 +1223,7 @@ func TestDeeperAhead(t *testing.T) {
 	snapshot(t, tt, "deeper-ahead")
 
 	a.askQuestion("", -1, "Why?")
-	pump(t, a, "the question", func() bool { return len(a.walkRuns) == 0 })
+	pump(t, a, "the question", func() bool { return a.walkRunCount() == 0 })
 	if r := a.runsOf(a.rev)[0]; r.info.Effort != "high" {
 		t.Errorf("a question ran at %q effort, want the main one", r.info.Effort)
 	}
