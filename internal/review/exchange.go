@@ -240,8 +240,8 @@ func (e *Exchange) Failed(msg string, at time.Time) {
 	e.rev.Overview = &ov
 }
 
-// Stopped shows "Stopped" as the failure, for a run the user stopped.
-func (e *Exchange) Stopped(at time.Time) { e.Failed("Stopped", at) }
+// Stopped shows Stopped as the failure, for a run the user stopped.
+func (e *Exchange) Stopped(at time.Time) { e.Failed(Stopped, at) }
 
 // addReply puts m into the thread right after the question it answers.
 func (e *Exchange) addReply(m Message) {

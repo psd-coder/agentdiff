@@ -8,7 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
-	"github.com/psd-coder/agentdiff/internal/store"
+	"github.com/psd-coder/agentdiff/internal/review"
 )
 
 // logDetailMax keeps a huge tool output from slowing every frame; the
@@ -16,19 +16,18 @@ import (
 const logDetailMax = 20000
 
 func (a *app) logTargetLabel() string {
-	switch a.logTarget {
-	case "":
+	if a.logTarget == "" {
 		return "All runs"
-	case store.TargetOverview:
+	}
+	switch kind, ok := a.rev.Resolve(a.logTarget); {
+	case !ok:
+		return "Thread"
+	case kind == review.KindOverview:
 		return "Overview"
+	case kind == review.KindWalk:
+		return a.rev.WalkTitle(a.rev.Walk(a.logTarget))
 	}
-	if th := a.rev.Thread(a.logTarget); th != nil {
-		return th.Anchor.Label()
-	}
-	if w := a.rev.Walk(a.logTarget); w != nil {
-		return a.rev.WalkTitle(w)
-	}
-	return "Thread"
+	return a.rev.Thread(a.logTarget).Anchor.Label()
 }
 
 func (a *app) logPanel(c *ui.Context) {
