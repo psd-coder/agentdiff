@@ -300,7 +300,7 @@ func (a *app) groupCards(c *ui.Context) {
 		card.Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold().Grow(1)
-				open := ui.Button(c, "Review group").OnClick(func() { a.goTo(fmt.Sprintf("group:%d", gi)) })
+				open := ui.Button(c, "Review group").OnClick(func() { a.goTo("group:" + a.groupID(gi)) })
 				// Shown while the pointer is over the card, or the focus in
 				// it; hidden, it keeps its room and its stop of Tab.
 				if !card.Hovered() && !card.FocusWithin() {

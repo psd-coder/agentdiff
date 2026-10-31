@@ -749,6 +749,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			if f, ok := strings.CutPrefix(a.page, "file:"); ok && a.diffs[f] == nil {
 				a.page = "overview"
 			}
+			a.leaveGoneGroup()
 		})
 		if err != nil {
 			return
@@ -1155,8 +1156,32 @@ func (a *app) groups() []review.Group {
 	} else {
 		groups = review.DirectoryGroups(a.fileNames())
 	}
-	a.grouped = groupsCache{groups: groups, from: from, files: a.files}
+	a.grouped = groupsCache{groups: groups, ids: groupIDs(groups), from: from, files: a.files}
 	return groups
+}
+
+// groupIDs are the ids of a group page, its sidebar item and its open
+// state, in the order of groups. The id is the title, so that a page
+// keeps its group when the groups change. A title that an earlier group
+// has already taken gets a number, such as "Tests #2".
+func groupIDs(groups []review.Group) []string {
+	ids := make([]string, len(groups))
+	taken := map[string]bool{}
+	for i, g := range groups {
+		id := g.Title
+		for n := 2; taken[id]; n++ {
+			id = fmt.Sprintf("%s #%d", g.Title, n)
+		}
+		taken[id] = true
+		ids[i] = id
+	}
+	return ids
+}
+
+// groupID is the id of the group at index i of groups().
+func (a *app) groupID(i int) string {
+	a.groups()
+	return a.grouped.ids[i]
 }
 
 // groupsCache holds the groups made from the groups of an overview and
@@ -1167,6 +1192,7 @@ func (a *app) groups() []review.Group {
 // files: none.
 type groupsCache struct {
 	groups []review.Group
+	ids    []string
 	from   []review.Group
 	files  []gitx.FileChange
 }

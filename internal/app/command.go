@@ -2,7 +2,6 @@ package app
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -446,14 +445,15 @@ func (a *app) hasFeedback(string) bool {
 	return len(review.ExportedThreads(a.rev, a.exportOptions())) > 0
 }
 
-// groupFiles are the files of the group with the index g, nil for none.
-// groupIndex reads g, the part of a group page name after "group:", and
-// reports whether the group exists.
+// groupIndex finds the group with the id g, the part of a group page
+// name after "group:", and reports whether the group exists.
 func (a *app) groupIndex(g string) (int, bool) {
-	i, err := strconv.Atoi(g)
-	return i, err == nil && i >= 0 && i < len(a.groups())
+	a.groups()
+	i := slices.Index(a.grouped.ids, g)
+	return i, i >= 0
 }
 
+// groupFiles are the files of the group with the id g, nil for none.
 func (a *app) groupFiles(g string) []string {
 	i, ok := a.groupIndex(g)
 	if !ok {

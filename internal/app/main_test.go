@@ -114,7 +114,7 @@ func TestOverviewAndGroups(t *testing.T) {
 	if err := tt.Click("Review group"); err != nil {
 		t.Fatal(err)
 	}
-	if a.page != "group:0" {
+	if a.page != "group:Cache keys" {
 		t.Errorf("page = %q", a.page)
 	}
 	tt.Advance(time.Second)
@@ -1756,7 +1756,7 @@ func TestViewedFiles(t *testing.T) {
 	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
-	a.page = "group:0"
+	a.page = "group:Cache keys"
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("Mark all as viewed"); err != nil {
@@ -1780,7 +1780,7 @@ func TestViewedFiles(t *testing.T) {
 	}
 
 	// On a group page, a file marked viewed leaves the sidebar.
-	a.goTo("group:1")
+	a.goTo("group:API")
 	tt.Frame()
 	if err := tt.Click("Viewed"); err != nil {
 		t.Fatal(err)
@@ -1837,14 +1837,14 @@ func TestGroupItem(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.page != "group:0" {
+	if a.page != "group:Cache keys" {
 		t.Fatalf("page = %q", a.page)
 	}
 	if err := tt.Click("Hide files"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.page != "group:0" || shows(tt, "cache.go") || !shows(tt, "handler.go") {
+	if a.page != "group:Cache keys" || shows(tt, "cache.go") || !shows(tt, "handler.go") {
 		t.Errorf("hidden: %q, %q", a.page, tt.Texts())
 	}
 	tt.Key(0, ui.KeyRight)
@@ -1932,7 +1932,7 @@ func TestFocusAndShortcuts(t *testing.T) {
 	}
 	tt.Key(0, ui.KeyUp)
 	tt.Frame()
-	if a.page != "group:0" {
+	if a.page != "group:api" {
 		t.Errorf("Up in the files sidebar: %q", a.page)
 	}
 	// It keeps the file open.
@@ -2423,7 +2423,7 @@ func TestReviewGroupOnHover(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.page != "group:0" {
+	if a.page != "group:Cache keys" {
 		t.Errorf("page %q", a.page)
 	}
 }

@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -51,7 +50,7 @@ func (a *app) groupPage(c *ui.Context, gi string) {
 	}
 	g := a.groups()[i]
 	rows := a.cardRows([]pageRow{{kind: titleRow}}, g.Files)
-	a.cardList(c, fmt.Sprintf("group:%d", i), rows, func(pageRow) {
+	a.cardList(c, "group:"+gi, rows, func(pageRow) {
 		pageTitle(c).AlignItems(ui.Start).Children(func() {
 			ui.Column(c).Gap(6).Grow(1).Shrink(1).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
@@ -59,8 +58,8 @@ func (a *app) groupPage(c *ui.Context, gi string) {
 					ui.Text(c, g.Summary).TextColor(t.TextMuted)
 				}
 			})
-			a.cmdButton(c, "mark-group-viewed", strconv.Itoa(i), "Mark all as viewed")
-			a.cmdButton(c, "mark-group-not-viewed", strconv.Itoa(i), "Mark all as not viewed")
+			a.cmdButton(c, "mark-group-viewed", gi, "Mark all as viewed")
+			a.cmdButton(c, "mark-group-not-viewed", gi, "Mark all as not viewed")
 			a.layoutSwitch(c)
 		})
 	})

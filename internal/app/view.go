@@ -438,13 +438,14 @@ func (a *app) fileNav(c *ui.Context) {
 			if len(files) == 0 {
 				continue
 			}
-			open := a.groupOpen(g.Title)
-			column := ui.Column(c.Key(g.Title)).Gap(2)
+			id := a.groupID(gi)
+			open := a.groupOpen(id)
+			column := ui.Column(c.Key(id)).Gap(2)
 			if gi > 0 {
 				column.Margin(8, 0, 0, 0)
 			}
 			column.Children(func() {
-				a.groupItem(c, gi, g.Title, len(files), open)
+				a.groupItem(c, id, g.Title, len(files), open)
 				if *open {
 					for _, f := range files {
 						a.fileItem(c, f, threads[f]).Level(2)
@@ -465,8 +466,8 @@ func (a *app) fileNav(c *ui.Context) {
 	a.takeFocus(nav, "files")
 	// Left and Right close and open the group chosen, as in a tree.
 	if gi, ok := strings.CutPrefix(page, "group:"); ok {
-		if i, ok := a.groupIndex(gi); ok {
-			open := a.groupOpen(groups[i].Title)
+		if _, ok := a.groupIndex(gi); ok {
+			open := a.groupOpen(gi)
 			switch {
 			case *open && nav.Shortcut(0, ui.KeyLeft):
 				*open = false
@@ -497,21 +498,21 @@ func (a *app) walkItems(c *ui.Context, parent string, depth int) {
 	}
 }
 
-func (a *app) groupOpen(title string) *bool {
-	open := a.groupsOpen[title]
+func (a *app) groupOpen(id string) *bool {
+	open := a.groupsOpen[id]
 	if open == nil {
 		v := true
 		open = &v
-		a.groupsOpen[title] = open
+		a.groupsOpen[id] = open
 	}
 	return open
 }
 
 // groupItem is the title of a group in the sidebar. Choosing it opens
 // the group page, and its chevron shows and hides the group's files.
-func (a *app) groupItem(c *ui.Context, gi int, title string, files int, open *bool) {
+func (a *app) groupItem(c *ui.Context, id, title string, files int, open *bool) {
 	t := c.Theme()
-	ui.SidebarItem(c, fmt.Sprintf("group:%d", gi), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
+	ui.SidebarItem(c, "group:"+id, nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
 		ui.Text(c, fmt.Sprint(files)).FontSize(11).TextColor(t.TextMuted)
 		label := "Hide files"
 		if !*open {
