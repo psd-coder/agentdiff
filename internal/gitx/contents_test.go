@@ -141,3 +141,19 @@ func TestContentsSymlink(t *testing.T) {
 		t.Errorf("Contents(link) = %q, %v", new, err)
 	}
 }
+
+func TestContentsSymlinkedDirOutsideRepo(t *testing.T) {
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tr := newTestRepo(t)
+	if err := os.Symlink(outside, filepath.Join(tr.dir, "docs")); err != nil {
+		t.Fatal(err)
+	}
+	tr.commit("link docs")
+	file := FileChange{Path: "docs/secret.txt", Status: StatusAdded}
+	if _, new, err := tr.open().Contents(t.Context(), Scope{Kind: ScopeUncommitted}, file); err == nil {
+		t.Errorf("Contents(docs/secret.txt) = %q, want an error", new)
+	}
+}

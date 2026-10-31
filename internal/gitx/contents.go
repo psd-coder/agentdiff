@@ -92,25 +92,32 @@ func (r *Repo) objectInfo(ctx context.Context, spec string) (oid, kind string, s
 	return oid, kind, size, err
 }
 
+// worktreeFile reads the file through an os.Root, so a symlinked directory
+// in the path cannot lead outside the repository.
 func (r *Repo) worktreeFile(ctx context.Context, path string) (string, error) {
-	full := filepath.Join(r.Root, filepath.FromSlash(path))
-	info, err := os.Lstat(full)
+	root, err := os.OpenRoot(r.Root)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	name := filepath.FromSlash(path)
+	info, err := root.Lstat(name)
 	if err != nil {
 		return "", err
 	}
 	switch {
 	case info.Mode()&os.ModeSymlink != 0:
-		return os.Readlink(full)
+		return root.Readlink(name)
 	case info.IsDir():
 		var out bytes.Buffer
-		if err := runIn(ctx, full, nil, &out, "rev-parse", "HEAD"); err != nil {
+		if err := runIn(ctx, filepath.Join(r.Root, name), nil, &out, "rev-parse", "HEAD"); err != nil {
 			return "", err
 		}
 		return "Subproject commit " + strings.TrimSpace(out.String()) + "\n", nil
 	case info.Size() > maxContentSize:
 		return "", ErrTooLarge
 	}
-	file, err := os.Open(full)
+	file, err := root.Open(name)
 	if err != nil {
 		return "", err
 	}
