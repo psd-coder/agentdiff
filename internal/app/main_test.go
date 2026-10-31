@@ -499,6 +499,24 @@ func TestFailedSaveShowsNotice(t *testing.T) {
 	}
 }
 
+// TestBadBaseShowsCommitsError compares with a base that does not exist:
+// the sidebar shows why there are no commits, until the base is valid.
+func TestBadBaseShowsCommitsError(t *testing.T) {
+	a := newTestApp(t)
+	a.compare("main", "nope")
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if !tt.HasText(`Could not list the commits: gitx: unknown revision "nope"`) || tt.HasText("No commits") {
+		t.Fatalf("commits error not shown: %q", tt.Texts())
+	}
+
+	a.compare("main", "main")
+	tt.Frame()
+	if tt.HasText("Could not list the commits") || !tt.HasText("Initial commit") {
+		t.Errorf("after a valid base: %q", tt.Texts())
+	}
+}
+
 // TestStartOverKeepsReviewWhenDeleteFails starts over while the saved
 // review cannot be deleted: the review stays, in the window and on disk.
 func TestStartOverKeepsReviewWhenDeleteFails(t *testing.T) {

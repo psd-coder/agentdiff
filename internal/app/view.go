@@ -105,7 +105,10 @@ func (a *app) scopeList(c *ui.Context) {
 						ui.Text(c, age(cm.Time)).FontSize(11).TextColor(t.TextMuted).SingleLine()
 					})
 			}
-			if len(a.commits) == 0 {
+			switch {
+			case a.commitsErr != "":
+				ui.Text(c, "Could not list the commits: "+a.commitsErr).FontSize(12).TextColor(t.Danger).Padding(4, 8).Selectable()
+			case len(a.commits) == 0:
 				ui.Text(c, "No commits").FontSize(12).TextColor(t.TextMuted).Padding(4, 8)
 			}
 		})

@@ -260,7 +260,10 @@ func (a *app) branchList(c *ui.Context) {
 					}
 				}
 			})
-			if len(branches) == 0 {
+			switch {
+			case a.branchesErr != "":
+				ui.Text(c, "Could not list the branches: "+a.branchesErr).FontSize(12).TextColor(t.Danger).Padding(6, 8).Selectable()
+			case len(branches) == 0:
 				ui.Text(c, "No branches match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
 			}
 		})

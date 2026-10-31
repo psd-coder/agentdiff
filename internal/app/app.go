@@ -60,11 +60,14 @@ type app struct {
 	// even as the upstream of the branch.
 	baseSet bool
 	// rng is the custom range under review instead of a branch.
-	rng        *gitx.Scope
-	branches   []string
-	worktrees  []gitx.Worktree
-	commits    []gitx.Commit
-	commitsGen int
+	rng       *gitx.Scope
+	branches  []string
+	worktrees []gitx.Worktree
+	// branchesErr is why git could not list the branches or worktrees.
+	branchesErr string
+	commits     []gitx.Commit
+	commitsErr  string
+	commitsGen  int
 
 	scope    gitx.Scope
 	scopeID  string
@@ -235,18 +238,16 @@ func (a *app) openRepo(path string) {
 	}
 	a.async(func() {
 		ctx := context.Background()
-		branch, _ := r.CurrentBranch(ctx)
+		branch, err := r.CurrentBranch(ctx)
 		base := r.DefaultBase(ctx)
-		branches, _ := r.Branches(ctx)
-		trees, err := r.Worktrees(ctx)
-		if err != nil {
-			log.Printf("worktrees: %v", err)
-		}
+		branches, trees, lerr := readBranches(ctx, r)
+		err = cmp.Or(err, lerr)
 		a.update(func() {
 			if a.repo != r {
 				return
 			}
 			a.branch, a.base, a.branches, a.worktrees = branch, base, branches, trees
+			a.branchesErr = errText(err)
 			a.loadCommits(nil)
 		})
 	})
@@ -368,15 +369,19 @@ func (a *app) syncBranch() {
 		ctx := context.Background()
 		branch, err := r.CurrentBranch(ctx)
 		if err != nil {
-			log.Printf("current branch: %v", err)
+			a.update(func() {
+				if a.repo == r {
+					a.branchesErr = err.Error()
+				}
+			})
 			return
 		}
-		branches, _ := r.Branches(ctx)
-		trees, _ := r.Worktrees(ctx)
+		branches, trees, err := readBranches(ctx, r)
 		a.update(func() {
 			if a.repo != r {
 				return
 			}
+			a.branchesErr = errText(err)
 			a.worktrees = trees
 			if branch != a.branch {
 				a.checkedOut(branch, branches)
@@ -385,6 +390,14 @@ func (a *app) syncBranch() {
 			}
 		})
 	})
+}
+
+// readBranches lists the branches and the worktrees of r, and returns
+// the first error.
+func readBranches(ctx context.Context, r *gitx.Repo) ([]string, []gitx.Worktree, error) {
+	branches, err := r.Branches(ctx)
+	trees, terr := r.Worktrees(ctx)
+	return branches, trees, cmp.Or(err, terr)
 }
 
 // errText is the message of err, or "" when err is nil.
@@ -430,14 +443,11 @@ func (a *app) loadCommits(then func()) {
 	base, head := a.listRange()
 	a.async(func() {
 		commits, err := r.Commits(context.Background(), base, head, commitsShown)
-		if err != nil {
-			log.Printf("commits: %v", err)
-		}
 		a.update(func() {
 			if a.repo != r || gen != a.commitsGen {
 				return
 			}
-			a.commits = commits
+			a.commits, a.commitsErr = commits, errText(err)
 			if then != nil {
 				then()
 			}
