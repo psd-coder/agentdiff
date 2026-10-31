@@ -1365,6 +1365,67 @@ func TestFlatFiles(t *testing.T) {
 	}
 }
 
+// TestFlatFileRows shows the whole file name in a narrow sidebar, with a
+// long folder on a second line below it, and picks the file when its first
+// letters are typed.
+func TestFlatFileRows(t *testing.T) {
+	a := newTestApp(t)
+	const (
+		dir  = "astrobook/src/stories/07-data-display"
+		name = "TwoColumnsSample.tsx"
+	)
+	write(t, a.repo.Root, dir+"/"+name, "export const TwoColumnsSample = 1\n")
+	write(t, a.repo.Root, "README.md", "# Demo\n\nMore.\n")
+	a.openRepo(a.repo.Root)
+	a.cfg.FlatFiles = true
+	a.sidebarW = 220
+	a.cmd("mark-viewed").run(nil, "api/handler.go")
+	a.goTo("file:cache/cache.go")
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if r, ok := tt.Find("README.md"); ok {
+		tt.Move(r.X+r.W/2, r.Y+r.H/2)
+		tt.Frame()
+	}
+	snapshot(t, tt, "flat-files-narrow")
+
+	nameBox, ok := tt.Find(name)
+	folderBox, ok2 := tt.Find(dir)
+	if !ok || !ok2 {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if full := textWidth(name); nameBox.W < full-0.01 {
+		t.Errorf("name cut to %.1f of %.1f", nameBox.W, full)
+	}
+	if folderBox.Y < nameBox.Y+nameBox.H-0.5 || math.Abs(float64(folderBox.X-nameBox.X)) > 0.5 {
+		t.Errorf("folder at %v, name at %v", folderBox, nameBox)
+	}
+	if shows(tt, ".") {
+		t.Errorf("a root file shows its folder: %q", tt.Texts())
+	}
+
+	if err := tt.Click("README.md"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	snapshot(t, tt, "flat-files-narrow-focused")
+	tt.Key(0, ui.KeyT)
+	tt.Key(0, ui.KeyW)
+	tt.Frame()
+	snapshot(t, tt, "flat-files-narrow-typed")
+	if a.page != "file:"+dir+"/"+name {
+		t.Errorf("typing the name chose %q", a.page)
+	}
+}
+
+// textWidth is the width of s alone, in the default font.
+func textWidth(s string) float32 {
+	tt := ui.NewTester(func(c *ui.Context) { ui.Row(c).Children(func() { ui.Text(c, s) }) }, 800, 100)
+	tt.Frame()
+	r, _ := tt.Find(s)
+	return r.W
+}
+
 // shows tells whether the last frame shows exactly the text s.
 func shows(tt *ui.Tester, s string) bool { return slices.Contains(tt.Texts(), s) }
 

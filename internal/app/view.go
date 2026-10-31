@@ -534,19 +534,25 @@ func (a *app) groupItem(c *ui.Context, gi int, title string, files int, open *bo
 }
 
 // fileItem is a file in the sidebar, with the number of threads on it.
+// In the flat list, the file's folder shows on a second line under its
+// name.
 func (a *app) fileItem(c *ui.Context, file string, threads int) ui.Element {
 	t := c.Theme()
 	viewed := a.rev.Viewed[file]
 	item := ui.SidebarItem(c, "file:"+file, nil, path.Base(file)).Tooltip(file)
 	dir := path.Dir(file)
+	folder := a.cfg.FlatFiles && dir != "."
+	if folder {
+		// SidebarItem builds the name first, so the name takes the first
+		// cell and the marks after it the second. The marks keep their
+		// width, and the name is cut only when the row is too narrow.
+		item.Grid().ColumnTracks(ui.Fr(1), ui.FitContent()).AlignItems(ui.Center).GapY(1)
+	}
 	if viewed && a.page != "file:"+file {
 		item.TextColor(t.TextMuted)
 	}
 	d := a.diffs[file]
-	item.Children(func() {
-		if a.cfg.FlatFiles && dir != "." {
-			ui.Text(c, dir).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1)
-		}
+	marks := func() {
 		if threads > 0 {
 			ui.Badge(c, fmt.Sprint(threads))
 		}
@@ -563,6 +569,16 @@ func (a *app) fileItem(c *ui.Context, file string, threads int) ui.Element {
 		if viewed {
 			ui.Icon(c, checkIcon).FontSize(12).TextColor(t.Success).Label("Viewed")
 		}
+	}
+	item.Children(func() {
+		if !folder {
+			marks()
+			return
+		}
+		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(marks)
+		// Opacity keeps the row's text color, so the folder stays readable
+		// on the accent of the chosen row.
+		ui.Text(c, dir).FontSize(11).Opacity(0.7).SingleLine().ColumnStart(1).RowStart(2)
 	})
 	return item
 }
