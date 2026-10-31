@@ -158,6 +158,22 @@ func (l CommitLog) Page(ctx context.Context, skip, limit int) ([]Commit, error) 
 	return parseCommits(out)
 }
 
+// Commit reads the commit that ref names.
+func (r *Repo) Commit(ctx context.Context, ref string) (Commit, error) {
+	sha, err := r.resolveCommit(ctx, ref)
+	if err != nil {
+		return Commit{}, err
+	}
+	commits, err := CommitLog{repo: r, head: sha}.Page(ctx, 0, 1)
+	if err != nil {
+		return Commit{}, err
+	}
+	if len(commits) != 1 {
+		return Commit{}, fmt.Errorf("gitx: commit %s not found", ref)
+	}
+	return commits[0], nil
+}
+
 func parseCommits(out []byte) ([]Commit, error) {
 	fields := splitNUL(out)
 	if len(fields)%commitFields != 0 {
