@@ -318,16 +318,16 @@ func (a *app) compareModal(c *ui.Context) {
 			if f.mode == compareBranches {
 				ui.Text(c, "Review the commits of a branch since it left its base. The branch does not have to be checked out.").FontSize(12).TextColor(t.TextMuted)
 				ui.Text(c, "Branch").FontSize(12).Bold()
-				a.takeFocus(ui.Combobox(c, &f.branch, a.branches).Label("Branch").AutoFocus(), "compare")
+				a.takeFocus(ui.Combobox(c.Key("branch"), &f.branch, a.branches).Label("Branch").AutoFocus(), "compare")
 				ui.Text(c, "Base").FontSize(12).Bold()
-				ui.Combobox(c, &f.base, a.branches).Label("Base")
+				ui.Combobox(c.Key("base"), &f.base, a.branches).Label("Base")
 				if f.branch != "" && f.branch == f.base {
 					ui.Text(c, "Pick two different branches.").FontSize(12).TextColor(t.Danger)
 				}
 			} else {
 				ui.Text(c, "Review the changes between two commits, branches or tags, as git diff from..to shows them.").FontSize(12).TextColor(t.TextMuted)
-				a.takeFocus(ui.TextInput(c, &f.from).Placeholder("From, e.g. main or abc1234").Label("From").AutoFocus().OnSubmit(apply), "compare")
-				ui.TextInput(c, &f.to).Placeholder("To, e.g. HEAD").Label("To").OnSubmit(apply)
+				a.takeFocus(ui.TextInput(c.Key("from"), &f.from).Placeholder("From, e.g. main or abc1234").Label("From").AutoFocus().OnSubmit(apply), "compare")
+				ui.TextInput(c.Key("to"), &f.to).Placeholder("To, e.g. HEAD").Label("To").OnSubmit(apply)
 			}
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				ui.Button(c, "Cancel").OnClick(func() { f.open = false })
