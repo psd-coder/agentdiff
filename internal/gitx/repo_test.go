@@ -420,6 +420,41 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	}
 }
 
+func TestFingerprintIgnoresDiffPrefixConfig(t *testing.T) {
+	for _, key := range []string{"diff.mnemonicPrefix", "diff.noprefix"} {
+		t.Run(key, func(t *testing.T) {
+			tr := newTestRepo(t)
+			tr.write("a.txt", "one\ntwo\n")
+			tr.commit("init")
+			r := tr.open()
+			ctx := t.Context()
+			uncommitted := Scope{Kind: ScopeUncommitted}
+			tr.write("a.txt", "one\nTWO\n")
+			tr.write("dir/new file.txt", "new\n")
+			tr.write("pic.bin", "\x00\x01")
+			want, err := r.Fingerprint(ctx, uncommitted)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr.git("config", key, "true")
+			got, err := r.Fingerprint(ctx, uncommitted)
+			if err != nil || got.Patch != want.Patch || !maps.Equal(got.Files, want.Files) {
+				t.Fatalf("with %s %+v, without %+v, err %v", key, got, want, err)
+			}
+			for _, path := range []string{"a.txt", "dir/new file.txt", "pic.bin"} {
+				if _, ok := got.Files[path]; !ok {
+					t.Errorf("file %q missing: %v", path, got.Files)
+				}
+			}
+			sha := tr.commit("change")
+			ids, err := r.CommitPatchIDs(ctx, "", "", 10)
+			if err != nil || ids[want.Patch] != sha {
+				t.Errorf("commit ids = %v, want %s for %s, err %v", ids, sha, want.Patch, err)
+			}
+		})
+	}
+}
+
 func TestChunkPath(t *testing.T) {
 	for _, tc := range []struct{ diff, want string }{
 		{"diff --git a/x.go b/x.go\nindex 1..2 100644\n--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n", "x.go"},

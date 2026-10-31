@@ -48,7 +48,6 @@ func (r *Repo) Patch(ctx context.Context, s Scope, maxBytes int) (string, bool, 
 	}
 	out := &cappedBuffer{max: maxBytes}
 	args := append([]string{"diff"}, diffFlags...)
-	args = append(args, "--src-prefix=a/", "--dst-prefix=b/")
 	args = append(append(args, v.args()...), "--")
 	if err := r.run(ctx, out, args...); err != nil {
 		return "", false, err
@@ -71,8 +70,8 @@ func (r *Repo) untrackedPatches(ctx context.Context, out *cappedBuffer) error {
 			out.truncated = true
 			return nil
 		}
-		err := r.run(ctx, out, "diff", "--no-index", "--no-color", "--no-ext-diff", "--no-textconv",
-			"--src-prefix=a/", "--dst-prefix=b/", "--", "/dev/null", p)
+		args := append([]string{"diff"}, diffFlags...)
+		err := r.run(ctx, out, append(args, "--no-index", "--", "/dev/null", p)...)
 		// --no-index exits 1 when the files differ, which is always the case here.
 		if err != nil && exitCode(err) != 1 {
 			return err
