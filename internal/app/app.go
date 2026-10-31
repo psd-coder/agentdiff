@@ -14,6 +14,7 @@ import (
 	"github.com/egoist/mygo/ui/editor"
 	"github.com/egoist/mygo/ui/markdown"
 
+	"github.com/psd-coder/agentdiff/internal/agent"
 	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
 	"github.com/psd-coder/agentdiff/internal/store"
@@ -57,6 +58,8 @@ type app struct {
 	// when nil.
 	watchFiles watchFunc
 	stopWatch  context.CancelFunc
+	// startAgent starts every agent run.
+	startAgent agentFunc
 
 	repo    *gitx.Repo
 	repoErr string
@@ -206,6 +209,7 @@ func newApp(s store.Store) *app {
 	return &app{
 		store:       s,
 		cfg:         s.LoadConfig(),
+		startAgent:  agent.Run,
 		diffs:       map[string]*fileDiff{},
 		folded:      map[string]bool{},
 		reviews:     map[string]*review.Review{},

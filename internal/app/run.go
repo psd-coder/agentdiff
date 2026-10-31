@@ -19,6 +19,8 @@ import (
 // far faster than frames are worth drawing.
 const streamFlush = 40 * time.Millisecond
 
+type agentFunc func(context.Context, agent.Config, agent.Request) <-chan agent.Event
+
 // stream runs the agent and hands its events to fn on the main thread,
 // text deltas joined into one event per streamFlush. It records the run in
 // the log of rev, in memory and in the run's file.
@@ -42,7 +44,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 		logged = append(logged, items...)
 		mu.Unlock()
 	}
-	events := agent.Run(ctx, cfg, req)
+	events := a.startAgent(ctx, cfg, req)
 	go func() {
 		var pending strings.Builder
 		last := time.Now()

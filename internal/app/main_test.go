@@ -2,7 +2,6 @@ package app
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"image/png"
 	"math"
@@ -297,7 +296,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	newFakeAgent(t, a).answer("s1", answer)
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
@@ -351,7 +350,7 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	newFakeAgent(t, a).answer("s1", answer)
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
@@ -396,7 +395,8 @@ func TestArchiveUncommitted(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
 	answer := "```json\n" + `{"summary": "Lower-case keys.", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	fake := newFakeAgent(t, a)
+	fake.answer("s1", answer)
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
@@ -416,12 +416,14 @@ func TestArchiveUncommitted(t *testing.T) {
 
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
-	a.overviews[a.rev] = &overviewRun{cancel: func() {}}
+	fake.hold()
+	a.generateOverview()
 	reload("the busy reload")
 	if a.rev.Overview == nil {
 		t.Fatal("archived a review an agent writes into")
 	}
-	delete(a.overviews, a.rev)
+	a.stopOverview()
+	pump(t, a, "the stopped overview", func() bool { return !a.runsOf(a.rev)[0].running })
 	tt := reload("the other changes")
 	if !a.rev.Empty() || len(a.archived) != 1 || !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") {
 		t.Fatalf("review %+v, archived %v; texts %q", a.rev, a.archived, tt.Texts())
@@ -553,15 +555,11 @@ func TestStartOverDuringRuns(t *testing.T) {
 	a := newTestApp(t)
 	root, scope := a.repo.Root, a.scope
 	a.queue = make(chan func(), 64)
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "t1", "Because.")}
+	fake := newFakeAgent(t, a)
+	fake.answer("t1", "Because.")
 	a.ask(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
 	thread := a.runs[a.rev][0]
-	slow := filepath.Join(t.TempDir(), "claude")
-	write(t, filepath.Dir(slow), "claude", "#!/bin/sh\ncat > /dev/null\nsleep 10\n")
-	if err := os.Chmod(slow, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	a.cfg.Agent.Binary = slow
+	fake.hold()
 	a.askQuestion("", -1, "What?")
 	runs := slices.Clone(a.runs[a.rev])
 	deadline := time.Now().Add(5 * time.Second)
@@ -594,12 +592,9 @@ func TestStartOverDuringRuns(t *testing.T) {
 func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 	a := newTestApp(t)
 	a.queue = make(chan func(), 64)
-	hang := filepath.Join(t.TempDir(), "claude")
-	write(t, filepath.Dir(hang), "claude", "#!/bin/sh\ncat > /dev/null\nexec sleep 30\n")
-	if err := os.Chmod(hang, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: hang}
+	fake := newFakeAgent(t, a)
+	fake.answer("t1", "Because.")
+	fake.hold()
 	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
 	a.openThread(th.ID)
 	tt := ui.NewTester(a.view, 1300, 800)
@@ -629,8 +624,8 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if n := len(a.runs[a.rev]); n != 1 {
-		t.Fatalf("runs after asking again = %d", n)
+	if n := len(fake.received()); n != 1 {
+		t.Fatalf("requests after asking again = %d", n)
 	}
 	if d := a.drafts[th.ID]; !strings.Contains(d, "And the tests?") {
 		t.Errorf("draft after asking again = %q", d)
@@ -671,16 +666,26 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 // walks under it stop, and the runs of other walks go on.
 func TestDeleteWalkStopsItsRuns(t *testing.T) {
 	a := newTestApp(t)
+	a.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, a)
+	fake.answer("w1", "Because.")
+	fake.hold()
+	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	pump(t, a, "the commit", func() bool { return !a.switching })
+	other := a.rev.AddWalk("", -1, "Other review?")
+	a.runWalk(a.rev, other, false)
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	pump(t, a, "the uncommitted changes", func() bool { return !a.switching })
 	parent := a.rev.AddWalk("", -1, "Parent?")
 	child := a.rev.AddWalk(parent.ID, -1, "Child?")
 	sibling := a.rev.AddWalk("", -1, "Sibling?")
-	stopped := map[string]bool{}
-	for _, id := range []string{parent.ID, child.ID, sibling.ID, "walk-of-another-review"} {
-		a.walkRuns[id] = &walkRun{cancel: func() { stopped[id] = true }}
+	for _, w := range []*review.Walk{parent, child, sibling} {
+		a.runWalk(a.rev, w, false)
 	}
 	a.deleteWalk(parent)
-	if !stopped[parent.ID] || !stopped[child.ID] || stopped[sibling.ID] || stopped["walk-of-another-review"] {
-		t.Errorf("stopped = %v; parent %s, child %s, sibling %s", stopped, parent.ID, child.ID, sibling.ID)
+	pump(t, a, "the stopped runs", func() bool { return !a.walkBusy(parent.ID) && !a.walkBusy(child.ID) })
+	if parent.Err != "Stopped" || child.Err != "Stopped" || !a.walkBusy(sibling.ID) || !a.walkBusy(other.ID) {
+		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, a.walkBusy(sibling.ID), a.walkBusy(other.ID))
 	}
 }
 
@@ -756,7 +761,7 @@ func TestScopeSwitchKeepsReview(t *testing.T) {
 func TestGroupsFollowChanges(t *testing.T) {
 	a := newTestApp(t)
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": [{"title": "Cache keys", "files": ["cache/cache.go"]}]}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	newFakeAgent(t, a).answer("s1", answer)
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	want := func(step string, titles ...string) {
@@ -995,29 +1000,6 @@ func TestRefreshListsNewCommits(t *testing.T) {
 	}
 }
 
-// fakeClaude is a claude CLI that answers every prompt with answer, in
-// session id.
-func fakeClaude(t *testing.T, id, answer string) string {
-	t.Helper()
-	dir := t.TempDir()
-	init := `{"type":"system","subtype":"init","session_id":"` + id + `"}`
-	step := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"a.go"}}],"usage":{"input_tokens":5,"cache_read_input_tokens":20000,"cache_creation_input_tokens":3000,"output_tokens":995}}}`
-	result, err := json.Marshal(map[string]any{
-		"type": "result", "subtype": "success", "result": answer, "session_id": id, "total_cost_usd": 0.25,
-		"usage":      map[string]int{"input_tokens": 10, "output_tokens": 1000, "cache_read_input_tokens": 20000, "cache_creation_input_tokens": 5000},
-		"modelUsage": map[string]any{"m": map[string]int{"inputTokens": 10, "outputTokens": 1000, "cacheReadInputTokens": 20000, "cacheCreationInputTokens": 5000}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	write(t, dir, "out.jsonl", init+"\n"+step+"\n"+string(result)+"\n")
-	write(t, dir, "claude", "#!/bin/sh\ncat > "+filepath.Join(dir, "prompt.txt")+"\ncat "+filepath.Join(dir, "out.jsonl")+"\n")
-	if err := os.Chmod(filepath.Join(dir, "claude"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return filepath.Join(dir, "claude")
-}
-
 // pump runs the app's queued updates on the test goroutine until ok.
 func pump(t *testing.T, a *app, what string, ok func() bool) {
 	t.Helper()
@@ -1047,7 +1029,8 @@ func TestWalkthrough(t *testing.T) {
 		Checklist: []review.CheckItem{{Question: "What data changes?", Answer: "None."}},
 	}}
 	deeper := "```json\n" + `{"summary": "Inside Get.", "steps": [{"title": "ToLower call", "text": "Uses strings.", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "child", deeper)}
+	fake := newFakeAgent(t, a)
+	fake.answer("child", deeper)
 
 	tt := ui.NewTester(a.view, 1300, 1000)
 	tt.Advance(time.Second)
@@ -1070,9 +1053,8 @@ func TestWalkthrough(t *testing.T) {
 	if w.Err != "" || w.Sessions[agent.Claude] != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
 		t.Fatalf("walk = %+v", w)
 	}
-	prompt, err := os.ReadFile(filepath.Join(filepath.Dir(a.cfg.Agent.Binary), "prompt.txt"))
-	if err != nil || !strings.Contains(string(prompt), "### Lower-case keys") {
-		t.Errorf("prompt = %q, %v", prompt, err)
+	if req := fake.last(); !strings.Contains(req.Prompt, "### Lower-case keys") || req.ResumeID != "root" || !req.Fork {
+		t.Errorf("request = %+v", req)
 	}
 	tt.Frame()
 	for _, want := range []string{"Overview", "Inside Get.", "1. ToLower call", "cache/cache.go:6 (+)"} {
@@ -1096,7 +1078,8 @@ func TestWalkthrough(t *testing.T) {
 func TestDeeperAhead(t *testing.T) {
 	a := newTestApp(t)
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}, {"title": "B", "text": "b"}, {"title": "C", "text": "c"}, {"title": "D", "text": "d"}], "groups": []}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer), Effort: "high", AutoEffort: "low"}
+	newFakeAgent(t, a).answer("s1", answer)
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Effort: "high", AutoEffort: "low"}
 	a.queue = make(chan func(), 256)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
@@ -1194,8 +1177,8 @@ func TestQuestionPanel(t *testing.T) {
 		Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
 	}}
 	reply := "```json\n" + `{"summary": "Callers pass mixed case.", "steps": [{"title": "Caller", "text": "x", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "q1", reply)}
-	prompt := filepath.Join(filepath.Dir(a.cfg.Agent.Binary), "prompt.txt")
+	fake := newFakeAgent(t, a)
+	fake.answer("q1", reply)
 	tt := ui.NewTester(a.view, 1400, 900)
 	tt.Frame()
 
@@ -1227,8 +1210,8 @@ func TestQuestionPanel(t *testing.T) {
 	if len(w.More) != 1 || w.More[0].Content == nil || w.Sessions[agent.Claude] != "q1" {
 		t.Fatalf("follow-up = %+v", w.More)
 	}
-	if b, _ := os.ReadFile(prompt); !strings.Contains(string(b), "follow-up question: And the tests?") || strings.Contains(string(b), "The change set under review") {
-		t.Errorf("follow-up prompt = %q", b)
+	if req := fake.last(); !strings.Contains(req.Prompt, "follow-up question: And the tests?") || strings.Contains(req.Prompt, "The change set under review") || req.ResumeID != "q1" || req.Fork {
+		t.Errorf("follow-up request = %+v", req)
 	}
 	tt.Frame()
 	snapshot(t, tt, "question")
@@ -1267,7 +1250,8 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := newTestApp(t)
-			a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "q1", "Because.")}
+			fake := newFakeAgent(t, a)
+			fake.answer("q1", "Because.")
 			a.queue = make(chan func(), 64)
 			left := a.rev
 			left.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
@@ -1290,8 +1274,8 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 			if a.questionOpen() || tt.HasText("About: Lower-case keys") {
 				t.Error("the Ask panel stayed open")
 			}
-			if len(left.Walks) != 0 || len(a.rev.Walks) != 0 {
-				t.Errorf("questions: %d in the left review, %d in the new one", len(left.Walks), len(a.rev.Walks))
+			if len(left.Walks) != 0 || len(a.rev.Walks) != 0 || len(fake.received()) != 0 {
+				t.Errorf("questions: %d in the left review, %d in the new one, %d sent", len(left.Walks), len(a.rev.Walks), len(fake.received()))
 			}
 		})
 	}
@@ -1380,7 +1364,7 @@ func TestDeleteWalkClosesItsAskPanel(t *testing.T) {
 // goes, and the panel closes.
 func TestRegenerateClosesAskPanelOfItsStepWalk(t *testing.T) {
 	a := newTestApp(t)
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "w1", "Because.")}
+	newFakeAgent(t, a).answer("w1", "Because.")
 	a.queue = make(chan func(), 64)
 	parent := a.rev.AddWalk("", 0, "")
 	deeper := a.rev.AddWalk(parent.ID, 0, "")
@@ -2683,7 +2667,8 @@ func TestEarlierReviewPage(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
 	answer := "```json\n" + `{"summary": "Lower-case keys.", "steps": [{"title": "Keys", "text": "a", "refs": [{"file": "cache/cache.go", "side": "new", "start": 5, "end": 7, "why": "the call"}]}], "groups": []}` + "\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	fake := newFakeAgent(t, a)
+	fake.answer("s1", answer)
 	a.cfg.DeeperAhead = false
 	a.queue = make(chan func(), 64)
 	a.generateOverview()
@@ -2697,7 +2682,7 @@ func TestEarlierReviewPage(t *testing.T) {
 	write(t, dir, "output.json", "{}\n")
 	a.refresh()
 	pump(t, a, "the other changes", func() bool { return !a.loading && !a.switching })
-	a.cfg.Agent.Binary = fakeClaude(t, "s2", "```json\n"+`{"summary": "Other change.", "steps": [{"title": "B", "text": "b"}], "groups": []}`+"\n```")
+	fake.answer("s2", "```json\n"+`{"summary": "Other change.", "steps": [{"title": "B", "text": "b"}], "groups": []}`+"\n```")
 	a.generateOverview()
 	pump(t, a, "the second overview", func() bool { return a.overviewRunning() == nil })
 	tt := ui.NewTester(a.view, 1300, 900)
