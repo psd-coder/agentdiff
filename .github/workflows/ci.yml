@@ -34,6 +34,23 @@ jobs:
         run: go tool mygo vet ./internal/app
       - name: Check for known vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      # deadcode exits with 0 even when it finds unreachable functions
+      - name: Check for unreachable functions
+        run: |
+          dead=$(go run golang.org/x/tools/cmd/deadcode@v0.52.0 -test ./...)
+          test -z "$dead" || { echo "$dead"; exit 1; }
+
+  golangci-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
 
   test:
     runs-on: ubuntu-latest
