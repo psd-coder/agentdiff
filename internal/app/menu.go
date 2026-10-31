@@ -98,7 +98,7 @@ func (a *app) keys(c *ui.Context) {
 // agent log.
 func (a *app) escape() {
 	switch {
-	case a.thread != "":
+	case a.threadID() != "":
 		a.closeThread()
 	case a.questionOpen():
 		a.closeQuestion()

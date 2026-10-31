@@ -422,14 +422,16 @@ func (a *app) targetWalk() (string, bool) {
 }
 
 func (a *app) targetThread() (string, bool) {
-	return a.thread, a.thread != "" && a.rev.Thread(a.thread) != nil
+	id := a.threadID()
+	return id, id != "" && a.rev.Thread(id) != nil
 }
 
-func (a *app) targetQuestion() (string, bool) { return "", a.thread == "" && a.questionOpen() }
+func (a *app) targetQuestion() (string, bool) { return "", a.threadID() == "" && a.questionOpen() }
 
 func (a *app) targetQuestionWalk() (string, bool) {
 	_, open := a.targetQuestion()
-	return a.question, open && a.rev.Walk(a.question) != nil
+	id := a.questionID()
+	return id, open && a.rev.Walk(id) != nil
 }
 
 func (a *app) targetFeedback() (string, bool) { return "", a.page == "feedback" }
@@ -501,7 +503,7 @@ func (a *app) setExcluded(id string, excluded bool) {
 func (a *app) deleteThread(id string) {
 	a.stopThread(a.rev.Thread(id))
 	a.rev.DeleteThread(id)
-	a.thread = ""
+	a.panel = nil
 	a.saveReview()
 }
 

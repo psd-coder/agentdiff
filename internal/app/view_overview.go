@@ -21,7 +21,7 @@ func (a *app) staleBanner(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Column(c).Gap(10).Padding(10, 14).Radius(8).Background(t.Warning.Alpha(0.15)).Border(1, t.Warning).Children(func() {
-		ui.Text(c, staleText(a.rev.Overview.Drift(a.fileIDs)))
+		ui.Text(c, staleText(a.rev.Overview.Drift(a.fp.Files)))
 		if sha := a.movedTo; sha != "" {
 			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Those changes are now commit "+shortSHA(sha)+". The review moves there when you open it.").Grow(1).Shrink(1)

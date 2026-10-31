@@ -85,13 +85,6 @@ func (a *app) leaveGoneGroup() {
 	}
 }
 
-// resetNav forgets the history and the scroll places, for another scope.
-func (a *app) resetNav() {
-	a.page, a.history, a.forward = "overview", nil, nil
-	a.scrolls = map[string]*ui.ScrollState{}
-	a.lists = map[string]*cardPage{}
-}
-
 // takeFocus gives e the keyboard focus while a.refocus names it, until it
 // has it: a dialog that closes in the same frame gives the focus back to
 // where it was before, after e asked for it.

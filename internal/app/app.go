@@ -93,50 +93,31 @@ type app struct {
 	scope gitx.Scope
 	// chosen is the scope the user opened last, which the list of
 	// changes shows chosen while it loads.
-	chosen   gitx.Scope
-	rev      *review.Review
-	files    []gitx.FileChange
-	diffstat string
-	loading  bool
-	loadErr  string
+	chosen  gitx.Scope
+	rev     *review.Review
+	loading bool
 	// shown is set once the window shows the changes of a scope, which
 	// stay while the next scope loads, and switching while it does.
 	shown        bool
 	switching    bool
 	loadingScope *scopeLoad
-	diffs        map[string]*fileDiff
 	// stopLoad cancels the git work of the latest load.
 	stopLoad context.CancelFunc
-	// folded holds the files the reviewer folded or unfolded in this
-	// scope. The others are folded while they are viewed or big.
-	folded map[string]bool
-	gen    int
-	// patch identifies the changes of the scope once patchKnown, see
-	// gitx.Repo.PatchID.
-	patch      string
-	patchKnown bool
-	// fileIDs maps the changed files to the IDs of their changes, see
-	// gitx.Fingerprint.
-	fileIDs map[string]string
+	gen      int
+	perLoad
 	// grouped caches groups, which a frame reads several times.
 	grouped groupsCache
-	// movedTo is the commit that now holds the changes a stale overview
-	// of the uncommitted changes was written for.
-	movedTo string
 
 	reviews   *continuity.Reviews
 	logOpen   bool
 	logTarget string
 	logPct    float32
 
-	page    string
-	history []string
-	forward []string
-	scrolls map[string]*ui.ScrollState
-	lists   map[string]*cardPage
-	thread  string
-	drafts  map[string]string
-	runner  runner
+	perReview
+	// drafts holds the unsent text of each thread and question for the
+	// session, by questionDraftKey or thread ID.
+	drafts map[string]string
+	runner runner
 
 	sidebarW    float32
 	scopePct    float32
@@ -146,11 +127,6 @@ type app struct {
 	codeKey     codeThemeKey
 	codeColors  *editor.Theme
 	exportAgent bool
-	exportDone  bool
-	savedPath   string
-	question    string
-	asking      *askTarget
-	extra       map[string]*extraFile
 	reveal      *reveal
 
 	settings     *settingsForm
@@ -184,25 +160,106 @@ type app struct {
 	saveErr string
 }
 
+// perReview is the state of the window for the review it shows. Leaving
+// the review replaces all of it, see leaveReview.
+type perReview struct {
+	page    string
+	history []string
+	forward []string
+	scrolls map[string]*ui.ScrollState
+	lists   map[string]*cardPage
+	panel   sidePanel
+	// exportDone includes the resolved threads in the feedback, and
+	// savedPath is where the feedback was saved last.
+	exportDone bool
+	savedPath  string
+	// folded holds the files the reviewer folded or unfolded. The others
+	// are folded while they are viewed or big.
+	folded map[string]bool
+}
+
+func newPerReview() perReview {
+	return perReview{
+		page:    "overview",
+		scrolls: map[string]*ui.ScrollState{},
+		lists:   map[string]*cardPage{},
+		folded:  map[string]bool{},
+	}
+}
+
+// sidePanel is what the side panel shows: a panelThread, a panelQuestion
+// or a panelAsk. It is nil while the panel is closed.
+type sidePanel interface{ isSidePanel() }
+
+// panelThread is the ID of the thread the panel shows.
+type panelThread string
+
+// panelQuestion is the ID of the question walk the panel shows.
+type panelQuestion string
+
+// panelAsk is the target of a new question the panel asks.
+type panelAsk askTarget
+
+func (panelThread) isSidePanel()   {}
+func (panelQuestion) isSidePanel() {}
+func (panelAsk) isSidePanel()      {}
+
+// threadID is the thread the side panel shows, or "".
+func (a *app) threadID() string {
+	id, _ := a.panel.(panelThread)
+	return string(id)
+}
+
+// questionID is the question walk the side panel shows, or "".
+func (a *app) questionID() string {
+	id, _ := a.panel.(panelQuestion)
+	return string(id)
+}
+
+// asking is the target of the new question the side panel asks, or nil.
+func (a *app) asking() *askTarget {
+	if t, ok := a.panel.(panelAsk); ok {
+		return (*askTarget)(&t)
+	}
+	return nil
+}
+
+// perLoad is what a load read about the changes of the scope. A new load
+// replaces all of it.
+type perLoad struct {
+	files    []gitx.FileChange
+	diffstat string
+	loadErr  string
+	// fp identifies the changes of the scope once patchKnown.
+	fp         gitx.Fingerprint
+	patchKnown bool
+	diffs      map[string]*fileDiff
+	// extra holds the files the code snippets show that are not changed.
+	extra map[string]*extraFile
+	// movedTo is the commit that now holds the changes a stale overview
+	// of the uncommitted changes was written for.
+	movedTo string
+}
+
+func newPerLoad() perLoad {
+	return perLoad{diffs: map[string]*fileDiff{}, extra: map[string]*extraFile{}}
+}
+
 func newApp(s store.Store) *app {
 	return &app{
 		store:       s,
 		cfg:         s.LoadConfig(),
 		startAgent:  agent.Run,
-		diffs:       map[string]*fileDiff{},
-		folded:      map[string]bool{},
+		perLoad:     newPerLoad(),
+		perReview:   newPerReview(),
 		reviews:     continuity.New(s),
 		logPct:      50,
 		drafts:      map[string]string{},
 		runner:      newRunner(),
-		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},
 		sidebarW:    280,
 		scopePct:    34,
 		mainPct:     62,
-		page:        "overview",
-		scrolls:     map[string]*ui.ScrollState{},
-		lists:       map[string]*cardPage{},
 		exportAgent: true,
 	}
 }
@@ -557,10 +614,6 @@ func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 		a.saveReview()
 	}
 	a.scope, a.rev = s, rev
-	a.resetNav()
-	a.folded = map[string]bool{}
-	a.exportDone = false
-	a.reviews.ClearAdopted()
 }
 
 // contents is a file read for a diff or a code snippet.
@@ -594,7 +647,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			a.enterScope(s, rev)
 			entered = true
 		}
-		a.clearChanges()
+		a.perLoad = newPerLoad()
 		a.loading = true
 	}
 	before := continuity.BeforeLoad(rev)
@@ -643,19 +696,21 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			if !entered {
 				a.enterScope(s, rev)
 			}
-			a.clearChanges()
 			a.loading, a.switching, a.loadingScope = false, false, nil
 			if err != nil {
-				a.loadErr = err.Error()
+				a.perLoad = perLoad{loadErr: err.Error(), diffs: map[string]*fileDiff{}, extra: map[string]*extraFile{}}
 				return
 			}
-			a.shown = true
-			a.files, a.diffstat = files, stat
-			a.patch, a.patchKnown, a.fileIDs = fp.Patch, perr == nil, fp.Files
-			a.settle(a.reviews.Decide(found, a.rev, a.runner.reviewBusy))
+			diffs := map[string]*fileDiff{}
 			for _, f := range files {
-				a.diffs[f.Path] = &fileDiff{change: f, loading: true}
+				diffs[f.Path] = &fileDiff{change: f, loading: true}
 			}
+			a.perLoad = perLoad{
+				files: files, diffstat: stat, fp: fp, patchKnown: perr == nil,
+				diffs: diffs, extra: map[string]*extraFile{},
+			}
+			a.shown = true
+			a.settle(a.reviews.Decide(found, a.rev, a.runner.reviewBusy))
 			for p, c := range read {
 				if a.diffs[p] != nil {
 					a.setContents(c.change, c.oldText, c.newText, c.err)
@@ -706,15 +761,6 @@ func (a *app) cancelLoad() {
 	}
 }
 
-// clearChanges forgets the changes of the scope, which load reads.
-func (a *app) clearChanges() {
-	a.loadErr = ""
-	a.files, a.diffstat = nil, ""
-	a.patch, a.patchKnown, a.movedTo, a.fileIDs = "", false, "", nil
-	a.diffs = map[string]*fileDiff{}
-	a.extra = map[string]*extraFile{}
-}
-
 // firstPaint are the files the page shows first: the code snippets of
 // an overview or a walkthrough, the file of a file page, the files of a
 // group page.
@@ -758,14 +804,13 @@ func (a *app) settle(out continuity.Outcome) {
 	for _, r := range out.Dropped {
 		a.release(r)
 	}
-	if old := out.Archived; old != nil && a.leaveReview() {
-		a.saved(a.store.SaveReview(old))
+	if old := out.Archived; old != nil {
+		if a.leaveReview() {
+			a.saved(a.store.SaveReview(old))
+		}
+		a.movedTo = ""
 	}
 	a.rev = out.Rev
-	if out.Archived != nil {
-		a.movedTo = ""
-		a.resetNav()
-	}
 	if out.Err != nil {
 		a.saveErr = out.Err.Error()
 	}
@@ -830,7 +875,7 @@ func (a *app) stale() bool {
 	if !ov.Done() || a.loading || (ov.PatchID != "" && !a.patchKnown) || a.busy(store.TargetOverview) {
 		return false
 	}
-	return ov.Stale(a.patch, a.fileNames())
+	return ov.Stale(a.fp.Patch, a.fileNames())
 }
 
 func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error) {
@@ -1006,7 +1051,6 @@ func (a *app) startOver() {
 	a.release(a.rev)
 	a.leaveReview()
 	a.rev = rev
-	a.resetNav()
 	a.drafts = map[string]string{}
 }
 
@@ -1094,17 +1138,18 @@ func (a *app) scopeLabel() string {
 
 func (a *app) openThread(id string) {
 	a.closeEmptyThread(id)
-	a.thread, a.question, a.asking = id, "", nil
+	a.panel = panelThread(id)
 }
 
 // closeEmptyThread drops a thread the user opened and left without
 // writing anything, unless it is the one being opened. It reports whether
 // it dropped one.
 func (a *app) closeEmptyThread(keep string) bool {
-	if a.thread == "" || a.thread == keep || a.rev == nil {
+	id := a.threadID()
+	if id == "" || id == keep || a.rev == nil {
 		return false
 	}
-	t := a.rev.Thread(a.thread)
+	t := a.rev.Thread(id)
 	if t == nil || len(t.Messages) > 0 {
 		return false
 	}
@@ -1113,14 +1158,13 @@ func (a *app) closeEmptyThread(keep string) bool {
 	return true
 }
 
-// leaveReview closes the side panels and the export note of the review
-// the window shows, before another review takes its place. It reports
-// whether it dropped an empty thread. Then the caller saves the review.
+// leaveReview resets perReview and the adopted-from notice before another
+// review takes the place of the one the window shows. It reports whether
+// it dropped an empty thread. Then the caller saves the review.
 func (a *app) leaveReview() bool {
 	dropped := a.closeEmptyThread("")
-	a.thread = ""
-	a.closeQuestion()
-	a.savedPath = ""
+	a.perReview = newPerReview()
+	a.reviews.ClearAdopted()
 	return dropped
 }
 

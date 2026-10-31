@@ -12,7 +12,7 @@ import (
 
 func (a *app) threadPanel(c *ui.Context) {
 	t := c.Theme()
-	th := a.rev.Thread(a.thread)
+	th := a.rev.Thread(a.threadID())
 	if th == nil {
 		return
 	}
@@ -69,7 +69,7 @@ func (a *app) threadPanel(c *ui.Context) {
 
 func (a *app) closeThread() {
 	a.closeEmptyThread("")
-	a.thread = ""
+	a.panel = nil
 }
 
 func messageHeader(c *ui.Context, who string, at time.Time) {

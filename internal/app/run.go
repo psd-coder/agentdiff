@@ -107,7 +107,7 @@ func (a *app) generateOverview() {
 	}
 	rev := a.rev
 	cfg := a.cfg.Agent.Auto()
-	changes := review.ChangeSet{Diffstat: a.diffstatOf(rev), Files: a.fileNames(), PatchID: a.patch, FileIDs: a.fileIDs}
+	changes := review.ChangeSet{Diffstat: a.diffstatOf(rev), Files: a.fileNames(), PatchID: a.fp.Patch, FileIDs: a.fp.Files}
 	ex := review.OverviewExchange(rev, changes, cfg, a.cfg.Questions)
 	a.launch(&agentRun{kind: overviewKind, ex: ex, ended: func(answered bool) {
 		if rev == a.rev {
