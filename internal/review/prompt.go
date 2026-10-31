@@ -252,26 +252,29 @@ type Section struct {
 // first heading is a section without a title.
 func Sections(md string) []Section {
 	var out []Section
-	cur := Section{}
+	title, start := "", 0
 	inFence := false
-	flush := func() {
-		cur.Body = strings.TrimSpace(cur.Body)
-		if cur.Title != "" || cur.Body != "" {
-			out = append(out, cur)
+	// The body is a slice of md: the overview is drawn every frame, and
+	// adding to the body line by line copies it once per line.
+	flush := func(end int) {
+		body := strings.TrimSpace(md[start:end])
+		if title != "" || body != "" {
+			out = append(out, Section{Title: title, Body: body})
 		}
 	}
+	pos := 0
 	for line := range strings.SplitSeq(md, "\n") {
+		next := min(pos+len(line)+1, len(md))
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			inFence = !inFence
 		}
 		if !inFence && strings.HasPrefix(line, "## ") {
-			flush()
-			cur = Section{Title: strings.TrimSpace(strings.TrimPrefix(line, "## "))}
-			continue
+			flush(pos)
+			title, start = strings.TrimSpace(strings.TrimPrefix(line, "## ")), next
 		}
-		cur.Body += line + "\n"
+		pos = next
 	}
-	flush()
+	flush(len(md))
 	return out
 }
 
