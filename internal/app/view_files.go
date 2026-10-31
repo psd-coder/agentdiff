@@ -316,7 +316,7 @@ func (a *app) layoutSwitch(c *ui.Context) {
 func (a *app) fileThreads(c *ui.Context, file string) {
 	var threads []*review.Thread
 	for _, th := range a.rev.ThreadsOn(file) {
-		if th.Anchor.Kind == review.AnchorFile && (len(th.Messages) > 0 || th.ID == a.thread) {
+		if th.Anchor.Kind == review.AnchorFile && (len(th.Messages) > 0 || th.ID == a.threadID()) {
 			threads = append(threads, th)
 		}
 	}
@@ -370,7 +370,7 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
 	}
 	s.Annotations = s.Annotations[:0]
 	for _, th := range a.rev.ThreadsOn(file) {
-		if th.Anchor.Kind != review.AnchorLines || (len(th.Messages) == 0 && th.ID != a.thread) {
+		if th.Anchor.Kind != review.AnchorLines || (len(th.Messages) == 0 && th.ID != a.threadID()) {
 			continue
 		}
 		s.Annotations = append(s.Annotations, editor.DiffAnnotation{
@@ -400,7 +400,7 @@ func (a *app) threadCard(c *ui.Context, th *review.Thread) {
 	t := c.Theme()
 	card := ui.ButtonBase(c.Key("card-"+th.ID)).Height(threadCardHeight).Padding(6, 10).Gap(10).Radius(8).AlignItems(ui.Center).
 		Background(t.Background).Border(1, t.Border)
-	if th.ID == a.thread {
+	if th.ID == a.threadID() {
 		card.Border(2, t.Accent)
 	} else if card.Hovered() {
 		card.Background(t.SurfaceHover)

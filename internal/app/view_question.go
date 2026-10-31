@@ -19,22 +19,29 @@ type askTarget struct {
 
 func (a *app) openQuestion(id string) {
 	a.closeEmptyThread("")
-	a.thread, a.question, a.asking = "", id, nil
+	a.panel = panelQuestion(id)
 }
 
 // askAbout opens the side panel for a new question about a step.
 func (a *app) askAbout(parent string, step int) {
 	a.closeEmptyThread("")
-	a.thread, a.question, a.asking = "", "", &askTarget{parent, step}
+	a.panel = panelAsk{parent, step}
 }
 
-func (a *app) closeQuestion() { a.question, a.asking = "", nil }
+// closeQuestion closes the side panel while it shows a question or asks
+// one.
+func (a *app) closeQuestion() {
+	switch a.panel.(type) {
+	case panelQuestion, panelAsk:
+		a.panel = nil
+	}
+}
 
 // closeGoneQuestion closes the side panel when the walk it asks about,
 // or the question it shows, was deleted.
 func (a *app) closeGoneQuestion() {
 	gone := func(id string) bool { return id != "" && a.rev.Walk(id) == nil }
-	if a.asking != nil && gone(a.asking.parent) || gone(a.question) {
+	if t := a.asking(); t != nil && gone(t.parent) || gone(a.questionID()) {
 		a.closeQuestion()
 	}
 }
@@ -50,7 +57,8 @@ func (a *app) questionDraftKey(w *review.Walk, target askTarget) string {
 }
 
 func (a *app) questionOpen() bool {
-	return a.asking != nil || (a.question != "" && a.rev.Walk(a.question) != nil)
+	id := a.questionID()
+	return a.asking() != nil || (id != "" && a.rev.Walk(id) != nil)
 }
 
 // targetLabel names what a question is about.
@@ -67,8 +75,9 @@ func (a *app) targetLabel(parent string, step int) string {
 func (a *app) questionPanel(c *ui.Context) {
 	t := c.Theme()
 	rev := a.rev
-	w := rev.Walk(a.question)
-	target := a.asking
+	id := a.questionID()
+	w := rev.Walk(id)
+	target := a.asking()
 	if w != nil {
 		target = &askTarget{w.Parent, w.Step}
 	}
@@ -87,7 +96,7 @@ func (a *app) questionPanel(c *ui.Context) {
 		})
 		ui.Text(c, "About: "+a.targetLabel(target.parent, target.step)).FontSize(12).TextColor(t.TextMuted).
 			SingleLine().Padding(6, 12).BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
-		ui.Scroll(c.Key("q-" + a.question)).TrackScroll(a.scrollOf("question:" + a.question)).Grow(1).FillWidth().Children(func() {
+		ui.Scroll(c.Key("q-" + id)).TrackScroll(a.scrollOf("question:" + id)).Grow(1).FillWidth().Children(func() {
 			ui.Column(c).Gap(14).Padding(12).Children(func() {
 				if w == nil {
 					a.earlierQuestions(c, target)

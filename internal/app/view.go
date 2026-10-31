@@ -29,8 +29,8 @@ func (a *app) view(c *ui.Context) {
 		a.saveNotice(c)
 		ui.Split(c, &a.sidebarW, func() { a.sidebar(c) }, func() {
 			var panel func()
-			switch {
-			case a.thread != "" && a.rev.Thread(a.thread) != nil:
+			switch id := a.threadID(); {
+			case id != "" && a.rev.Thread(id) != nil:
 				panel = func() { a.threadPanel(c) }
 			case a.questionOpen():
 				panel = func() { a.questionPanel(c) }

@@ -138,14 +138,14 @@ func TestCommentOnFileAndExport(t *testing.T) {
 	if err := tt.Click("Comment on file"); err != nil {
 		t.Fatal(err)
 	}
-	if a.thread == "" {
+	if a.threadID() == "" {
 		t.Fatal("no thread opened")
 	}
 	tt.Type("Keep keys case-sensitive.")
 	if err := tt.Click("Comment"); err != nil {
 		t.Fatal(err)
 	}
-	th := a.rev.Thread(a.thread)
+	th := a.rev.Thread(a.threadID())
 	if th == nil || len(th.Messages) != 1 || th.Messages[0].Text != "Keep keys case-sensitive." {
 		t.Fatalf("thread = %+v", th)
 	}
@@ -173,7 +173,7 @@ func TestLineThreadAnnotation(t *testing.T) {
 	a := newTestApp(t)
 	a.page = "file:cache/cache.go"
 	a.lineThread("cache/cache.go", lineRange(5, 5))
-	th := a.rev.Thread(a.thread)
+	th := a.rev.Thread(a.threadID())
 	if th.Anchor.Quote != "\treturn strings.ToLower(key)" || th.Anchor.Label() != "cache/cache.go:6 (+)" {
 		t.Errorf("anchor = %+v", th.Anchor)
 	}
@@ -1271,7 +1271,7 @@ func TestQuestionPanel(t *testing.T) {
 	tt.Type("Why lower-case?")
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyEnter)
-	w := a.rev.Walk(a.question)
+	w := a.rev.Walk(a.questionID())
 	if w == nil || w.Question != "Why lower-case?" || w.Step != 0 || a.page != "overview" {
 		t.Fatalf("question = %+v, page %q", w, a.page)
 	}
@@ -1303,8 +1303,8 @@ func TestQuestionPanel(t *testing.T) {
 	if err := tt.Click("Why lower-case?"); err != nil {
 		t.Fatal(err)
 	}
-	if a.question != w.ID {
-		t.Errorf("question = %q", a.question)
+	if a.questionID() != w.ID {
+		t.Errorf("question = %q", a.questionID())
 	}
 }
 
@@ -1387,6 +1387,52 @@ func TestArchiveDropsSavedNote(t *testing.T) {
 	}
 }
 
+// TestStartOverResetsExport starts a review over after its feedback was
+// saved with resolved threads: the feedback page of the new review leaves
+// them out and shows no "Saved to" note.
+func TestStartOverResetsExport(t *testing.T) {
+	a := newTestApp(t)
+	a.exportDone, a.savedPath = true, "/tmp/feedback.md"
+	a.page = "feedback"
+	a.startOver()
+	if a.exportDone || a.savedPath != "" || a.page != "overview" {
+		t.Errorf("after Start Over: resolved %v, saved %q, page %q", a.exportDone, a.savedPath, a.page)
+	}
+}
+
+// TestScopeSwitchKeepsGroupsFolded closes a group of files and switches
+// scope and back: the group stays closed.
+func TestScopeSwitchKeepsGroupsFolded(t *testing.T) {
+	a := newTestApp(t)
+	id := a.groupID(0)
+	*a.groupOpen(id) = false
+	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if *a.groupOpen(id) {
+		t.Errorf("group %q opened again after a scope switch", id)
+	}
+}
+
+// TestSidePanelShowsOne opens the Ask panel, a question and a thread in
+// turn: each one closes the one before.
+func TestSidePanelShowsOne(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "s", Steps: []review.Step{{Title: "One", Text: "t"}},
+	}}
+	q := a.rev.AddWalk("", 0, "Why?")
+	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
+	a.askAbout("", 0)
+	a.openThread(th.ID)
+	if a.questionOpen() || a.threadID() != th.ID {
+		t.Errorf("after the thread: question open %v, thread %q", a.questionOpen(), a.threadID())
+	}
+	a.openQuestion(q.ID)
+	if !a.questionOpen() || a.threadID() != "" {
+		t.Errorf("after the question: question open %v, thread %q", a.questionOpen(), a.threadID())
+	}
+}
+
 // TestLeavingReviewDropsEmptyThread opens a thread on a line, writes
 // nothing, and switches scope and back: the thread is gone from the
 // review, its file and its saved copy.
@@ -1409,7 +1455,7 @@ func TestLeavingReviewDropsEmptyThread(t *testing.T) {
 	}
 
 	a.lineThread("cache/cache.go", lineRange(5, 5))
-	a.comment(a.rev.Thread(a.thread), "Why lower-case?")
+	a.comment(a.rev.Thread(a.threadID()), "Why lower-case?")
 	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	if len(first.Threads) != 1 {
@@ -1438,7 +1484,7 @@ func TestDeleteWalkClosesItsAskPanel(t *testing.T) {
 	parent = a.rev.AddWalk("", 0, "")
 	a.openQuestion(a.rev.AddWalk(parent.ID, 0, "Why?").ID)
 	a.deleteWalk(parent)
-	if a.question != "" {
+	if a.questionID() != "" {
 		t.Error("the panel of a deleted question stayed open")
 	}
 }
@@ -1531,12 +1577,12 @@ func TestKeyboardNavigation(t *testing.T) {
 	}
 
 	a.newThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
-	a.rev.Thread(a.thread).Messages = []review.Message{{Role: review.RoleUser, Text: "x"}}
+	a.rev.Thread(a.threadID()).Messages = []review.Message{{Role: review.RoleUser, Text: "x"}}
 	a.toggleLog()
 	tt.Frame()
 	tt.Key(0, ui.KeyEscape)
-	if a.thread != "" || !a.logOpen {
-		t.Errorf("Escape: thread %q, log %v", a.thread, a.logOpen)
+	if a.threadID() != "" || !a.logOpen {
+		t.Errorf("Escape: thread %q, log %v", a.threadID(), a.logOpen)
 	}
 	tt.Frame()
 	tt.Key(0, ui.KeyEscape)
@@ -1791,7 +1837,7 @@ func TestSelectLineRange(t *testing.T) {
 	}
 	check := func(how string) {
 		t.Helper()
-		th := a.rev.Thread(a.thread)
+		th := a.rev.Thread(a.threadID())
 		if th == nil || th.Anchor.Start != 1 || th.Anchor.End != 3 {
 			t.Errorf("thread from %s = %+v", how, th)
 		}
@@ -1808,7 +1854,7 @@ func TestSelectLineRange(t *testing.T) {
 	tt.Frame()
 	check("+")
 
-	a.thread = ""
+	a.panel = nil
 	tt.Frame()
 	sel()
 	if err := tt.Click("Comment on lines 1–3"); err != nil {
@@ -2279,8 +2325,8 @@ func TestShortcutSettings(t *testing.T) {
 	tt.Frame()
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyU)
 	tt.Frame()
-	if !a.rev.Viewed["api/handler.go"] || a.drafts[a.thread] != "hello" {
-		t.Errorf("in a field: viewed %v, draft %q", a.rev.Viewed, a.drafts[a.thread])
+	if !a.rev.Viewed["api/handler.go"] || a.drafts[a.threadID()] != "hello" {
+		t.Errorf("in a field: viewed %v, draft %q", a.rev.Viewed, a.drafts[a.threadID()])
 	}
 
 	a.resetKeys()
