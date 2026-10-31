@@ -547,6 +547,7 @@ func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 	if a.leaveReview() {
 		a.saveReview()
 	}
+	a.reviews.ClearAdopted()
 	a.scope, a.rev = s, rev
 	delete(a.runner.unseen, rev)
 }
@@ -1088,13 +1089,12 @@ func (a *app) closeEmptyThread(keep string) bool {
 	return true
 }
 
-// leaveReview resets perReview and the adopted-from notice before another
-// review takes the place of the one the window shows. It reports whether
-// it dropped an empty thread. Then the caller saves the review.
+// leaveReview resets perReview before another review takes the place of
+// the one the window shows. It reports whether it dropped an empty thread.
+// Then the caller saves the review.
 func (a *app) leaveReview() bool {
 	dropped := a.closeEmptyThread("")
 	a.perReview = newPerReview()
-	a.reviews.ClearAdopted()
 	return dropped
 }
 

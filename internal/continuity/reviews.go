@@ -66,6 +66,7 @@ func (rs *Reviews) StartOver(repo string, s gitx.Scope) (*review.Review, error) 
 	r := review.New(repo, s)
 	rs.Replace(r)
 	rs.startedOver[key(repo, s)] = true
+	rs.adoptedFrom = nil
 	return r, nil
 }
 
