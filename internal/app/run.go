@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"log"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -128,34 +127,23 @@ func (a *app) generateOverview() {
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &overviewRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.overviews[rev] = run
-	files := a.fileNames()
-	patch, fileIDs := a.patch, a.fileIDs
-	prompt := review.OverviewPrompt(a.scope.Describe(), a.diffstat, a.scope.NewRev(), files, questions)
-	session := ""
-	req := agent.Request{Dir: a.repo.Root, Prompt: prompt, SystemPrompt: review.SystemPrompt}
+	changes := review.ChangeSet{Diffstat: a.diffstat, Files: a.fileNames(), PatchID: a.patch, FileIDs: a.fileIDs}
+	ex := review.OverviewExchange(rev, changes, cfg, questions)
 	info := newRunInfo(store.TargetOverview, "Overview", "", cfg)
-	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
+	a.stream(ctx, cfg, ex.Request, rev, info, func(ev agent.Event) {
 		if a.overviews[rev] != run {
 			return
 		}
 		switch ev.Kind {
 		case agent.EventSession:
-			session = ev.SessionID
+			ex.Started(ev.SessionID)
 		case agent.EventText:
 			run.text += ev.Text
 			run.activity = ""
 		case agent.EventActivity:
 			run.activity = ev.Text
 		case agent.EventDone:
-			ov := review.ReadOverview(answer(ev.Text, run.text), files)
-			ov.Agent, ov.Model, ov.Generated, ov.PatchID, ov.Files = cfg.Provider, cfg.Model, time.Now(), patch, fileIDs
-			if old := rev.Overview; old != nil {
-				ov.Sessions = maps.Clone(old.Sessions)
-			}
-			if session != "" {
-				ov.Sessions.Set(cfg.Provider, session)
-			}
-			rev.Overview = &ov
+			ex.Answered(answer(ev.Text, run.text), time.Now())
 			cancel()
 			delete(a.overviews, rev)
 			a.saveReviewOf(rev)
@@ -164,18 +152,13 @@ func (a *app) generateOverview() {
 			}
 			a.deeperAhead(rev)
 		case agent.EventError:
-			stopped := ctx.Err() != nil
+			if ctx.Err() != nil {
+				ex.Stopped(time.Now())
+			} else {
+				ex.Failed(ev.Err.Error(), time.Now())
+			}
 			cancel()
 			delete(a.overviews, rev)
-			if stopped {
-				return
-			}
-			ov := &review.Overview{Generated: time.Now(), Err: ev.Err.Error()}
-			if old := rev.Overview; old.Done() {
-				ov.Walk, ov.Markdown, ov.Groups, ov.Sessions, ov.PatchID, ov.Files = old.Walk, old.Markdown, old.Groups, old.Sessions, old.PatchID, old.Files
-				ov.Agent, ov.Model, ov.Generated = old.Agent, old.Model, old.Generated
-			}
-			rev.Overview = ov
 			a.saveReviewOf(rev)
 			if rev == a.rev {
 				a.leaveGoneGroup()

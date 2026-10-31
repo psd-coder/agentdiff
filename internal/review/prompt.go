@@ -50,10 +50,10 @@ Explain the idea and leave the details out. The reviewer asks for a deeper walkt
 `
 }
 
-// OverviewPrompt asks for the walkthrough of the whole change set, the
+// overviewPrompt asks for the walkthrough of the whole change set, the
 // answers to the checklist, and the files grouped by intent, all in one
-// JSON block that ReadOverview takes apart.
-func OverviewPrompt(scope, diffstat, newRev string, files []string, questions string) string {
+// JSON block that readOverview takes apart.
+func overviewPrompt(scope, diffstat, newRev string, files []string, questions string) string {
 	if strings.TrimSpace(questions) == "" {
 		questions = DefaultQuestions
 	}
@@ -151,9 +151,9 @@ func FollowupPrompt(f FollowupRequest) string {
 	return b.String()
 }
 
-// ReadOverview turns the agent's answer into an overview: a walkthrough
+// readOverview turns the agent's answer into an overview: a walkthrough
 // when the answer holds one, else the Markdown and its groups block.
-func ReadOverview(answer string, files []string) Overview {
+func readOverview(answer string, files []string) Overview {
 	if w, ok := ParseWalkthrough(answer); ok {
 		groups := NormalizeGroups(w.Groups, files)
 		w.Groups = nil

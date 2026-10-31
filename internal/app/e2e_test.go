@@ -49,9 +49,12 @@ func TestEndToEnd(t *testing.T) {
 	for i, f := range files {
 		names[i] = f.Path
 	}
-	prompt := review.OverviewPrompt(scope.Describe(), stat, scope.NewRev(), names, review.DefaultQuestions)
-	final, session := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: prompt, SystemPrompt: review.SystemPrompt})
-	ov := review.ReadOverview(final, names)
+	rev := review.New(repo.Root, scope)
+	ex := review.OverviewExchange(rev, review.ChangeSet{Diffstat: stat, Files: names}, cfg, review.DefaultQuestions)
+	final, started := runAgent(t, ctx, cfg, ex.Request)
+	ex.Started(started)
+	ex.Answered(final, time.Now())
+	ov := rev.Overview
 	if ov.Walk == nil {
 		t.Fatalf("no walkthrough in:\n%s", final)
 	}
@@ -66,8 +69,9 @@ func TestEndToEnd(t *testing.T) {
 
 	step := ov.Walk.Steps[0]
 	deeper := review.DeeperPrompt(review.DeeperRequest{Step: &step, Known: true, NewRev: scope.NewRev()})
+	session := ov.Sessions[provider]
 	answer, forked := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: deeper, SystemPrompt: review.SystemPrompt, ResumeID: session, Fork: true})
-	if forked == "" || forked == session {
+	if session == "" || forked == "" || forked == session {
 		t.Errorf("fork session = %q, overview session = %q", forked, session)
 	}
 	w, ok := review.ParseWalkthrough(answer)
