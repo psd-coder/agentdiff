@@ -1,6 +1,6 @@
 # AGENTS.md
 
-AgentDiff is a native macOS app in Go, built on [MyGo](https://mygo.egoist.dev) (`github.com/egoist/mygo`, pinned in `go.mod`, drawn with Metal, no webview). It runs the `claude` or `codex` CLI read-only to write a walkthrough of a git diff, then collects review comments into a Markdown feedback file. `README.md` is the user-facing spec: features, storage layout, keyboard shortcuts.
+AgentDiff is a native macOS app in Go, built on [MyGo](https://mygo.egoist.dev) (`github.com/egoist/mygo`, pinned in `go.mod`, drawn with Metal, no webview). It runs the `claude` or `codex` CLI read-only to write a walkthrough of a git diff, then collects review comments into a Markdown feedback file. `README.md` is the user-facing spec: features, storage layout, keyboard shortcuts. `CONTEXT.md` defines the domain terms.
 
 ## Commands
 
@@ -26,7 +26,7 @@ The `validate` skill (`.agents/skills/validate/validate.sh`) runs golangci-lint 
 ## Architecture
 
 - `main.go` picks the repository and calls `app.Run`.
-- `internal/app` holds the UI and app state in one `app` struct (`app.go`). `view*.go` has one file per screen. `run.go` starts the agent runs: overview, deeper walkthroughs, questions, threads. `runner.go` keeps every run in one map, keyed by its review and its target in the run log, ends each run through one path, and holds the queue of the deeper walkthroughs the app writes ahead. `command.go` and `keys.go` hold the commands that the menu bar, the shortcuts and the command palette share. `watch.go` follows the repository's files and git directory.
+- `internal/app` holds the UI and app state in one `app` struct (`app.go`). `view*.go` has one file per screen. `run.go` starts the agent runs: overview, deeper walkthroughs, questions, threads. `runner.go` holds the `runner` type: every run, keyed by its review and its target, the queue of the deeper walkthroughs the app writes ahead, and the one path through which a run ends. The app gives it `a.stream`, which runs the agent and writes the run log, and `a.saveReviewOf`. Its tests use a fake stream and need no git repository. The run logs in memory are the `logs` field of `app`. `command.go` and `keys.go` hold the commands that the menu bar, the shortcuts and the command palette share. `watch.go` follows the repository's files and git directory.
 - `internal/agent` builds the CLI arguments for each provider, parses the JSONL stream into `Event`s, writes run logs, and reads `PATH` from the login shell. `outcome.go` reads from a run's log items how the run ended, what it spent and its own cost. `ResumedSession` reads the resumed session back from a logged command. `testdata/` holds recorded CLI output that the parse tests replay.
 - `internal/gitx` wraps the git CLI. `Scope` is uncommitted changes, a branch against a base, one commit, or a range. A load reads its changes, diffstat, fingerprint and file contents from one `Snapshot`, which resolves the scope to fixed commits once. `patchid.go` gives the `git patch-id` fingerprints that let a review follow its changes across commit, amend, rebase and stash.
 - `internal/review` holds the review model (`Review`, `Walk`, `Thread`, `Anchor`), builds the prompts, parses the agent's Markdown answer into steps and file groups, and exports the feedback.
