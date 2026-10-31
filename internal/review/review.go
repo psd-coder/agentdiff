@@ -57,14 +57,14 @@ type Message struct {
 // Thread is a note for the coding agent, a discussion with the review
 // agent, or both: a thread with only user messages is a plain comment.
 type Thread struct {
-	ID        string         `json:"id"`
-	Anchor    Anchor         `json:"anchor"`
-	Messages  []Message      `json:"messages"`
-	SessionID string         `json:"sessionId,omitempty"`
-	Agent     agent.Provider `json:"agent,omitempty"`
-	Resolved  bool           `json:"resolved,omitempty"`
-	Excluded  bool           `json:"excluded,omitempty"`
-	Created   time.Time      `json:"created"`
+	ID       string         `json:"id"`
+	Anchor   Anchor         `json:"anchor"`
+	Messages []Message      `json:"messages"`
+	Sessions Sessions       `json:"sessions,omitempty"`
+	Agent    agent.Provider `json:"agent,omitempty"`
+	Resolved bool           `json:"resolved,omitempty"`
+	Excluded bool           `json:"excluded,omitempty"`
+	Created  time.Time      `json:"created"`
 }
 
 func (t *Thread) Discussed() bool {
@@ -88,7 +88,7 @@ type Overview struct {
 	Walk      *Walkthrough   `json:"walk,omitempty"`
 	Markdown  string         `json:"markdown,omitempty"`
 	Groups    []Group        `json:"groups,omitempty"`
-	SessionID string         `json:"sessionId,omitempty"`
+	Sessions  Sessions       `json:"sessions,omitempty"`
 	Agent     agent.Provider `json:"agent"`
 	Model     string         `json:"model,omitempty"`
 	Generated time.Time      `json:"generated"`

@@ -168,7 +168,7 @@ Shortcuts lists every command with its shortcut. Click a shortcut and press the 
 
 Automatic runs are the runs the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions, follow-ups, threads and a click on Go deeper use Model and Effort. Each run in the agent log shows the effort it ran at.
 
-The app wraps your questions in the scope, the diffstat, the list of changed files, the walkthrough format and the grouping request, because it parses the answer. Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. A thread's session belongs to one agent. After you switch agents, the next question in an old thread goes to a new session of the new agent, with the thread's anchor and its earlier messages.
+The app wraps your questions in the scope, the diffstat, the list of changed files, the walkthrough format and the grouping request, because it parses the answer. Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. The overview, each walkthrough and each thread keep one session for each agent. After you switch agents, the next question goes on in the earlier session of the new agent. That session does not hold what the other agent answered in between. When the new agent has no session yet, the question starts a new one, with the thread's anchor and its earlier messages.
 
 Appearance sets the theme: System follows the light or dark appearance of macOS, and Light or Dark keeps the app in one of them.
 
