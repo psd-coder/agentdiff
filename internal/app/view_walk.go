@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -140,7 +139,7 @@ type snippet struct {
 
 func (a *app) snippetOf(r review.Ref) snippet {
 	if a.diffs[r.File] == nil {
-		a.extraOf(r.File)
+		a.readExtra(r.File)
 	}
 	s, _ := a.loadedSnippet(r)
 	return s
@@ -220,31 +219,14 @@ func inHunk(hunks []editor.DiffHunk, side review.Side, line int) bool {
 	return false
 }
 
-// extraOf returns a file outside the changes, reading it on first use.
-func (a *app) extraOf(path string) *extraFile {
-	if f := a.extra[path]; f != nil {
-		return f
+// readExtra reads a file outside the changes on its first use. The
+// first load has no snapshot yet, and the view asks again once it shows.
+func (a *app) readExtra(path string) {
+	if a.extra[path] != nil || a.snap == nil {
+		return
 	}
-	// The first load has no snapshot yet. The view asks again once it shows.
-	if a.snap == nil {
-		return &extraFile{loading: true}
-	}
-	f := &extraFile{loading: true}
-	a.extra[path] = f
-	snap, gen := a.snap, a.gen
-	a.async(func() {
-		text, err := snap.File(context.Background(), path)
-		a.update(func() {
-			if gen != a.gen {
-				return
-			}
-			*f = *newExtraFile(text, err)
-			if a.keepSnippets() {
-				a.saveReview()
-			}
-		})
-	})
-	return f
+	a.extra[path] = &extraFile{loading: true}
+	a.loader.readFile(a.snap, path)
 }
 
 // newExtraFile is a file outside the changes, read as text, or failing

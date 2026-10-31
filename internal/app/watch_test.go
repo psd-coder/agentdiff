@@ -102,7 +102,7 @@ func TestWatchWaitsForIndexLock(t *testing.T) {
 	a, watches := newWatchedApp(t, fixtureRepo(t))
 	lock := filepath.Join(a.repo.Root, ".git", "index.lock")
 	write(t, filepath.Dir(lock), "index.lock", "")
-	gen := a.gen
+	gen := a.loader.gen
 	(*watches)[1].emit(".")
 	if len(a.queue) != 0 {
 		t.Fatal("refreshed while git held the index lock")
@@ -112,7 +112,7 @@ func TestWatchWaitsForIndexLock(t *testing.T) {
 	}
 	(*watches)[1].emit(".")
 	drain(a)
-	if a.gen == gen {
+	if a.loader.gen == gen {
 		t.Error("did not refresh once the lock went")
 	}
 }
@@ -124,7 +124,7 @@ func TestWatchReloadsUncommittedChanges(t *testing.T) {
 	a, watches := newWatchedApp(t, dir)
 	tree := (*watches)[0]
 
-	gen := a.gen
+	gen := a.loader.gen
 	tree.emit("dist")
 	if len(a.queue) != 0 {
 		t.Fatal("reloaded for a change in an ignored directory")
@@ -132,16 +132,16 @@ func TestWatchReloadsUncommittedChanges(t *testing.T) {
 	write(t, dir, "api/routes.go", "package api\n")
 	tree.emit("dist", "api")
 	drain(a)
-	if a.gen == gen || !hasFile(a.files, "api/routes.go") {
+	if a.loader.gen == gen || !hasFile(a.files, "api/routes.go") {
 		t.Fatalf("files after a change in api: %+v", a.files)
 	}
 
 	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
 	drain(a)
-	gen = a.gen
+	gen = a.loader.gen
 	tree.emit("api")
 	drain(a)
-	if a.gen != gen {
+	if a.loader.gen != gen {
 		t.Error("reloaded a commit for a change in the working tree")
 	}
 }

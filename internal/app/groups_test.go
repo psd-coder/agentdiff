@@ -59,7 +59,7 @@ func TestGroupPageKeepsGroupAfterReload(t *testing.T) {
 	a.nav.goTo(page{kindGroup, "cache"})
 	write(t, a.repo.Root, "app/main.go", "package main\n")
 	a.refresh()
-	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching })
+	waitLoad(t, a, "the reload")
 	drain(a)
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()

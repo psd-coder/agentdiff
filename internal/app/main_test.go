@@ -383,7 +383,7 @@ func TestArchiveUncommitted(t *testing.T) {
 	reload := func(what string) {
 		t.Helper()
 		a.refresh()
-		pump(t, a, what, func() bool { return !a.loading && !a.switching })
+		waitLoad(t, a, what)
 		drain(a)
 		tt.Frame()
 	}
@@ -439,7 +439,7 @@ func TestArchiveAndAdoptShowsWhereTheReviewCameFrom(t *testing.T) {
 	reload := func(what string) {
 		t.Helper()
 		a.refresh()
-		pump(t, a, what, func() bool { return !a.loading && !a.switching })
+		waitLoad(t, a, what)
 		drain(a)
 		tt.Frame()
 	}
@@ -682,12 +682,12 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 	fake.answer("w1", "Because.")
 	fake.hold()
 	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	pump(t, a, "the commit", func() bool { return !a.switching })
+	waitLoad(t, a, "the commit")
 	otherRev := a.rev
 	other := otherRev.AddWalk("", -1, "Other review?")
 	a.runWalk(otherRev, other)
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	pump(t, a, "the uncommitted changes", func() bool { return !a.switching })
+	waitLoad(t, a, "the uncommitted changes")
 	parent := a.rev.AddWalk("", -1, "Parent?")
 	child := a.rev.AddWalk(parent.ID, -1, "Child?")
 	sibling := a.rev.AddWalk("", -1, "Sibling?")
@@ -813,7 +813,7 @@ func TestGroupsFollowChanges(t *testing.T) {
 	}
 	loaded := func(what string) {
 		t.Helper()
-		pump(t, a, what, func() bool { return !a.loading && !a.switching })
+		waitLoad(t, a, what)
 		drain(a)
 	}
 	want("first load", "api", "cache")
@@ -1114,6 +1114,13 @@ func revSHA(t *testing.T, dir, rev string) string {
 }
 
 // pump runs the app's queued updates on the test goroutine until ok.
+// waitLoad runs the queued updates until the latest load of a scope
+// landed.
+func waitLoad(t *testing.T, a *app, what string) {
+	t.Helper()
+	pump(t, a, what, a.loader.idle)
+}
+
 func pump(t *testing.T, a *app, what string, ok func() bool) {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
@@ -1489,7 +1496,7 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 	}{
 		{"scope switch", func(a *app) {
 			a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-			pump(t, a, "the commit", func() bool { return !a.switching })
+			waitLoad(t, a, "the commit")
 		}},
 		{"start over", func(a *app) { a.startOver() }},
 		{"archive", func(a *app) {
@@ -2347,14 +2354,14 @@ func TestCloseRepoForgetsTheLoad(t *testing.T) {
 	}
 	a.queue = make(chan func(), 64)
 	a.refresh()
-	if !a.switching || a.loadingScope == nil {
-		t.Fatalf("no load runs: switching = %v, loading scope = %v", a.switching, a.loadingScope)
+	if !a.loader.switching() {
+		t.Fatal("no load runs")
 	}
 
 	a.closeRepo()
 	drain(a)
-	if a.loading || a.switching || a.loadingScope != nil {
-		t.Errorf("loading = %v, switching = %v, loading scope = %v", a.loading, a.switching, a.loadingScope)
+	if !a.loader.idle() {
+		t.Error("the load still runs")
 	}
 	if a.snap != nil || len(a.files) != 0 || len(a.diffs) != 0 {
 		t.Errorf("the closed project keeps %d files and %d diffs", len(a.files), len(a.diffs))
@@ -2526,12 +2533,12 @@ func TestScopeShowsAtOnce(t *testing.T) {
 	}}}
 	a.queue = make(chan func(), 64)
 	a.reload()
-	if !a.switching || a.loading || len(a.files) == 0 {
-		t.Fatalf("switching %v, loading %v, files %d", a.switching, a.loading, len(a.files))
+	if !a.loader.switching() || len(a.files) == 0 {
+		t.Fatalf("switching %v, files %d", a.loader.switching(), len(a.files))
 	}
 	(<-a.queue)()
-	if a.switching || len(a.files) == 0 {
-		t.Fatalf("switching %v, files %d", a.switching, len(a.files))
+	if !a.loader.idle() || len(a.files) == 0 {
+		t.Fatalf("idle %v, files %d", a.loader.idle(), len(a.files))
 	}
 	if d := a.diffs["api/handler.go"]; d == nil || d.state == nil {
 		t.Error("the file of the snippet is not read with the changes")
@@ -2544,10 +2551,10 @@ func TestScopeShowsAtOnce(t *testing.T) {
 	old := a.scope
 	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
 	a.setScope(commit)
-	if a.scope != old || a.chosen != commit || !a.switching {
-		t.Fatalf("scope %+v, chosen %+v, switching %v", a.scope, a.chosen, a.switching)
+	if a.scope != old || a.chosen != commit || !a.loader.switching() {
+		t.Fatalf("scope %+v, chosen %+v, switching %v", a.scope, a.chosen, a.loader.switching())
 	}
-	pump(t, a, "the commit", func() bool { return !a.switching })
+	waitLoad(t, a, "the commit")
 	if a.scope != commit || a.nav.page != overview {
 		t.Errorf("scope %+v, page %q", a.scope, a.nav.page.String())
 	}
@@ -2561,7 +2568,7 @@ func TestScopeLoadsInOrder(t *testing.T) {
 	a.queue = make(chan func(), 64)
 	a.openRepo(a.repo.Root)
 	a.setScope(commit)
-	pump(t, a, "the commit", func() bool { return !a.loading && !a.switching })
+	waitLoad(t, a, "the commit")
 	if a.scope != commit || a.rev.Scope != commit {
 		t.Fatalf("scope %+v, review of %+v", a.scope, a.rev.Scope)
 	}
@@ -2569,7 +2576,7 @@ func TestScopeLoadsInOrder(t *testing.T) {
 	uncommitted := gitx.Scope{Kind: gitx.ScopeUncommitted}
 	a.setScope(uncommitted)
 	a.refresh()
-	pump(t, a, "the uncommitted changes", func() bool { return !a.loading && !a.switching })
+	waitLoad(t, a, "the uncommitted changes")
 	if a.scope != uncommitted || a.chosen != uncommitted {
 		t.Errorf("scope %+v, chosen %+v", a.scope, a.chosen)
 	}
@@ -2988,7 +2995,7 @@ func TestEarlierReviewPage(t *testing.T) {
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	a.refresh()
-	pump(t, a, "the other changes", func() bool { return !a.loading && !a.switching })
+	waitLoad(t, a, "the other changes")
 	fake.answer("s2", "```json\n"+`{"summary": "Other change.", "steps": [{"title": "B", "text": "b"}], "groups": []}`+"\n```")
 	a.generateOverview()
 	pump(t, a, "the second overview", func() bool { return !a.busy(store.TargetOverview) })
@@ -3076,7 +3083,7 @@ func TestOverviewShowsCommitMessage(t *testing.T) {
 	a.queue = make(chan func(), 64)
 	git(t, a.repo.Root, "commit", "-qam", "Lower the cache keys\n\nKeys differ only by case in some callers.")
 	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	pump(t, a, "the commit", func() bool { return !a.switching && !a.loading })
+	waitLoad(t, a, "the commit")
 	tt := ui.NewTester(a.view, 1300, 900)
 	tt.Frame()
 	snapshot(t, tt, "overview-commit")
@@ -3086,7 +3093,7 @@ func TestOverviewShowsCommitMessage(t *testing.T) {
 		}
 	}
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
+	waitLoad(t, a, "the uncommitted changes")
 	tt.Frame()
 	if tt.HasText("Keys differ only by case in some callers.") {
 		t.Error("the uncommitted changes show the commit body")
@@ -3106,12 +3113,12 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 	pump(t, a, "the commit list", func() bool { return len(a.commits.rows) > 0 })
 	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
 	a.setScope(commit)
-	pump(t, a, "the commit", func() bool { return !a.switching && !a.loading })
+	waitLoad(t, a, "the commit")
 	rev := a.rev
 	overviewOf := func() targetState { return a.targets.state(rev, review.TargetOverview) }
 	a.generateOverview()
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
+	waitLoad(t, a, "the uncommitted changes")
 	if got := overviewOf(); got.status != targetRunning {
 		t.Fatalf("state while the overview runs = %+v", got)
 	}
@@ -3129,7 +3136,7 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 		t.Error("the uncommitted changes have an unseen answer")
 	}
 	a.setScope(commit)
-	pump(t, a, "the commit again", func() bool { return !a.switching && !a.loading })
+	waitLoad(t, a, "the commit again")
 	if overviewOf().unseen {
 		t.Error("the overview stays unseen after opening the commit")
 	}
@@ -3138,7 +3145,7 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 	fake.hold()
 	a.generateOverview()
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
+	waitLoad(t, a, "the uncommitted changes")
 	fake.release()
 	pump(t, a, "the failed overview", func() bool { return !overviewOf().busy() })
 	if got := overviewOf(); got != (targetState{status: targetFailed, unseen: true}) {

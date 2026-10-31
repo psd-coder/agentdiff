@@ -437,7 +437,7 @@ func (a *app) scopeHeader(c *ui.Context) {
 	ui.Column(c).Gap(2).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, a.scopeLabel()).Bold().SingleLine().Shrink(1).Tooltip(a.scopeLabel())
-			if a.switching {
+			if a.loader.switching() {
 				ui.Spinner(c).Size(12, 12).Label("Reading changes")
 			}
 		})
@@ -533,7 +533,7 @@ func (a *app) fileNav(c *ui.Context) {
 		if len(a.files) > 0 && !slices.ContainsFunc(a.files, func(f gitx.FileChange) bool { return a.listed(f.Path) }) {
 			ui.Text(c, "All files are viewed.").FontSize(12).TextColor(t.TextMuted).Padding(4, 12)
 		}
-		if a.loading {
+		if a.loader.firstLoad() {
 			ui.Row(c).Gap(8).Padding(8, 12).Children(func() {
 				ui.Spinner(c).Size(12, 12)
 				ui.Text(c, "Reading changes…").FontSize(12).TextColor(t.TextMuted)

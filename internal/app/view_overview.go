@@ -65,7 +65,7 @@ func isAre(n int) string {
 // earlierList lists the archived reviews of the uncommitted changes.
 // Each one opens on its own page.
 func (a *app) earlierList(c *ui.Context) {
-	if a.scope.Kind != gitx.ScopeUncommitted || len(a.reviews.Earlier()) == 0 || a.loading {
+	if a.scope.Kind != gitx.ScopeUncommitted || len(a.reviews.Earlier()) == 0 || a.loader.firstLoad() {
 		return
 	}
 	t := c.Theme()
@@ -163,7 +163,7 @@ func (a *app) overviewPage(c *ui.Context) {
 			}
 			a.staleBanner(c)
 			switch {
-			case a.loading:
+			case a.loader.firstLoad():
 				ui.Row(c).Gap(8).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, "Reading changes…").TextColor(t.TextMuted)
@@ -184,7 +184,7 @@ func (a *app) overviewPage(c *ui.Context) {
 			if s := a.state(review.TargetOverview).status; s == targetFailed || s == targetStopped {
 				failureBox(c, ov.Err)
 			}
-			if len(a.files) > 0 && !a.loading {
+			if len(a.files) > 0 && !a.loader.firstLoad() {
 				a.groupCards(c)
 				a.askWalk(c, "")
 				a.generalThreads(c)

@@ -81,7 +81,7 @@ func TestRegenerateAfterReloadInDialog(t *testing.T) {
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	a.refresh()
-	pump(t, a, "the reload", func() bool { return !a.loading && !a.switching && a.rev != old })
+	pump(t, a, "the reload", func() bool { return a.loader.idle() && a.rev != old })
 	fake.hold()
 	confirmed()
 	if old.Walk(step.ID) == nil {

@@ -77,17 +77,9 @@ type app struct {
 	scope gitx.Scope
 	// chosen is the scope the user opened last, which the list of
 	// changes shows chosen while it loads.
-	chosen  gitx.Scope
-	rev     *review.Review
-	loading bool
-	// shown is set once the window shows the changes of a scope, which
-	// stay while the next scope loads, and switching while it does.
-	shown        bool
-	switching    bool
-	loadingScope *scopeLoad
-	// stopLoad cancels the git work of the latest load.
-	stopLoad context.CancelFunc
-	gen      int
+	chosen gitx.Scope
+	rev    *review.Review
+	loader *scopeLoader
 	perLoad
 	// grouped caches groups, which a frame reads several times.
 	grouped groupsCache
@@ -255,6 +247,7 @@ func newApp(s store.Store) *app {
 		exportAgent: true,
 	}
 	a.runner = newRunner(a.stream, a.saveReviewOf)
+	a.loader = newScopeLoader(a.reviews, a.async, a.update, a)
 	a.targets = newTargets(a.runner, a.onScreen)
 	return a
 }
@@ -292,7 +285,7 @@ func (a *app) openRepo(path string) {
 	a.saveConfig()
 	a.branch, a.head, a.base, a.branches = "", "", "", nil
 	a.commits.reset()
-	a.shown = false
+	a.loader.reset()
 	a.baseSet, a.rng, a.worktrees = false, nil, nil
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff: " + r.Name())
@@ -319,11 +312,9 @@ func (a *app) openRepo(path string) {
 func (a *app) closeRepo() {
 	a.repo = nil
 	a.unwatch()
-	a.cancelLoad()
-	a.gen++
-	a.loading, a.switching, a.loadingScope = false, false, nil
+	a.loader.reset()
 	a.perLoad = newPerLoad()
-	a.projectsOpen, a.shown = false, false
+	a.projectsOpen = false
 	a.commits.reset()
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff")
@@ -542,17 +533,8 @@ func (a *app) setScope(s gitx.Scope) {
 // reload reads the changes of the scope again, keeping the review: of
 // the scope being loaded, if one is.
 func (a *app) reload() {
-	if t := a.loadingScope; t != nil {
-		a.load(t.scope, t.fresh)
-		return
-	}
-	a.load(a.scope, false)
-}
-
-// scopeLoad is a scope load reads, and whether it opens anew.
-type scopeLoad struct {
-	scope gitx.Scope
-	fresh bool
+	t := a.loader.again(a.scope)
+	a.load(t.scope, t.fresh)
 }
 
 // enterScope makes s, with its review rev, the scope the window shows.
@@ -565,152 +547,58 @@ func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 	a.targets.seen(rev, review.TargetOverview)
 }
 
-// contents is a file read for a diff or a code snippet.
-type contents struct {
-	change           gitx.FileChange
-	oldText, newText string
-	err              error
-}
-
-// load reads the changes of s, with the files the first page shows, and
-// shows them all at once, so the page does not grow as they come. Until
-// then the window keeps what it shows, under a spinner. A new scope
-// opens with its own review on its overview.
+// load reads the changes of s, with the files the first page shows.
+// Until they land the window keeps what it shows, under a spinner. A new
+// scope opens with its own review on its overview.
 func (a *app) load(s gitx.Scope, fresh bool) {
-	a.cancelLoad()
-	ctx, cancel := context.WithCancel(context.Background())
-	a.stopLoad = cancel
-	a.gen++
-	gen, r := a.gen, a.repo
 	rev, page := a.rev, a.nav.page
 	if fresh {
-		rev, page = a.reviews.Of(r.Root, s), overview
+		rev, page = a.reviews.Of(a.repo.Root, s), overview
 	}
-	a.loadingScope = &scopeLoad{s, fresh}
-	entered := !fresh
-	if a.shown && a.rev != nil && a.rev.Repo == r.Root {
-		a.switching = true
-	} else {
+	if !a.loader.shown {
 		if fresh {
 			a.enterScope(s, rev)
-			entered = true
 		}
 		a.perLoad = newPerLoad()
-		a.loading = true
 	}
-	cont := a.reviews.Begin(r.Root, s, rev)
-	first := a.firstPaint(rev, page, fresh)
-	a.async(func() {
-		defer cancel()
-		var files []gitx.FileChange
-		var stat string
-		var fp gitx.Fingerprint
-		snap, err := r.Snapshot(ctx, s)
-		// A scope that does not resolve has no fingerprint either.
-		perr := err
-		if err == nil {
-			fp, perr = snap.Fingerprint(ctx)
-			if files, err = snap.Changes(ctx); err == nil {
-				stat, err = snap.DiffStat(ctx)
-			}
-		}
-		if perr != nil {
-			log.Printf("fingerprint: %v", perr)
-		}
-		var commit *gitx.Commit
-		if err == nil && s.Kind == gitx.ScopeCommit {
-			if cm, cerr := r.Commit(ctx, s.Commit); cerr == nil {
-				commit = &cm
-			} else {
-				log.Printf("commit message: %v", cerr)
-			}
-		}
-		cont.Read(fp, perr)
-		var cr *gitx.ContentReader
-		// The files of the first page, read before it shows.
-		read := map[string]contents{}
-		if err == nil {
-			cr = snap.NewContentReader(ctx)
-			defer func() {
-				if err := cr.Close(); err != nil && ctx.Err() == nil {
-					log.Printf("content reader: %v", err)
-				}
-			}()
-			for _, p := range first {
-				if i := slices.IndexFunc(files, func(f gitx.FileChange) bool { return f.Path == p }); i >= 0 {
-					oldText, newText, cerr := cr.Contents(files[i])
-					read[p] = contents{files[i], oldText, newText, cerr}
-				} else {
-					text, cerr := cr.File(p)
-					read[p] = contents{newText: text, err: cerr}
-				}
-			}
-		}
-		a.update(func() {
-			if gen != a.gen {
-				return
-			}
-			if !entered {
-				a.enterScope(s, rev)
-			}
-			a.loading, a.switching, a.loadingScope = false, false, nil
-			if err != nil {
-				a.perLoad = perLoad{loadErr: err.Error(), diffs: map[string]*fileDiff{}, extra: map[string]*extraFile{}}
-				return
-			}
-			diffs := map[string]*fileDiff{}
-			for _, f := range files {
-				diffs[f.Path] = &fileDiff{change: f, loading: true}
-			}
-			a.perLoad = perLoad{
-				snap: snap, files: files, diffstat: stat, fp: fp, patchKnown: perr == nil,
-				diffs: diffs, extra: map[string]*extraFile{}, commit: commit,
-			}
-			a.shown = true
-			a.settle(cont.Decide(a.rev, a.runner.reviewBusy))
-			for p, c := range read {
-				if a.diffs[p] != nil {
-					a.setContents(c.change, c.oldText, c.newText, c.err)
-				} else {
-					a.extra[p] = newExtraFile(c.newText, c.err)
-				}
-			}
-			a.leaveGone()
-		})
-		if err != nil {
-			return
-		}
-		if located := cont.Locate(ctx, r); located != nil {
-			a.update(func() {
-				if gen != a.gen {
-					return
-				}
-				a.movedTo = located()
-			})
-		}
-		for _, f := range files {
-			if ctx.Err() != nil {
-				return
-			}
-			if _, ok := read[f.Path]; ok {
-				continue
-			}
-			oldText, newText, cerr := cr.Contents(f)
-			a.update(func() {
-				if gen != a.gen {
-					return
-				}
-				a.setContents(f, oldText, newText, cerr)
-			})
-		}
+	a.loader.start(loadRequest{
+		repo: a.repo, scopeLoad: scopeLoad{s, fresh}, rev: rev,
+		first: a.firstPaint(rev, page, fresh),
 	})
 }
 
-// cancelLoad stops the git work of the latest load, whose results are
-// stale once another load starts or the project closes.
-func (a *app) cancelLoad() {
-	if a.stopLoad != nil {
-		a.stopLoad()
+// scopeLanded shows the changes a load read.
+func (a *app) scopeLanded(ld landing) {
+	if ld.enter {
+		a.enterScope(ld.scope, ld.rev)
+	}
+	a.perLoad = ld.perLoad
+	if a.loadErr != "" {
+		return
+	}
+	a.settle(ld.cont.Decide(a.rev, a.runner.reviewBusy))
+	for p, c := range ld.first {
+		if a.diffs[p] != nil {
+			a.setContents(c.change, c.oldText, c.newText, c.err)
+		} else {
+			a.extra[p] = newExtraFile(c.newText, c.err)
+		}
+	}
+	a.leaveGone()
+}
+
+func (a *app) commitsLocated(movedTo string) { a.movedTo = movedTo }
+
+// fileRead shows a file a load read after it landed: a changed file, or
+// a file outside the changes that a code snippet shows.
+func (a *app) fileRead(c contents) {
+	if a.diffs[c.change.Path] != nil {
+		a.setContents(c.change, c.oldText, c.newText, c.err)
+		return
+	}
+	a.extra[c.change.Path] = newExtraFile(c.newText, c.err)
+	if a.keepSnippets() {
+		a.saveReview()
 	}
 }
 
@@ -813,7 +701,7 @@ func (a *app) showNext(next continuity.Next, failed string) {
 // the scope has now.
 func (a *app) stale() bool {
 	ov := a.rev.Overview
-	if !ov.Done() || a.loading || (ov.PatchID != "" && !a.patchKnown) || a.busy(store.TargetOverview) {
+	if !ov.Done() || a.loader.firstLoad() || (ov.PatchID != "" && !a.patchKnown) || a.busy(store.TargetOverview) {
 		return false
 	}
 	return ov.Stale(a.fp.Patch, a.fileNames())
@@ -852,7 +740,7 @@ func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error)
 // it saved any.
 func (a *app) keepSnippets() bool {
 	ov := a.rev.Overview
-	if a.loading || !ov.Done() || ov.PatchID != "" && !a.patchKnown || a.busy(store.TargetOverview) || a.stale() {
+	if a.loader.firstLoad() || !ov.Done() || ov.PatchID != "" && !a.patchKnown || a.busy(store.TargetOverview) || a.stale() {
 		return false
 	}
 	kept := false
