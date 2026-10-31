@@ -19,7 +19,16 @@ import (
 	"github.com/psd-coder/agentdiff/internal/store"
 )
 
-const commitsShown = 50
+const (
+	// commitPage is how many commits the commit list reads at a time.
+	commitPage = 50
+	// commitsAhead is how close to the last commit read the list scrolls
+	// before it reads the next page.
+	commitsAhead = 10
+	// commitsSearched is how many recent commits hold the changes of an
+	// earlier review that moved.
+	commitsSearched = 50
+)
 
 type fileDiff struct {
 	change  gitx.FileChange
@@ -68,9 +77,28 @@ type app struct {
 	commits     []gitx.Commit
 	commitsErr  string
 	commitsGen  int
+	// commitLog is where the commit list reads its next pages, and
+	// commitsTotal is how many commits the whole list has.
+	commitLog    gitx.CommitLog
+	commitsTotal int
+	// commitsFor is the range the commit list was read for.
+	commitsFor string
+	// commitsReading is set while git reads the commit list or a page of
+	// it. Only one read runs at a time.
+	commitsReading bool
+	// commitsFailedAt is the last row in view when a page failed. The
+	// list reads the page again once it scrolls away from that row.
+	commitsFailedAt int
+	// commitsShown is the commitsGen of the commits the list of changes
+	// showed in the last frame.
+	commitsShown int
+	// changeList is the place of the list of changes in the sidebar.
+	changeList ui.ListState
 
-	scope    gitx.Scope
-	scopeID  string
+	scope gitx.Scope
+	// chosen is the scope the user opened last, which the list of
+	// changes shows chosen while it loads.
+	chosen   gitx.Scope
 	rev      *review.Review
 	files    []gitx.FileChange
 	diffstat string
@@ -232,6 +260,7 @@ func (a *app) openRepo(path string) {
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
 	a.branch, a.head, a.base, a.branches, a.commits = "", "", "", nil, nil
+	a.commitsTotal, a.commitLog = 0, gitx.CommitLog{}
 	a.shown = false
 	a.baseSet, a.rng, a.worktrees = false, nil, nil
 	if a.win != nil {
@@ -438,22 +467,43 @@ func (a *app) refresh() {
 }
 
 // loadCommits reads the commit list again, then runs then, if given.
+// For the same range it reads as many commits as the list already has,
+// so the list keeps its rows and its place.
 func (a *app) loadCommits(then func()) {
 	a.commitsGen++
 	r, gen := a.repo, a.commitsGen
 	base, head := a.listRange()
+	key := base + ".." + cmp.Or(head, a.branch)
+	fresh := key != a.commitsFor
+	limit := commitPage
+	if !fresh {
+		limit = max(limit, len(a.commits))
+	}
+	a.commitsFor = key
+	a.commitsReading = true
 	a.async(func() {
 		ctx := context.Background()
-		log, err := r.CommitLog(ctx, base, head)
+		cl, err := r.CommitLog(ctx, base, head)
+		total := 0
 		var commits []gitx.Commit
 		if err == nil {
-			commits, err = log.Page(ctx, 0, commitsShown)
+			total, err = cl.Count(ctx)
+		}
+		if err == nil {
+			commits, err = cl.Page(ctx, 0, limit)
 		}
 		a.update(func() {
 			if a.repo != r || gen != a.commitsGen {
 				return
 			}
-			a.commits, a.commitsErr = commits, errText(err)
+			if err != nil {
+				commits, total = nil, 0
+			}
+			a.commits, a.commitsTotal, a.commitLog, a.commitsErr = commits, total, cl, errText(err)
+			a.commitsReading = false
+			if fresh {
+				a.changeList.ScrollTo(0, ui.Start)
+			}
 			if then != nil {
 				then()
 			}
@@ -461,7 +511,33 @@ func (a *app) loadCommits(then func()) {
 	})
 }
 
-func scopeID(s gitx.Scope) string { return "scope:" + s.Key() }
+// loadMoreCommits reads the next page of the commit list when last, the
+// last commit in view, is near the end of the commits read. The rows in
+// view count once the list has shown the commits read last.
+func (a *app) loadMoreCommits(last int) {
+	n := len(a.commits)
+	if a.commitsShown != a.commitsGen || a.commitsReading || n >= a.commitsTotal || last < n-commitsAhead ||
+		a.commitsErr != "" && last == a.commitsFailedAt {
+		return
+	}
+	a.commitsReading = true
+	r, gen, cl := a.repo, a.commitsGen, a.commitLog
+	a.async(func() {
+		page, err := cl.Page(context.Background(), n, commitPage)
+		a.update(func() {
+			if a.repo != r || gen != a.commitsGen {
+				return
+			}
+			a.commitsReading = false
+			a.commitsErr, a.commitsFailedAt = errText(err), last
+			if err == nil && len(page) < commitPage {
+				// A short page ends the log, whatever git counted.
+				a.commitsTotal = n + len(page)
+			}
+			a.commits = append(a.commits, page...)
+		})
+	})
+}
 
 func reviewKey(repo string, s gitx.Scope) string { return repo + "\x00" + s.Key() }
 
@@ -478,7 +554,7 @@ func (a *app) reviewOf(s gitx.Scope) *review.Review {
 }
 
 func (a *app) setScope(s gitx.Scope) {
-	a.scopeID = scopeID(s)
+	a.chosen = s
 	a.load(s, true)
 }
 
@@ -803,7 +879,7 @@ type changeID struct {
 // the commit with the same changes, probable a commit that changes all
 // the files of changes no commit holds as they are.
 func findCommits(ctx context.Context, r *gitx.Repo, wanted map[string]changeID) (moved, probable map[string]string) {
-	ids, err := r.CommitPatchIDs(ctx, "", "", commitsShown)
+	ids, err := r.CommitPatchIDs(ctx, "", "", commitsSearched)
 	if err != nil {
 		log.Printf("commit patch ids: %v", err)
 	}
@@ -815,7 +891,7 @@ func findCommits(ctx context.Context, r *gitx.Repo, wanted map[string]changeID) 
 			sets[key] = w.files
 		}
 	}
-	probable, err = r.CommitsWithFiles(ctx, sets, commitsShown)
+	probable, err = r.CommitsWithFiles(ctx, sets, commitsSearched)
 	if err != nil {
 		log.Printf("commits with files: %v", err)
 	}

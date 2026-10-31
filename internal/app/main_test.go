@@ -1863,8 +1863,8 @@ func TestScopeShowsAtOnce(t *testing.T) {
 	old := a.scope
 	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits[0].SHA}
 	a.setScope(commit)
-	if a.scope != old || a.scopeID != scopeID(commit) || !a.switching {
-		t.Fatalf("scope %+v, id %q, switching %v", a.scope, a.scopeID, a.switching)
+	if a.scope != old || a.chosen != commit || !a.switching {
+		t.Fatalf("scope %+v, chosen %+v, switching %v", a.scope, a.chosen, a.switching)
 	}
 	pump(t, a, "the commit", func() bool { return !a.switching })
 	if a.scope != commit || a.page != "overview" {
@@ -1889,8 +1889,8 @@ func TestScopeLoadsInOrder(t *testing.T) {
 	a.setScope(uncommitted)
 	a.refresh()
 	pump(t, a, "the uncommitted changes", func() bool { return !a.loading && !a.switching })
-	if a.scope != uncommitted || a.scopeID != scopeID(uncommitted) {
-		t.Errorf("scope %+v, id %q", a.scope, a.scopeID)
+	if a.scope != uncommitted || a.chosen != uncommitted {
+		t.Errorf("scope %+v, chosen %+v", a.scope, a.chosen)
 	}
 }
 

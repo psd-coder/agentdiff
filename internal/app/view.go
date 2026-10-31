@@ -84,42 +84,248 @@ func sidebarHeading(c *ui.Context, title string, end func()) {
 	})
 }
 
+// scopeList lists the changes to review: the uncommitted ones, all the
+// changes of the branch or range, and its commits. It builds only the
+// rows in view, and reads the next page of commits as the list nears the
+// last one read.
 func (a *app) scopeList(c *ui.Context) {
 	t := c.Theme()
-	choice := a.scopeID
-	list := ui.Sidebar(c, &choice, func() {
-		sidebarHeading(c, "Changes", nil)
-		if a.uncommittedShown() {
-			ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeUncommitted}), editIcon, "Uncommitted changes")
+	s := &a.changeList
+	above := a.changesAbove()
+	if first, last := s.Visible(); first <= last {
+		a.loadMoreCommits(last - len(above))
+	}
+	if !a.commitsReading {
+		a.commitsShown = a.commitsGen
+	}
+	rows := &changeRows{above: above, commits: a.commits, note: a.commitsNote()}
+	chosen := rows.find(a.chosen)
+	// The list paints its chosen row in the accent color. As in a
+	// sidebar, the open scope shows so only while the list has the focus,
+	// and in gray without it.
+	focused := s.Handle.Focused(c)
+	sel := -1
+	if focused {
+		sel = chosen
+	}
+	s.Selected = &sel
+	s.Key = rows.key
+	s.Label = rows.label
+	s.Header = rows.header
+	list := ui.List(c.Key("changes"), s, rows.len()).Fill().Padding(t.Space(2.5), t.Space(2.5)).Gap(t.Space(0.5)).
+		Background(t.Surface).FocusRing(false).Label("Changes")
+	ring := list.FocusVisible()
+	list.Rows(func(lr ui.ListRow) {
+		i := lr.Index
+		look := plainItem
+		switch {
+		case lr.Selected() && ring:
+			look = ringedItem
+		case lr.Selected():
+			look = accentItem
+		case !focused && i == chosen:
+			look = grayItem
 		}
-		ui.SidebarSection(c, a.commitsTitle(), nil, func() {
-			if s, ok := a.allScope(); ok && len(a.commits) > 0 {
-				ui.SidebarItem(c, scopeID(s), layersIcon, "All changes").Tooltip(s.Label()).Children(func() {
-					ui.Badge(c, fmt.Sprint(len(a.commits)))
-				})
+		switch k := rows.kind(i); {
+		case k == headingRow:
+			ui.Column(c).Background(t.Surface).Children(func() { sidebarHeading(c, rows.label(i), nil) })
+		case k == sectionRow:
+			ui.Row(c).Padding(t.Space(4), t.Space(2), t.Space(1), t.Space(2)).Background(t.Surface).Children(func() {
+				ui.Text(c, rows.label(i)).FontSize(t.FontSize - 1).FontWeight(600).TextColor(t.TextMuted).Grow(1).SingleLine()
+			})
+		case k == noteRow && a.commitsErr != "":
+			ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.Danger).Padding(4, 8).Selectable()
+		case k == noteRow:
+			ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.TextMuted).Padding(4, 8)
+		case k == commitRow:
+			cm := rows.commit(i)
+			changeItem(c, commitIcon, cm.Subject, look, func() {
+				ui.Text(c, age(cm.Time)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			}).Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04"))
+		default:
+			row := rows.above[i]
+			item := changeItem(c, row.icon, row.text, look, func() {
+				if row.badge != "" {
+					ui.Badge(c, row.badge)
+				}
+			})
+			if row.tooltip != "" {
+				item.Tooltip(row.tooltip)
 			}
-			for _, cm := range a.commits {
-				ui.SidebarItem(c, scopeID(gitx.Scope{Kind: gitx.ScopeCommit, Commit: cm.SHA}), commitIcon, cm.Subject).
-					Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04")).
-					Children(func() {
-						ui.Text(c, age(cm.Time)).FontSize(11).TextColor(t.TextMuted).SingleLine()
-					})
-			}
-			switch {
-			case a.commitsErr != "":
-				ui.Text(c, "Could not list the commits: "+a.commitsErr).FontSize(12).TextColor(t.Danger).Padding(4, 8).Selectable()
-			case len(a.commits) == 0:
-				ui.Text(c, "No commits").FontSize(12).TextColor(t.TextMuted).Padding(4, 8)
-			}
-		})
-	}).Fill().Label("Changes")
+		}
+	})
 	a.takeFocus(list, "changes")
-	if !list.Changed() || choice == a.scopeID {
-		return
+	if list.Changed() && sel >= 0 {
+		if scope, ok := rows.scope(sel); ok && scope.Key() != a.chosen.Key() {
+			a.setScope(scope)
+		}
 	}
-	if s, ok := a.scopeFromID(choice); ok {
-		a.setScope(s)
+}
+
+// itemLook is how a row of the list of changes shows that it is chosen.
+type itemLook uint8
+
+const (
+	plainItem itemLook = iota
+	// accentItem is the row the list chose, which the list paints.
+	accentItem
+	// ringedItem is the row the list chose, with a focus ring.
+	ringedItem
+	// grayItem is the open scope while the list has no focus.
+	grayItem
+)
+
+// changeItem builds a row that opens a scope, in the look of a sidebar
+// item: the icon, the label, then what end builds.
+func changeItem(c *ui.Context, icon *ui.SVG, label string, look itemLook, end func()) ui.Element {
+	t := c.Theme()
+	iconColor := t.Accent
+	item := ui.Row(c).AlignItems(ui.Center).Gap(t.Space(2)).Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius)
+	switch look {
+	case ringedItem:
+		item.DrawOver(func(p *ui.Painter, r ui.Rect) {
+			p.FocusRing(r, [4]float32{t.Radius, t.Radius, t.Radius, t.Radius})
+		})
+		fallthrough
+	case accentItem:
+		iconColor = t.AccentText
+	case grayItem:
+		item.Background(t.SurfacePressed)
 	}
+	return item.Children(func() {
+		ui.Icon(c, icon).FontSize(16).TextColor(iconColor)
+		ui.Text(c, label).Grow(1).SingleLine()
+		end()
+	})
+}
+
+// changeKind is what a row of the list of changes shows.
+type changeKind uint8
+
+const (
+	headingRow changeKind = iota
+	sectionRow
+	scopeRow
+	commitRow
+	// noteRow is under the commits: that there are none, or an error.
+	noteRow
+)
+
+// changeRow is a row of the list of changes other than a commit.
+type changeRow struct {
+	kind    changeKind
+	text    string
+	icon    *ui.SVG
+	scope   gitx.Scope
+	tooltip string
+	badge   string
+}
+
+// changesAbove are the rows of the list of changes above the commits.
+func (a *app) changesAbove() []changeRow {
+	rows := []changeRow{{kind: headingRow, text: "Changes"}}
+	if a.uncommittedShown() {
+		rows = append(rows, changeRow{kind: scopeRow, text: "Uncommitted changes", icon: editIcon, scope: gitx.Scope{Kind: gitx.ScopeUncommitted}})
+	}
+	rows = append(rows, changeRow{kind: sectionRow, text: a.commitsTitle()})
+	if s, ok := a.allScope(); ok && len(a.commits) > 0 {
+		rows = append(rows, changeRow{kind: scopeRow, text: "All changes", icon: layersIcon, scope: s, tooltip: s.Label(), badge: fmt.Sprint(a.commitsTotal)})
+	}
+	return rows
+}
+
+// commitsNote is the row under the commits, if any.
+func (a *app) commitsNote() []changeRow {
+	switch {
+	case a.commitsErr != "" && len(a.commits) > 0:
+		return []changeRow{{kind: noteRow, text: "Could not list more commits: " + a.commitsErr}}
+	case a.commitsErr != "":
+		return []changeRow{{kind: noteRow, text: "Could not list the commits: " + a.commitsErr}}
+	case len(a.commits) == 0:
+		return []changeRow{{kind: noteRow, text: "No commits"}}
+	}
+	return nil
+}
+
+// changeRows are the rows of the list of changes: those above the
+// commits, the commits, and the note under them.
+type changeRows struct {
+	above   []changeRow
+	commits []gitx.Commit
+	note    []changeRow
+}
+
+func (r *changeRows) len() int { return len(r.above) + len(r.commits) + len(r.note) }
+
+// commit returns the commit of row i, nil for a row that is not one.
+func (r *changeRows) commit(i int) *gitx.Commit {
+	if j := i - len(r.above); j >= 0 && j < len(r.commits) {
+		return &r.commits[j]
+	}
+	return nil
+}
+
+// other returns row i when it is not a commit.
+func (r *changeRows) other(i int) changeRow {
+	if i < len(r.above) {
+		return r.above[i]
+	}
+	return r.note[i-len(r.above)-len(r.commits)]
+}
+
+func (r *changeRows) kind(i int) changeKind {
+	if r.commit(i) != nil {
+		return commitRow
+	}
+	return r.other(i).kind
+}
+
+func (r *changeRows) key(i int) any {
+	if cm := r.commit(i); cm != nil {
+		return cm.SHA
+	}
+	return r.other(i).text
+}
+
+func (r *changeRows) label(i int) string {
+	if cm := r.commit(i); cm != nil {
+		return cm.Subject
+	}
+	return r.other(i).text
+}
+
+// header reports whether row i is one the list cannot choose.
+func (r *changeRows) header(i int) bool {
+	k := r.kind(i)
+	return k != scopeRow && k != commitRow
+}
+
+// scope returns the scope row i opens.
+func (r *changeRows) scope(i int) (gitx.Scope, bool) {
+	if cm := r.commit(i); cm != nil {
+		return gitx.Scope{Kind: gitx.ScopeCommit, Commit: cm.SHA}, true
+	}
+	row := r.other(i)
+	return row.scope, row.kind == scopeRow
+}
+
+// find returns the row that opens s, -1 for none.
+func (r *changeRows) find(s gitx.Scope) int {
+	if s.Kind == gitx.ScopeCommit {
+		for j := range r.commits {
+			if r.commits[j].SHA == s.Commit {
+				return len(r.above) + j
+			}
+		}
+		return -1
+	}
+	key := s.Key()
+	for i, row := range r.above {
+		if row.kind == scopeRow && row.scope.Key() == key {
+			return i
+		}
+	}
+	return -1
 }
 
 // commitsTitle names the commit list.
@@ -131,22 +337,6 @@ func (a *app) commitsTitle() string {
 		return "Commits on " + a.headBranch()
 	}
 	return "Recent commits on " + a.headBranch()
-}
-
-func (a *app) scopeFromID(id string) (gitx.Scope, bool) {
-	candidates := []gitx.Scope{{Kind: gitx.ScopeUncommitted}}
-	if s, ok := a.allScope(); ok {
-		candidates = append(candidates, s)
-	}
-	for _, cm := range a.commits {
-		candidates = append(candidates, gitx.Scope{Kind: gitx.ScopeCommit, Commit: cm.SHA})
-	}
-	for _, s := range candidates {
-		if scopeID(s) == id {
-			return s, true
-		}
-	}
-	return gitx.Scope{}, false
 }
 
 // scopeHeader names the changes under review, above their review.
