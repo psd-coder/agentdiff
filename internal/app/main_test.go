@@ -432,6 +432,49 @@ func TestArchiveUncommitted(t *testing.T) {
 	}
 }
 
+func TestArchiveAndAdoptShowsWhereTheReviewCameFrom(t *testing.T) {
+	a := newTestApp(t)
+	dir := a.repo.Root
+	fake := newFakeAgent(t, a)
+	a.cfg.DeeperAhead = false
+	a.queue = make(chan func(), 64)
+	tt := ui.NewTester(a.view, 1300, 800)
+	overview := func(summary string) {
+		t.Helper()
+		fake.answer("s1", "```json\n"+`{"summary": "`+summary+`", "steps": [{"title": "A", "text": "a"}], "groups": []}`+"\n```")
+		a.generateOverview()
+		pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
+	}
+	reload := func(what string) {
+		t.Helper()
+		a.refresh()
+		pump(t, a, what, func() bool { return !a.loading && !a.switching })
+		drain(a)
+		tt.Frame()
+	}
+
+	overview("First changes.")
+	git(t, dir, "stash", "-u", "-q")
+	write(t, dir, "output.json", "{}\n")
+	reload("the other changes")
+	overview("Other changes.")
+
+	if err := os.Remove(filepath.Join(dir, "output.json")); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "stash", "pop", "-q")
+	reload("the first changes back")
+	if !tt.HasText("First changes.") || !tt.HasText("Moved here from earlier uncommitted changes, which had the same changes.") || !tt.HasText("Other changes.") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+
+	a.startOver()
+	tt.Frame()
+	if tt.HasText("Moved here from earlier uncommitted changes, which had the same changes.") {
+		t.Errorf("the notice stayed after start over: %q", tt.Texts())
+	}
+}
+
 func TestStaleOverviewAndStartOver(t *testing.T) {
 	a := newTestApp(t)
 	a.rev.Overview = &review.Overview{Markdown: "## A\nx", Groups: []review.Group{{Title: "Old", Files: []string{"gone.go"}}}, Agent: agent.Claude}
