@@ -2,6 +2,7 @@ package review
 
 import (
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
@@ -16,9 +17,9 @@ type ChangeSet struct {
 	FileIDs map[string]string
 }
 
-// Exchange is one run of the agent for the overview or a walk of a
-// review. It holds the request to send, and it writes what comes back into
-// the review.
+// Exchange is one run of the agent for the overview, a walk or a thread
+// of a review. It holds the request to send, and it writes what comes back
+// into the review.
 type Exchange struct {
 	Request agent.Request
 	rev     *Review
@@ -27,6 +28,11 @@ type Exchange struct {
 	session string
 	// walk is the walk the run writes, nil for the overview.
 	walk *Walk
+	// thread is the thread the run answers in, and reply is where the
+	// answer goes in its messages. Comments added during the run come
+	// after the answer.
+	thread *Thread
+	reply  int
 }
 
 // OverviewExchange starts the exchange for a new overview of r. The
@@ -35,7 +41,7 @@ type Exchange struct {
 func OverviewExchange(r *Review, changes ChangeSet, cfg agent.Config, questions string) *Exchange {
 	prompt := overviewPrompt(r.Scope.Describe(), changes.Diffstat, r.Scope.NewRev(), changes.Files, questions)
 	return &Exchange{
-		Request: agent.Request{Dir: r.Repo, Prompt: prompt, SystemPrompt: SystemPrompt},
+		Request: agent.Request{Dir: r.Repo, Prompt: prompt, SystemPrompt: systemPrompt},
 		rev:     r,
 		cfg:     cfg,
 		changes: changes,
@@ -60,11 +66,11 @@ func DeeperExchange(r *Review, w *Walk, cfg agent.Config, diffstat string) *Exch
 	if s, ok := r.StepOf(w); ok {
 		d.Step = &s
 	}
-	req := agent.Request{Dir: r.Repo, SystemPrompt: SystemPrompt}
+	req := agent.Request{Dir: r.Repo, SystemPrompt: systemPrompt}
 	if d.Known {
 		req.ResumeID, req.Fork = parentSession, true
 	} else {
-		d.Context = ContextPrompt(r.Scope.Describe(), diffstat)
+		d.Context = contextPrompt(r.Scope.Describe(), diffstat)
 		path := r.WalkPath(w.ID)
 		for _, p := range path[:len(path)-1] {
 			d.Path = append(d.Path, r.WalkTitle(p))
@@ -83,11 +89,11 @@ func DeeperExchange(r *Review, w *Walk, cfg agent.Config, diffstat string) *Exch
 func FollowupExchange(r *Review, w *Walk, cfg agent.Config, diffstat, question string) *Exchange {
 	session := w.Sessions[cfg.Provider]
 	f := followupRequest{Question: question, Known: session != "", NewRev: r.Scope.NewRev()}
-	req := agent.Request{Dir: r.Repo, SystemPrompt: SystemPrompt}
+	req := agent.Request{Dir: r.Repo, SystemPrompt: systemPrompt}
 	if f.Known {
 		req.ResumeID = session
 	} else {
-		f.Context = ContextPrompt(r.Scope.Describe(), diffstat)
+		f.Context = contextPrompt(r.Scope.Describe(), diffstat)
 		f.Earlier = w.Turns()
 	}
 	req.Prompt = followupPrompt(f)
@@ -95,10 +101,42 @@ func FollowupExchange(r *Review, w *Walk, cfg agent.Config, diffstat, question s
 	return &Exchange{Request: req, rev: r, cfg: cfg, walk: w}
 }
 
-// Started records the session the agent started for the run. A walk keeps
-// it at once, so a run that fails later still leaves the session to go on
-// from.
+// ThreadExchange starts the exchange for a question in t, and adds the
+// question to the thread. The thread's first question with a provider
+// forks the overview's session of that provider, so every thread starts
+// from what the agent learned writing the overview, and threads stay
+// apart. Later questions go on in the thread's own session. Without
+// either session, a new session is told the change set. diffstat is
+// empty when the app does not know it.
+func ThreadExchange(r *Review, t *Thread, cfg agent.Config, diffstat, question string) *Exchange {
+	t.Messages = append(t.Messages, Message{Role: RoleUser, Text: question, Time: time.Now()})
+	t.Agent = cfg.Provider
+	session, overviewSession := t.Sessions[cfg.Provider], ""
+	if r.Overview != nil {
+		overviewSession = r.Overview.Sessions[cfg.Provider]
+	}
+	req := agent.Request{Dir: r.Repo, SystemPrompt: systemPrompt}
+	prompt := questionPrompt(t, question, session != "")
+	switch {
+	case session != "":
+		req.ResumeID = session
+	case overviewSession != "":
+		req.ResumeID, req.Fork = overviewSession, true
+	default:
+		prompt = contextPrompt(r.Scope.Describe(), diffstat) + prompt
+	}
+	req.Prompt = prompt
+	return &Exchange{Request: req, rev: r, cfg: cfg, thread: t, reply: len(t.Messages)}
+}
+
+// Started records the session the agent started for the run. A walk or a
+// thread keeps it at once, so a run that fails later still leaves the
+// session to go on from.
 func (e *Exchange) Started(session string) {
+	if e.thread != nil {
+		e.thread.Sessions.Set(e.cfg.Provider, session)
+		return
+	}
 	if e.walk != nil {
 		e.walk.Sessions.Set(e.cfg.Provider, session)
 		return
@@ -106,10 +144,15 @@ func (e *Exchange) Started(session string) {
 	e.session = session
 }
 
-// Answered writes the agent's answer into the review. A walk's answer is a
-// walkthrough, or the answer as Markdown when it holds none. The new
-// overview keeps the sessions of the other providers.
+// Answered writes the agent's answer into the review. A thread gets the
+// answer as a message. A walk's answer is a walkthrough, or the answer as
+// Markdown when it holds none. The new overview keeps the sessions of the
+// other providers.
 func (e *Exchange) Answered(answer string, at time.Time) {
+	if e.thread != nil {
+		e.addReply(Message{Role: RoleAgent, Text: answer, Time: at})
+		return
+	}
 	if w := e.walk; w != nil {
 		if wt, ok := parseWalkthrough(answer); ok {
 			w.setAnswer(wt, "", "", at)
@@ -133,10 +176,14 @@ func (e *Exchange) Answered(answer string, at time.Time) {
 	e.rev.Overview = &ov
 }
 
-// Failed shows msg in place of the walk's latest answer, or over the
-// overview. An overview with an explanation keeps it, with its sessions
-// and the agent that wrote it.
+// Failed shows msg in place of the thread's answer, in place of the walk's
+// latest answer, or over the overview. An overview with an explanation
+// keeps it, with its sessions and the agent that wrote it.
 func (e *Exchange) Failed(msg string, at time.Time) {
+	if e.thread != nil {
+		e.addReply(Message{Role: RoleAgent, Err: msg, Time: at})
+		return
+	}
 	if e.walk != nil {
 		e.walk.setAnswer(nil, "", msg, at)
 		return
@@ -151,3 +198,9 @@ func (e *Exchange) Failed(msg string, at time.Time) {
 
 // Stopped shows "Stopped" as the failure, for a run the user stopped.
 func (e *Exchange) Stopped(at time.Time) { e.Failed("Stopped", at) }
+
+// addReply puts m into the thread right after the question it answers.
+func (e *Exchange) addReply(m Message) {
+	t := e.thread
+	t.Messages = slices.Insert(t.Messages, e.reply, m)
+}

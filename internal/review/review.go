@@ -46,12 +46,10 @@ const (
 )
 
 type Message struct {
-	Role     Role      `json:"role"`
-	Text     string    `json:"text"`
-	Time     time.Time `json:"time"`
-	Err      string    `json:"err,omitempty"`
-	Pending  bool      `json:"-"`
-	Activity string    `json:"-"`
+	Role Role      `json:"role"`
+	Text string    `json:"text"`
+	Time time.Time `json:"time"`
+	Err  string    `json:"err,omitempty"`
 }
 
 // Thread is a note for the coding agent, a discussion with the review

@@ -558,7 +558,7 @@ func TestStartOverDuringRuns(t *testing.T) {
 	a.queue = make(chan func(), 64)
 	fake := newFakeAgent(t, a)
 	fake.answer("t1", "Because.")
-	a.ask(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
+	a.ask(a.rev, a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
 	thread := a.runs[a.rev][0]
 	fake.hold()
 	a.askQuestion("", -1, "What?")
@@ -605,6 +605,9 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 	tt.Frame()
 	if n := len(a.runs[a.rev]); n != 1 {
 		t.Fatalf("runs after the first question = %d", n)
+	}
+	if !tt.HasText("Thinking…") {
+		t.Error("the thread does not show the answer being written")
 	}
 
 	tt.Type("Keep it short.")
@@ -687,6 +690,30 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 	pump(t, a, "the stopped runs", func() bool { return !a.walkBusy(parent.ID) && !a.walkBusy(child.ID) })
 	if parent.Err != "Stopped" || child.Err != "Stopped" || !a.walkBusy(sibling.ID) || !a.walkBusy(other.ID) {
 		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, a.walkBusy(sibling.ID), a.walkBusy(other.ID))
+	}
+}
+
+// TestThreadOfReviewOffScreen asks in a thread of a review that is not
+// on screen. The question goes to that review's repository and scope, and
+// the answer goes into its thread.
+func TestThreadOfReviewOffScreen(t *testing.T) {
+	a := newTestApp(t)
+	a.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, a)
+	fake.answer("t1", "Because.")
+	other := review.New(t.TempDir(), gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
+	th := other.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	a.ask(other, th, "Why?")
+	pump(t, a, "the answer", func() bool { return !a.threadBusy(th.ID) })
+	req := fake.received()[0]
+	if req.Dir != other.Repo {
+		t.Errorf("dir %q, want %q", req.Dir, other.Repo)
+	}
+	if !strings.Contains(req.Prompt, "commit abc123") || strings.Contains(req.Prompt, "uncommitted") || !strings.Contains(req.Prompt, "Diffstat:\n```\n\n```") {
+		t.Errorf("prompt = %q", req.Prompt)
+	}
+	if n := len(th.Messages); n != 2 || th.Messages[1].Text != "Because." {
+		t.Errorf("messages = %+v", th.Messages)
 	}
 }
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
@@ -44,8 +45,15 @@ func (a *app) threadPanel(c *ui.Context) {
 				if len(th.Messages) == 0 {
 					ui.Text(c, "Write a comment for the coding agent, or ask the review agent a question. Each thread is a separate conversation.").TextColor(t.TextMuted)
 				}
+				run := a.threadRuns[th.ID]
 				for i := range th.Messages {
+					if run != nil && run.reply == i {
+						a.pendingReply(c, th, run)
+					}
 					a.message(c, th, i)
+				}
+				if run != nil && run.reply == len(th.Messages) {
+					a.pendingReply(c, th, run)
 				}
 			})
 		})
@@ -64,6 +72,31 @@ func (a *app) closeThread() {
 	a.thread = ""
 }
 
+func messageHeader(c *ui.Context, who string, at time.Time) {
+	t := c.Theme()
+	ui.Row(c).Gap(6).Children(func() {
+		ui.Text(c, who).FontSize(11).Bold().TextColor(t.TextMuted)
+		if !at.IsZero() {
+			ui.Text(c, at.Format("15:04")).FontSize(11).TextColor(t.TextMuted)
+		}
+	})
+}
+
+// pendingReply is the answer the agent writes in the thread now.
+func (a *app) pendingReply(c *ui.Context, th *review.Thread, run *threadRun) {
+	t := c.Theme()
+	ui.Column(c.Key("pending")).Gap(4).Children(func() {
+		messageHeader(c, providerName(th.Agent), run.started)
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Spinner(c).Size(12, 12)
+			ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
+		})
+		if run.text != "" {
+			markdown.Stream(c, run.text, &a.md)
+		}
+	})
+}
+
 func (a *app) message(c *ui.Context, th *review.Thread, i int) {
 	t := c.Theme()
 	m := th.Messages[i]
@@ -72,24 +105,9 @@ func (a *app) message(c *ui.Context, th *review.Thread, i int) {
 		if m.Role == review.RoleAgent {
 			who = providerName(th.Agent)
 		}
-		ui.Row(c).Gap(6).Children(func() {
-			ui.Text(c, who).FontSize(11).Bold().TextColor(t.TextMuted)
-			if !m.Time.IsZero() {
-				ui.Text(c, m.Time.Format("15:04")).FontSize(11).TextColor(t.TextMuted)
-			}
-		})
+		messageHeader(c, who, m.Time)
 		if m.Role == review.RoleUser {
 			ui.Text(c, m.Text).Selectable().Padding(8, 10).Radius(8).Background(t.Surface)
-			return
-		}
-		if m.Pending {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c).Size(12, 12)
-				ui.Text(c, m.Activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
-			})
-			if m.Text != "" {
-				markdown.Stream(c, m.Text, &a.md)
-			}
 			return
 		}
 		if m.Text != "" {
@@ -113,7 +131,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 		in := ui.TextArea(c.Key("draft-"+th.ID), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
 			OnTextKey(func(k ui.TextKey) bool {
 				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !a.threadBusy(th.ID) {
-					a.ask(th, k.Text())
+					a.ask(a.rev, th, k.Text())
 					k.SetText("")
 					a.drafts[th.ID] = ""
 					return true
@@ -132,7 +150,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 				a.drafts[th.ID] = ""
 			})
 			ui.PrimaryButton(c, "Ask agent").Disabled(empty || busy).OnClick(func() {
-				a.ask(th, draft)
+				a.ask(a.rev, th, draft)
 				a.drafts[th.ID] = ""
 			})
 		})

@@ -133,19 +133,19 @@ func TestSessionsPerProvider(t *testing.T) {
 		withRootOverview(a)
 		th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
 		useAgent(a, f, agent.Claude, "c1")
-		a.ask(th, "Why?")
+		a.ask(a.rev, th, "Why?")
 		idle(t, a, "the first answer")
 		if got := lastResumed(a); got != "root" {
 			t.Errorf("first question forked %q, want the overview session", got)
 		}
 		useAgent(a, f, agent.Codex, "x1")
-		a.ask(th, "And codex?")
+		a.ask(a.rev, th, "And codex?")
 		idle(t, a, "the codex answer")
 		if got := lastResumed(a); got != "" {
 			t.Errorf("codex question resumed %q", got)
 		}
 		useAgent(a, f, agent.Claude, "c2")
-		a.ask(th, "And claude?")
+		a.ask(a.rev, th, "And claude?")
 		idle(t, a, "the claude answer")
 		if got := lastResumed(a); got != "c1" {
 			t.Errorf("claude question resumed %q, want c1", got)
@@ -161,7 +161,7 @@ func TestFailedStartKeepsSessions(t *testing.T) {
 	useAgent(a, f, agent.Claude, "c1")
 	a.generateOverview()
 	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-	a.ask(th, "Why?")
+	a.ask(a.rev, th, "Why?")
 	a.askQuestion("", -1, "What?")
 	idle(t, a, "the claude runs")
 	w := a.rev.Walks[0]
@@ -169,7 +169,7 @@ func TestFailedStartKeepsSessions(t *testing.T) {
 	a.cfg.Agent = agent.Config{Provider: agent.Codex}
 	f.fail(errors.New("codex: executable file not found in $PATH"))
 	a.generateOverview()
-	a.ask(th, "And codex?")
+	a.ask(a.rev, th, "And codex?")
 	a.askMore(a.rev, w, "And codex?")
 	idle(t, a, "the failed codex runs")
 	ov := a.rev.Overview
@@ -189,7 +189,7 @@ func TestFailedStartKeepsSessions(t *testing.T) {
 	}
 
 	useAgent(a, f, agent.Codex, "x1")
-	a.ask(th, "And now?")
+	a.ask(a.rev, th, "And now?")
 	idle(t, a, "the codex answer")
 	if got := lastResumed(a); got != "" {
 		t.Errorf("codex question resumed %q", got)

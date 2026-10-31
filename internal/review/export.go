@@ -86,7 +86,7 @@ func writeMessages(b *strings.Builder, t *Thread, withAgent bool) {
 		return
 	}
 	for _, m := range t.Messages {
-		if m.Role == RoleAgent && (m.Pending || m.Text == "") {
+		if m.Role == RoleAgent && m.Text == "" {
 			continue
 		}
 		who := "Reviewer"

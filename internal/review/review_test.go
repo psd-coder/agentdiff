@@ -174,7 +174,7 @@ func TestExport(t *testing.T) {
 		{Role: RoleUser, Text: "why remove validation?"},
 		{Role: RoleAgent, Text: "It moved to the caller."},
 		{Role: RoleUser, Text: "keep it here too"},
-		{Role: RoleAgent, Pending: true},
+		{Role: RoleAgent},
 	}
 	resolved := r.AddThread(Anchor{Kind: AnchorGeneral})
 	resolved.Messages = []Message{{Role: RoleUser, Text: "done"}}
@@ -203,23 +203,6 @@ func TestExportEmpty(t *testing.T) {
 	got := Export(New("/r", gitx.Scope{}), "s", ExportOptions{})
 	if !strings.HasSuffix(got, "No comments.\n") {
 		t.Errorf("Export = %q", got)
-	}
-}
-
-func TestQuestionPrompt(t *testing.T) {
-	th := &Thread{Anchor: Anchor{Kind: AnchorLines, File: "a.go", Side: SideNew, Start: 3, Quote: "x := 1"}}
-	th.Messages = []Message{{Role: RoleUser, Text: "why?"}}
-	p := QuestionPrompt(th, "why?", false)
-	if !strings.Contains(p, "a.go:3 (+)") || !strings.Contains(p, "x := 1") || !strings.HasSuffix(p, "why?") || strings.Contains(p, "so far") {
-		t.Errorf("first prompt = %q", p)
-	}
-	th.Messages = append(th.Messages, Message{Role: RoleAgent, Text: "because"}, Message{Role: RoleUser, Text: "ok?"})
-	if p := QuestionPrompt(th, "ok?", true); p != "ok?" {
-		t.Errorf("prompt to a known session = %q", p)
-	}
-	p = QuestionPrompt(th, "ok?", false)
-	if !strings.Contains(p, "a.go:3 (+)") || !strings.Contains(p, "Reviewer: why?\n\nAgent: because") || strings.Contains(p, "Reviewer: ok?") || !strings.HasSuffix(p, "ok?") {
-		t.Errorf("prompt to a new session = %q", p)
 	}
 }
 
@@ -254,7 +237,7 @@ func TestThreads(t *testing.T) {
 	if r.Thread(a.ID) != nil || len(r.Threads) != 2 {
 		t.Error("DeleteThread failed")
 	}
-	a.Messages = []Message{{Role: RoleUser}, {Role: RoleAgent, Pending: true}}
+	a.Messages = []Message{{Role: RoleUser}, {Role: RoleAgent}}
 	if !a.Discussed() {
 		t.Error("Discussed wrong")
 	}
