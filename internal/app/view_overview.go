@@ -129,7 +129,7 @@ func shortSHA(sha string) string { return sha[:min(len(sha), 7)] }
 // commitName names a commit by its short hash and, when the commit list
 // has it, its subject.
 func (a *app) commitName(sha string) string {
-	for _, cm := range a.commits {
+	for _, cm := range a.commits.rows {
 		if cm.SHA == sha {
 			return cm.Short + " (" + cm.Subject + ")"
 		}

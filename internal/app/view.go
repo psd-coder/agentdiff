@@ -93,13 +93,17 @@ func (a *app) scopeList(c *ui.Context) {
 	t := c.Theme()
 	s := &a.changeList
 	above := a.changesAbove()
-	if first, last := s.Visible(); first <= last {
-		a.loadMoreCommits(last - len(above))
+	if a.commits.scrollTop() {
+		s.ScrollTo(0, ui.Start)
 	}
-	if !a.commitsReading {
-		a.commitsShown = a.commitsGen
+	last := -1
+	if first, l := s.Visible(); first <= l {
+		last = l - len(above)
 	}
-	rows := &changeRows{above: above, commits: a.commits, note: a.commitsNote()}
+	if a.commits.built(last) {
+		a.readCommitPage(last)
+	}
+	rows := &changeRows{above: above, commits: a.commits.rows, note: a.commitsNote()}
 	chosen := rows.find(a.chosen)
 	// The list paints its chosen row in the accent color. As in a
 	// sidebar, the open scope shows so only while the list has the focus,
@@ -134,13 +138,13 @@ func (a *app) scopeList(c *ui.Context) {
 			ui.Row(c).Padding(t.Space(4), t.Space(2), t.Space(1), t.Space(2)).Background(t.Surface).Children(func() {
 				ui.Text(c, rows.label(i)).FontSize(t.FontSize - 1).FontWeight(600).TextColor(t.TextMuted).Grow(1).SingleLine()
 			})
-		case k == noteRow && a.commitsErr != "" && len(rows.commits) > 0:
+		case k == noteRow && a.commits.err != "" && len(rows.commits) > 0:
 			ui.Column(c).Gap(4).Padding(4, 8).Children(func() {
 				ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.Danger).Selectable()
 				textLink(c, "Try again", func(e ui.Element) { e.FontSize(12) }).AlignSelf(ui.Start).
-					OnClick(func() { a.readCommitPage(a.commitsFailedAt) })
+					OnClick(func() { a.readCommitPage(a.commits.failedAt) })
 			})
-		case k == noteRow && a.commitsErr != "":
+		case k == noteRow && a.commits.err != "":
 			ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.Danger).Padding(4, 8).Selectable()
 		case k == noteRow:
 			ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.TextMuted).Padding(4, 8)
@@ -236,8 +240,8 @@ func (a *app) changesAbove() []changeRow {
 		rows = append(rows, changeRow{kind: scopeRow, text: "Uncommitted changes", icon: editIcon, scope: gitx.Scope{Kind: gitx.ScopeUncommitted}})
 	}
 	rows = append(rows, changeRow{kind: sectionRow, text: a.commitsTitle()})
-	if s, ok := a.allScope(); ok && len(a.commits) > 0 {
-		rows = append(rows, changeRow{kind: scopeRow, text: "All changes", icon: layersIcon, scope: s, tooltip: s.Label(), badge: fmt.Sprint(a.commitsTotal)})
+	if s, ok := a.allScope(); ok && len(a.commits.rows) > 0 {
+		rows = append(rows, changeRow{kind: scopeRow, text: "All changes", icon: layersIcon, scope: s, tooltip: s.Label(), badge: fmt.Sprint(a.commits.total)})
 	}
 	return rows
 }
@@ -245,11 +249,11 @@ func (a *app) changesAbove() []changeRow {
 // commitsNote is the row under the commits, if any.
 func (a *app) commitsNote() []changeRow {
 	switch {
-	case a.commitsErr != "" && len(a.commits) > 0:
-		return []changeRow{{kind: noteRow, text: "Could not list more commits: " + a.commitsErr}}
-	case a.commitsErr != "":
-		return []changeRow{{kind: noteRow, text: "Could not list the commits: " + a.commitsErr}}
-	case len(a.commits) == 0:
+	case a.commits.err != "" && len(a.commits.rows) > 0:
+		return []changeRow{{kind: noteRow, text: "Could not list more commits: " + a.commits.err}}
+	case a.commits.err != "":
+		return []changeRow{{kind: noteRow, text: "Could not list the commits: " + a.commits.err}}
+	case len(a.commits.rows) == 0:
 		return []changeRow{{kind: noteRow, text: "No commits"}}
 	}
 	return nil

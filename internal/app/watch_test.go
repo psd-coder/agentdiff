@@ -93,8 +93,8 @@ func TestWatchShowsNewCommits(t *testing.T) {
 	git(t, dir, "commit", "-qm", "Commit the work")
 	(*watches)[1].emit("refs/heads")
 	drain(a)
-	if len(a.commits) != 2 || a.commits[0].Subject != "Commit the work" {
-		t.Fatalf("commits = %+v", a.commits)
+	if len(a.commits.rows) != 2 || a.commits.rows[0].Subject != "Commit the work" {
+		t.Fatalf("commits = %+v", a.commits.rows)
 	}
 }
 
