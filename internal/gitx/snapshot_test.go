@@ -2,6 +2,7 @@ package gitx
 
 import (
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -83,5 +84,38 @@ func TestSnapshotSkipsDeletedUntrackedFile(t *testing.T) {
 	fp, err := snap.Fingerprint(ctx)
 	if _, ok := fp.Files["gone.txt"]; err != nil || ok || fp.Files["kept.txt"] == "" {
 		t.Errorf("Fingerprint() files = %v, %v", fp.Files, err)
+	}
+}
+
+func TestDiffStatUncommitted(t *testing.T) {
+	r := uncommittedFixture(t).open()
+	stat, err := snapshot(t, r, Scope{Kind: ScopeUncommitted}).DiffStat(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []*regexp.Regexp{
+		regexp.MustCompile(`mod\.txt +\| +3 \+\+-\n`),
+		regexp.MustCompile(`del\.txt +\| +1 -\n`),
+		regexp.MustCompile(`(?m)^ dir/untracked file\.txt \| 2 \+\+ \(untracked\)$`),
+		regexp.MustCompile(`(?m)^ untracked\.bin \| Bin \(untracked\)$`),
+		regexp.MustCompile(`files changed`),
+	} {
+		if !want.MatchString(stat) {
+			t.Errorf("DiffStat() missing %q:\n%s", want, stat)
+		}
+	}
+	if strings.Contains(stat, "ignored.log") {
+		t.Errorf("DiffStat() lists an ignored file:\n%s", stat)
+	}
+}
+
+func TestDiffStatBranch(t *testing.T) {
+	h := newHistoryFixture(t)
+	stat, err := snapshot(t, h.open(), Scope{Kind: ScopeBranch, Base: "main"}).DiffStat(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stat, "src/app.go") || strings.Contains(stat, "main-only.txt") {
+		t.Errorf("DiffStat() =\n%s", stat)
 	}
 }

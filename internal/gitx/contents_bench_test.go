@@ -41,10 +41,7 @@ func BenchmarkLoad(b *testing.B) {
 		}
 		b.Run(name, func(b *testing.B) {
 			for b.Loop() {
-				cr, err := snapshot(b, r, s).NewContentReader(b.Context())
-				if err != nil {
-					b.Fatal(err)
-				}
+				cr := snapshot(b, r, s).NewContentReader(b.Context())
 				for _, f := range files {
 					if _, _, err := cr.Contents(f); err != nil {
 						b.Fatal(err)
@@ -68,10 +65,7 @@ func BenchmarkFile(b *testing.B) {
 			b.Fatalf("Changes(%s) = %d files, %v", name, len(files), err)
 		}
 		b.Run(name, func(b *testing.B) {
-			cr, err := snap.NewContentReader(b.Context())
-			if err != nil {
-				b.Fatal(err)
-			}
+			cr := snap.NewContentReader(b.Context())
 			b.Cleanup(func() {
 				if err := cr.Close(); err != nil {
 					b.Error(err)

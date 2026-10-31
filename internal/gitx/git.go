@@ -98,38 +98,3 @@ func (r *Repo) optionalLine(ctx context.Context, args ...string) (string, bool, 
 	}
 	return out, true, nil
 }
-
-type cappedBuffer struct {
-	buf       bytes.Buffer
-	max       int
-	truncated bool
-}
-
-// Write never fails so git keeps running to completion; the excess is dropped.
-func (c *cappedBuffer) Write(p []byte) (int, error) {
-	if c.max <= 0 {
-		return c.buf.Write(p)
-	}
-	room := c.max - c.buf.Len()
-	if len(p) > room {
-		c.truncated = true
-		if room > 0 {
-			c.buf.Write(p[:room])
-		}
-		return len(p), nil
-	}
-	return c.buf.Write(p)
-}
-
-func (c *cappedBuffer) full() bool { return c.max > 0 && c.buf.Len() >= c.max }
-
-func (c *cappedBuffer) String() string {
-	if !c.truncated {
-		return c.buf.String()
-	}
-	b := c.buf.Bytes()
-	if i := bytes.LastIndexByte(b, '\n'); i >= 0 {
-		b = b[:i+1]
-	}
-	return string(b)
-}

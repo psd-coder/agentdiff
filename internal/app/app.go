@@ -210,6 +210,9 @@ func (a *app) asking() *askTarget {
 // perLoad is what a load read about the changes of the scope. A new load
 // replaces all of it.
 type perLoad struct {
+	// snap is the snapshot the load read. Files outside the changes are
+	// read from it too.
+	snap     *gitx.Snapshot
 	files    []gitx.FileChange
 	diffstat string
 	loadErr  string
@@ -602,29 +605,24 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			log.Printf("fingerprint: %v", perr)
 		}
 		found := a.reviews.Read(r.Root, s, before, fp, perr)
-		// readFile reads through one git process for the whole load, or
-		// starts git for each file when that process cannot start.
-		readFile := func(f gitx.FileChange) (string, string, error) { return snap.Contents(ctx, f) }
+		var cr *gitx.ContentReader
 		// The files of the first page, read before it shows.
 		read := map[string]contents{}
 		if err == nil {
-			if cr, cerr := snap.NewContentReader(ctx); cerr == nil {
-				defer func() {
-					if err := cr.Close(); err != nil && ctx.Err() == nil {
-						log.Printf("content reader: %v", err)
-					}
-				}()
-				readFile = cr.Contents
-			} else if ctx.Err() == nil {
-				log.Printf("content reader: %v", cerr)
-			}
-			for _, p := range first {
-				f := gitx.FileChange{Path: p, Status: gitx.StatusAdded}
-				if i := slices.IndexFunc(files, func(f gitx.FileChange) bool { return f.Path == p }); i >= 0 {
-					f = files[i]
+			cr = snap.NewContentReader(ctx)
+			defer func() {
+				if err := cr.Close(); err != nil && ctx.Err() == nil {
+					log.Printf("content reader: %v", err)
 				}
-				oldText, newText, cerr := readFile(f)
-				read[p] = contents{f, oldText, newText, cerr}
+			}()
+			for _, p := range first {
+				if i := slices.IndexFunc(files, func(f gitx.FileChange) bool { return f.Path == p }); i >= 0 {
+					oldText, newText, cerr := cr.Contents(files[i])
+					read[p] = contents{files[i], oldText, newText, cerr}
+				} else {
+					text, cerr := cr.File(p)
+					read[p] = contents{newText: text, err: cerr}
+				}
 			}
 		}
 		a.update(func() {
@@ -644,7 +642,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 				diffs[f.Path] = &fileDiff{change: f, loading: true}
 			}
 			a.perLoad = perLoad{
-				files: files, diffstat: stat, fp: fp, patchKnown: perr == nil,
+				snap: snap, files: files, diffstat: stat, fp: fp, patchKnown: perr == nil,
 				diffs: diffs, extra: map[string]*extraFile{},
 			}
 			a.shown = true
@@ -680,7 +678,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			if _, ok := read[f.Path]; ok {
 				continue
 			}
-			oldText, newText, cerr := readFile(f)
+			oldText, newText, cerr := cr.Contents(f)
 			a.update(func() {
 				if gen != a.gen {
 					return

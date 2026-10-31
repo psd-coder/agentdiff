@@ -14,24 +14,97 @@ import (
 type reader struct {
 	name string
 	read func(FileChange) (old, new string, err error)
+	file func(path string) (string, error)
 }
 
-// readers gives the two ways to read the files of s: Repo.Contents and a
-// ContentReader. Both must give the same result.
+// readers gives the three ways to read the files of s: Snapshot.Contents,
+// a ContentReader, and a ContentReader whose git process cannot start.
+// All must give the same result.
 func readers(t *testing.T, r *Repo, s Scope) []reader {
 	t.Helper()
-	cr, err := snapshot(t, r, s).NewContentReader(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	snap := snapshot(t, r, s)
+	batch := contentReader(t, snap)
+	fallback := brokenReader(t, snap)
+	ctx := context.Background()
+	return []reader{
+		{
+			"snapshot",
+			func(f FileChange) (string, string, error) { return snap.Contents(ctx, f) },
+			func(path string) (string, error) { return snap.File(ctx, path) },
+		},
+		{"reader", batch.Contents, batch.File},
+		{"fallback", fallback.Contents, fallback.File},
 	}
+}
+
+func contentReader(t *testing.T, snap *Snapshot) *ContentReader {
+	t.Helper()
+	cr := snap.NewContentReader(context.Background())
 	t.Cleanup(func() {
 		if err := cr.Close(); err != nil {
 			t.Errorf("Close() = %v", err)
 		}
 	})
-	return []reader{
-		{"repo", func(f FileChange) (string, string, error) { return r.Contents(t.Context(), s, f) }},
-		{"reader", cr.Contents},
+	return cr
+}
+
+// brokenReader is a ContentReader that starts a git cat-file which exits
+// at once, as one older than 2.36 does.
+func brokenReader(t *testing.T, snap *Snapshot) *ContentReader {
+	t.Helper()
+	args := catFileArgs
+	catFileArgs = []string{"cat-file", "--no-such-option"}
+	defer func() { catFileArgs = args }()
+	return contentReader(t, snap)
+}
+
+func TestContentReaderFallsBackWhenBatchReaderExits(t *testing.T) {
+	r := uncommittedFixture(t).open()
+	cr := brokenReader(t, snapshot(t, r, Scope{Kind: ScopeUncommitted}))
+	if cr.cmd != nil {
+		t.Fatal("the reader kept a git process that cannot read")
+	}
+	old, new, err := cr.Contents(FileChange{Path: "mod.txt", Status: StatusModified})
+	if err != nil || old != "a\nb\n" || new != "a\nB\nc\n" {
+		t.Errorf("Contents(mod.txt) = %q, %q, %v", old, new, err)
+	}
+}
+
+func TestFileOutsideChanges(t *testing.T) {
+	h := newHistoryFixture(t)
+	h.write("readme.md", "edited\n")
+	r := h.open()
+	tests := []struct {
+		name  string
+		scope Scope
+		path  string
+		want  string
+	}{
+		{"uncommitted reads the working tree", Scope{Kind: ScopeUncommitted}, "src/app.go", "package app\n\nfunc A() {}\n\nfunc B() {}\n"},
+		{"commit reads its own tree", Scope{Kind: ScopeCommit, Commit: h.featureB}, "src/app.go", "package app\n\nfunc A() {}\n\nfunc B() {}\n"},
+		{"range reads its end", Scope{Kind: ScopeRange, From: h.second, To: h.featureA}, "rename me.txt", ""},
+		{"range reads an older end", Scope{Kind: ScopeRange, From: h.root, To: h.second}, "readme.md", "hello\n"},
+	}
+	for _, tt := range tests {
+		for _, rd := range readers(t, r, tt.scope) {
+			t.Run(rd.name+"/"+tt.name, func(t *testing.T) {
+				got, err := rd.file(tt.path)
+				if tt.want == "" {
+					if err == nil {
+						t.Errorf("File(%s) = %q, want an error", tt.path, got)
+					}
+					return
+				}
+				if err != nil || got != tt.want {
+					t.Errorf("File(%s) = %q, %v, want %q", tt.path, got, err, tt.want)
+				}
+			})
+		}
+	}
+	for _, rd := range readers(t, r, Scope{Kind: ScopeUncommitted}) {
+		if got, err := rd.file("../outside.txt"); !errors.Is(err, ErrInvalidPath) {
+			t.Errorf("%s: File(../outside.txt) = %q, %v, want ErrInvalidPath", rd.name, got, err)
+		}
 	}
 }
 
@@ -233,10 +306,7 @@ func TestContentsUnbornHead(t *testing.T) {
 func TestContentReaderCancelled(t *testing.T) {
 	r := uncommittedFixture(t).open()
 	ctx, cancel := context.WithCancel(t.Context())
-	cr, err := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cr := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
 	cancel()
 	if _, _, err := cr.Contents(FileChange{Path: "mod.txt", Status: StatusModified}); !errors.Is(err, context.Canceled) {
 		t.Errorf("Contents() error = %v, want context.Canceled", err)
@@ -253,10 +323,7 @@ func TestContentReaderCancelledMidRead(t *testing.T) {
 	r := uncommittedFixture(t).open()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-	cr, err := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cr := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
 	pid := cr.cmd.Process.Pid
 	t.Cleanup(func() {
 		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
@@ -319,8 +386,8 @@ func TestContentsSymlinkedDirOutsideRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 	tr.commit("link docs")
-	file := FileChange{Path: "docs/secret.txt", Status: StatusAdded}
-	if _, new, err := tr.open().Contents(t.Context(), Scope{Kind: ScopeUncommitted}, file); err == nil {
-		t.Errorf("Contents(docs/secret.txt) = %q, want an error", new)
+	snap := snapshot(t, tr.open(), Scope{Kind: ScopeUncommitted})
+	if text, err := snap.File(t.Context(), "docs/secret.txt"); err == nil {
+		t.Errorf("File(docs/secret.txt) = %q, want an error", text)
 	}
 }

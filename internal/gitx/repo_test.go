@@ -329,11 +329,12 @@ func TestOtherBranch(t *testing.T) {
 	}
 
 	s := Scope{Kind: ScopeBranch, Base: "main", Head: "feature"}
-	changes, err := snapshot(t, r, s).Changes(ctx)
+	snap := snapshot(t, r, s)
+	changes, err := snap.Changes(ctx)
 	if err != nil || len(changes) != 1 || changes[0].Path != "b.txt" {
 		t.Fatalf("Changes = %+v, %v", changes, err)
 	}
-	_, newText, err := r.Contents(ctx, s, changes[0])
+	_, newText, err := snap.Contents(ctx, changes[0])
 	if err != nil || newText != "feature\n" {
 		t.Errorf("Contents = %q, %v", newText, err)
 	}

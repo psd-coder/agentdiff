@@ -17,24 +17,15 @@ import (
 
 const maxContentSize = 2 << 20
 
-// Contents resolves s and reads the old and the new side of f.
-func (r *Repo) Contents(ctx context.Context, s Scope, f FileChange) (old, new string, err error) {
-	if err := checkFile(f); err != nil {
-		return "", "", err
-	}
-	v, err := r.resolve(ctx, s)
-	if err != nil {
-		return "", "", err
-	}
-	return (&Snapshot{repo: r, revs: v}).Contents(ctx, f)
-}
-
 func checkFile(f FileChange) error {
 	if f.Binary {
 		return ErrBinary
 	}
-	if !validPath(f.Path) || (f.OldPath != "" && !validPath(f.OldPath)) {
-		return fmt.Errorf("%w: %q", ErrInvalidPath, f.Path)
+	if err := checkPath(f.Path); err != nil {
+		return err
+	}
+	if f.OldPath != "" {
+		return checkPath(f.OldPath)
 	}
 	return nil
 }
@@ -47,16 +38,26 @@ func (r *Repo) sides(ctx context.Context, v revs, f FileChange, blob func(rev, p
 		}
 	}
 	if f.Status != StatusDeleted {
-		if v.worktree() {
-			new, err = r.worktreeFile(ctx, f.Path)
-		} else {
-			new, err = blob(v.to, f.Path)
-		}
-		if err != nil {
+		if new, err = r.newSide(ctx, v, f.Path, blob); err != nil {
 			return "", "", err
 		}
 	}
 	return old, new, nil
+}
+
+// newSide reads path as it is at the end of v.
+func (r *Repo) newSide(ctx context.Context, v revs, path string, blob func(rev, path string) (string, error)) (string, error) {
+	if v.worktree() {
+		return r.worktreeFile(ctx, path)
+	}
+	return blob(v.to, path)
+}
+
+func checkPath(path string) error {
+	if !validPath(path) {
+		return fmt.Errorf("%w: %q", ErrInvalidPath, path)
+	}
+	return nil
 }
 
 func validPath(p string) bool {
@@ -164,15 +165,17 @@ var catFileArgs = []string{"cat-file", "--batch-command"}
 
 var errReaderClosed = errors.New("gitx: content reader is closed")
 
-// ContentReader reads the files of one scope. It resolves the scope once
-// and reads every blob through one git cat-file process, so a file costs
-// no new git process. It is not safe for concurrent use.
+// ContentReader reads the files of one snapshot. It reads every blob
+// through one git cat-file process, so a file costs no new git process.
+// When that process cannot start, it starts git for each blob instead.
+// It is not safe for concurrent use.
 type ContentReader struct {
 	repo *Repo
 	// ctx is the caller's context: the process stops when it is done.
-	ctx    context.Context
-	stop   context.CancelFunc
-	revs   revs
+	ctx  context.Context
+	stop context.CancelFunc
+	revs revs
+	// cmd is nil when the reader starts git for each blob.
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	out    *bufio.Reader
@@ -184,36 +187,43 @@ type ContentReader struct {
 // NewContentReader starts the git process that reads the files of the
 // snapshot, which runs until Close or until ctx is done. The caller must
 // call Close.
-func (s *Snapshot) NewContentReader(ctx context.Context) (*ContentReader, error) {
-	procCtx, stop := context.WithCancel(ctx)
-	c := &ContentReader{repo: s.repo, ctx: ctx, stop: stop, revs: s.revs}
-	c.cmd = command(procCtx, s.repo.Root, catFileArgs...)
+func (s *Snapshot) NewContentReader(ctx context.Context) *ContentReader {
+	c := &ContentReader{repo: s.repo, ctx: ctx, revs: s.revs}
+	if err := c.start(); err != nil {
+		c.cmd = nil
+	}
+	return c
+}
+
+func (c *ContentReader) start() error {
+	procCtx, stop := context.WithCancel(c.ctx)
+	c.stop = stop
+	c.cmd = command(procCtx, c.repo.Root, catFileArgs...)
 	c.cmd.Stderr = &c.stderr
 	var err error
 	if c.stdin, err = c.cmd.StdinPipe(); err != nil {
 		stop()
-		return nil, err
+		return err
 	}
 	stdout, err := c.cmd.StdoutPipe()
 	if err != nil {
-		err = errors.Join(err, c.stdin.Close())
 		stop()
-		return nil, err
+		return errors.Join(err, c.stdin.Close())
 	}
 	if err := c.cmd.Start(); err != nil {
 		stop()
-		return nil, &Error{Args: catFileArgs, Err: err}
+		return err
 	}
 	c.out = bufio.NewReader(stdout)
-	// A git older than 2.36 has no --batch-command and exits at once.
-	// The first request finds that, so the caller can use Contents instead.
-	if _, _, _, err := c.info(s.revs.from); err != nil {
-		return nil, errors.Join(err, c.Close())
+	// A git older than 2.36 has no --batch-command and exits at once,
+	// which the first request finds.
+	if _, _, _, err := c.info(c.revs.from); err != nil {
+		return errors.Join(err, c.Close())
 	}
-	return c, nil
+	return nil
 }
 
-// Contents is Snapshot.Contents through the reader's git process.
+// Contents is Snapshot.Contents through the reader.
 func (c *ContentReader) Contents(f FileChange) (old, new string, err error) {
 	if err := checkFile(f); err != nil {
 		return "", "", err
@@ -221,9 +231,17 @@ func (c *ContentReader) Contents(f FileChange) (old, new string, err error) {
 	return c.repo.sides(c.ctx, c.revs, f, c.blob)
 }
 
+// File is Snapshot.File through the reader.
+func (c *ContentReader) File(path string) (string, error) {
+	if err := checkPath(path); err != nil {
+		return "", err
+	}
+	return c.repo.newSide(c.ctx, c.revs, path, c.blob)
+}
+
 // Close stops the git process and waits for it to exit.
 func (c *ContentReader) Close() error {
-	if c.err != nil {
+	if c.cmd == nil || c.err != nil {
 		return nil
 	}
 	c.err = errReaderClosed
@@ -241,7 +259,7 @@ func (c *ContentReader) Close() error {
 
 func (c *ContentReader) blob(rev, path string) (string, error) {
 	// A request is one line, and git drops a CR at its end.
-	if strings.ContainsAny(path, "\n\r") {
+	if c.cmd == nil || strings.ContainsAny(path, "\n\r") {
 		return c.repo.blob(c.ctx, rev, path)
 	}
 	spec := rev + ":" + path
