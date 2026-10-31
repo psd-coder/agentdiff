@@ -152,7 +152,7 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 	}()
 
 	parser := newParser(cfg.Provider, req.Dir)
-	done := forward(ctx, pr, parser, ch, log)
+	done, readErr := forward(ctx, pr, parser, ch, log)
 	_, _ = io.Copy(io.Discard, pr)
 	exitErr := <-waitErr
 	stderrLines.flush()
@@ -164,10 +164,11 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 		ch <- Event{Kind: EventError, Err: ctx.Err()}
 		return
 	}
-	ch <- Event{Kind: EventError, Err: failure(cfg.Provider, parser.streamError(), exitErr, stderr.String())}
+	streamErr := errors.Join(parser.streamError(), readErr)
+	ch <- Event{Kind: EventError, Err: failure(cfg.Provider, streamErr, exitErr, stderr.String())}
 }
 
-func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Event, log *logger) bool {
+func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Event, log *logger) (bool, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLineSize)
 	for scanner.Scan() {
@@ -175,7 +176,7 @@ func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Even
 		for _, ev := range parser.parse(scanner.Bytes()) {
 			if ev.terminal() {
 				ch <- ev
-				return true
+				return true, nil
 			}
 			select {
 			case ch <- ev:
@@ -183,7 +184,10 @@ func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Even
 			}
 		}
 	}
-	return false
+	if err := scanner.Err(); err != nil {
+		return false, fmt.Errorf("read output: %w", err)
+	}
+	return false, nil
 }
 
 func failure(p Provider, streamErr, exitErr error, stderr string) error {

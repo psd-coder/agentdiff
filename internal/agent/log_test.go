@@ -111,6 +111,9 @@ func fixtureItems(t *testing.T, p Provider, name string) []LogItem {
 	for scanner.Scan() {
 		items = append(items, Summarize(p, LogEntry{Kind: LogStdout, Text: scanner.Text()})...)
 	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
 	return items
 }
 

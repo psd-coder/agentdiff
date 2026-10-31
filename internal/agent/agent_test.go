@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -267,6 +268,12 @@ func TestRunErrors(t *testing.T) {
 		},
 		{"codex turn failed", Codex, `echo '{"type":"turn.failed","error":{"message":"quota"}}'`, []string{"quota"}},
 		{"claude error result", Claude, `echo '{"type":"result","is_error":true,"result":"API Error"}'`, []string{"API Error"}},
+		{
+			"line over the size limit",
+			Claude,
+			fmt.Sprintf("head -c %d /dev/zero | tr '\\0' x", maxLineSize+1),
+			[]string{"claude exited without a result", "token too long"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

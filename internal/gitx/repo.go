@@ -31,7 +31,10 @@ func Open(path string) (*Repo, error) {
 	var out bytes.Buffer
 	err = runIn(context.Background(), abs, nil, &out, "rev-parse", "--show-toplevel")
 	root := strings.TrimSpace(out.String())
-	if err != nil || root == "" {
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %w", ErrNotRepo, abs, err)
+	}
+	if root == "" {
 		return nil, fmt.Errorf("%w: %s", ErrNotRepo, abs)
 	}
 	return &Repo{Root: root}, nil

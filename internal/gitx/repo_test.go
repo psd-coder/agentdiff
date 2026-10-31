@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -34,11 +35,23 @@ func TestOpen(t *testing.T) {
 }
 
 func TestOpenNotRepo(t *testing.T) {
-	if _, err := Open(t.TempDir()); !errors.Is(err, ErrNotRepo) {
+	_, err := Open(t.TempDir())
+	if !errors.Is(err, ErrNotRepo) {
 		t.Errorf("Open(non-repo) error = %v, want ErrNotRepo", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "fatal: not a git repository") {
+		t.Errorf("Open(non-repo) error = %v, want git's message", err)
 	}
 	if _, err := Open(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Error("Open(missing dir) succeeded")
+	}
+}
+
+func TestOpenWithoutGit(t *testing.T) {
+	tr := newTestRepo(t)
+	t.Setenv("PATH", t.TempDir())
+	if _, err := Open(tr.dir); !errors.Is(err, exec.ErrNotFound) {
+		t.Errorf("Open without git error = %v, want exec.ErrNotFound", err)
 	}
 }
 
