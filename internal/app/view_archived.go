@@ -14,7 +14,7 @@ import (
 // archivedPage shows an archived review as it was written, read-only:
 // its walkthroughs with the code they saved, its questions and comments.
 func (a *app) archivedPage(c *ui.Context, id string) {
-	e := a.earlierReview(id)
+	e := a.reviews.Find(id)
 	if e == nil {
 		a.emptyState(c, "Earlier review not found", "It was restored, moved or deleted.")
 		return

@@ -144,18 +144,18 @@ func (a *app) commands() []*command {
 			can: func(string) bool { return a.movedTo != "" && a.stale() },
 			run: func(*ui.Context, string) { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.movedTo}) }},
 		{id: "open-archived-commit", title: "Open Commit of the Earlier Review", target: a.targetArchived,
-			can: func(id string) bool { return a.earlierReview(id).MovedTo != "" },
+			can: func(id string) bool { return a.reviews.Find(id).MovedTo != "" },
 			run: func(_ *ui.Context, id string) {
-				a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.earlierReview(id).MovedTo})
+				a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.reviews.Find(id).MovedTo})
 			}},
 		{id: "move-archived", title: "Move Earlier Review to the Commit", target: a.targetArchived,
-			can: func(id string) bool { e := a.earlierReview(id); return e.MovedTo == "" && e.Probably != "" },
-			run: func(_ *ui.Context, id string) { a.moveArchived(a.earlierReview(id)) }},
+			can: func(id string) bool { e := a.reviews.Find(id); return e.MovedTo == "" && e.Probably != "" },
+			run: func(_ *ui.Context, id string) { a.moveArchived(a.reviews.Find(id)) }},
 		{id: "restore-archived", title: "Restore Earlier Review", tip: "Bring the review back to the uncommitted changes, with a warning that it was written for other changes",
 			target: a.targetArchived, can: func(string) bool { return a.rev.Empty() },
-			run: func(_ *ui.Context, id string) { a.restoreArchived(a.earlierReview(id)) }},
+			run: func(_ *ui.Context, id string) { a.restoreArchived(a.reviews.Find(id)) }},
 		{id: "delete-archived", title: "Delete Earlier Review", target: a.targetArchived, run: func(_ *ui.Context, id string) {
-			e := a.earlierReview(id)
+			e := a.reviews.Find(id)
 			a.confirm("Delete the earlier review?", "Its overview, walkthroughs and comments are deleted.", "Delete", func() { a.deleteArchived(e) })
 		}},
 
@@ -438,7 +438,7 @@ func (a *app) targetAll() (string, bool) { return "", a.page == "all" && len(a.f
 
 func (a *app) targetArchived() (string, bool) {
 	id, ok := strings.CutPrefix(a.page, "archived:")
-	return id, ok && a.earlierReview(id) != nil
+	return id, ok && a.reviews.Find(id) != nil
 }
 
 func (a *app) hasFeedback(string) bool {

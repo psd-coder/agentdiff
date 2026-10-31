@@ -83,7 +83,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 		}
 		a.update(func() {
 			run.running = false
-			if u := run.info.Usage; u != nil && !a.obsolete(rev) {
+			if u := run.info.Usage; u != nil && !a.reviews.Obsolete(rev) {
 				u.CostUSD = runCost(a.runsOf(rev), run)
 				if err := a.store.SaveRunUsage(rev.Repo, rev.Scope, info.ID, *u); err != nil {
 					log.Printf("run usage: %v", err)

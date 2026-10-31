@@ -64,14 +64,14 @@ func isAre(n int) string {
 // earlierList lists the archived reviews of the uncommitted changes.
 // Each one opens on its own page.
 func (a *app) earlierList(c *ui.Context) {
-	if a.scope.Kind != gitx.ScopeUncommitted || len(a.archived) == 0 || a.loading {
+	if a.scope.Kind != gitx.ScopeUncommitted || len(a.reviews.Earlier()) == 0 || a.loading {
 		return
 	}
 	t := c.Theme()
 	ui.Text(c, "Earlier reviews").FontSize(18).Bold().Margin(8, 0, 0, 0)
 	ui.Text(c, "Reviews of uncommitted changes that are no longer in the working tree. A review comes back here by itself when its changes do.").
 		FontSize(12).TextColor(t.TextMuted)
-	for _, e := range a.archived {
+	for _, e := range a.reviews.Earlier() {
 		row := ui.Row(c.Key("earlier-"+e.ID())).Gap(8).Padding(0, 10, 0, 0).Radius(8).Border(1, t.Border).AlignItems(ui.Center)
 		row.Children(func() {
 			open := ui.ButtonBase(c).Grow(1).Shrink(1).Padding(10, 14).Gap(4).Column().AlignItems(ui.Stretch)
@@ -152,7 +152,7 @@ func (a *app) overviewPage(c *ui.Context) {
 				a.cmdButton(c, "start-over", "", "Start over")
 			})
 			a.summaryLine(c)
-			if from := a.adoptedFrom; from != nil {
+			if from := a.reviews.AdoptedFrom(); from != nil {
 				verb := "Copied"
 				if from.Kind == gitx.ScopeUncommitted || from.Kind == gitx.ScopeArchived {
 					verb = "Moved"

@@ -126,20 +126,11 @@ type app struct {
 	fileIDs map[string]string
 	// grouped caches groups, which a frame reads several times.
 	grouped groupsCache
-	// archived are the archived reviews, the newest first, listed on the
-	// overview of the uncommitted changes.
-	archived []*continuity.Earlier
-	// kept holds the archive IDs of reviews restored in this session,
-	// which stay even though none of their files is changed.
-	kept map[string]bool
 	// movedTo is the commit that now holds the changes a stale overview
 	// of the uncommitted changes was written for.
 	movedTo string
-	// adoptedFrom is the scope the review was moved or copied from when
-	// the scope opened.
-	adoptedFrom *gitx.Scope
 
-	reviews   map[string]*review.Review
+	reviews   *continuity.Reviews
 	runs      map[*review.Review][]*logRun
 	logOpen   bool
 	logTarget string
@@ -210,7 +201,7 @@ func newApp(s store.Store) *app {
 		startAgent:  agent.Run,
 		diffs:       map[string]*fileDiff{},
 		folded:      map[string]bool{},
-		reviews:     map[string]*review.Review{},
+		reviews:     continuity.New(s),
 		runs:        map[*review.Review][]*logRun{},
 		logPct:      50,
 		drafts:      map[string]string{},
@@ -219,7 +210,6 @@ func newApp(s store.Store) *app {
 		walkRuns:    map[string]*walkRun{},
 		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},
-		kept:        map[string]bool{},
 		sidebarW:    280,
 		scopePct:    34,
 		mainPct:     62,
@@ -553,20 +543,6 @@ func (a *app) readCommitPage(last int) {
 	})
 }
 
-func reviewKey(repo string, s gitx.Scope) string { return repo + "\x00" + s.Key() }
-
-// reviewOf loads a review once and keeps it, so an agent run that finishes
-// after a scope switch writes into the review the view shows.
-func (a *app) reviewOf(s gitx.Scope) *review.Review {
-	key := reviewKey(a.repo.Root, s)
-	r := a.reviews[key]
-	if r == nil {
-		r = a.store.LoadReview(a.repo.Root, s)
-		a.reviews[key] = r
-	}
-	return r
-}
-
 func (a *app) setScope(s gitx.Scope) {
 	a.chosen = s
 	a.load(s, true)
@@ -597,7 +573,7 @@ func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 	a.resetNav()
 	a.folded = map[string]bool{}
 	a.exportDone = false
-	a.adoptedFrom = nil
+	a.reviews.ClearAdopted()
 }
 
 // contents is a file read for a diff or a code snippet.
@@ -619,7 +595,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 	gen, r := a.gen, a.repo
 	rev, page := a.rev, a.page
 	if fresh {
-		rev, page = a.reviewOf(s), "overview"
+		rev, page = a.reviews.Of(r.Root, s), "overview"
 		rev.Scope = s
 	}
 	a.loadingScope = &scopeLoad{s, fresh}
@@ -634,13 +610,8 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		a.clearChanges()
 		a.loading = true
 	}
-	written, empty := "", rev.Empty()
-	var writtenFiles []string
-	if ov := rev.Overview; ov != nil {
-		written, writtenFiles = ov.PatchID, ov.WrittenFiles()
-	}
+	before := continuity.BeforeLoad(rev)
 	first := a.firstPaint(rev, page, fresh)
-	uncommitted := s.Kind == gitx.ScopeUncommitted
 	a.async(func() {
 		defer cancel()
 		files, err := r.Changes(ctx, s)
@@ -652,29 +623,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		if perr != nil {
 			log.Printf("fingerprint: %v", perr)
 		}
-		var archived []*continuity.Earlier
-		if uncommitted {
-			for _, arch := range a.store.Archived(r.Root) {
-				archived = append(archived, &continuity.Earlier{Rev: arch})
-			}
-		}
-		// live is the review of the scope, for when it goes to the archive.
-		live := &continuity.Earlier{}
-		// wanted are the changes to find in the recent commits: those of
-		// the archived reviews, and under "" those of a drifted review.
-		wanted := map[string]continuity.ChangeID{}
-		if uncommitted && perr == nil && written != "" && written != fp.Patch {
-			wanted[""] = continuity.ChangeID{Patch: written, Files: writtenFiles}
-		}
-		for _, e := range archived {
-			wanted[e.ID()] = continuity.ChangeID{Patch: e.Rev.Overview.PatchID, Files: e.Rev.Overview.WrittenFiles()}
-		}
-		var from *review.Review
-		if (empty || uncommitted && written != fp.Patch) && perr == nil && fp.Patch != "" {
-			if src, ok := a.store.FindReview(r.Root, s, fp.Patch); ok {
-				from = src
-			}
-		}
+		found := a.reviews.Read(r.Root, s, before, fp, perr)
 		// readFile reads through one git process for the whole load, or
 		// starts git for each file when that process cannot start.
 		readFile := func(f gitx.FileChange) (string, string, error) { return r.Contents(ctx, s, f) }
@@ -716,28 +665,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			a.shown = true
 			a.files, a.diffstat = files, stat
 			a.patch, a.patchKnown, a.fileIDs = fp.Patch, perr == nil, fp.Files
-			// The list gets its own array: deleting from it in place
-			// would clear entries the commit lookup below still reads.
-			a.archived = slices.Clone(archived)
-			// These run on every load, so a failure goes to the notice,
-			// which stays, instead of a dialog each time.
-			var serr error
-			switch {
-			case from != nil && a.rev.Empty():
-				serr = a.adopt(from)
-			case from != nil && a.archivable():
-				if serr = a.archiveCurrent(live); serr == nil {
-					serr = a.adopt(from)
-				}
-			case a.archivable() && a.rev.Overview.Drift(a.fileIDs).Disjoint():
-				serr = a.archiveCurrent(live)
-			}
-			if serr != nil {
-				a.saveErr = serr.Error()
-			}
-			if from := a.adoptedFrom; from != nil {
-				a.archived = slices.DeleteFunc(a.archived, func(e *continuity.Earlier) bool { return e.Rev.Scope == *from })
-			}
+			a.settle(a.reviews.Decide(found, a.rev, a.reviewBusy))
 			for _, f := range files {
 				a.diffs[f.Path] = &fileDiff{change: f, loading: true}
 			}
@@ -756,19 +684,13 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		if err != nil {
 			return
 		}
-		if len(wanted) > 0 && ctx.Err() == nil {
-			moved, probable := continuity.FindCommits(ctx, r, wanted)
+		if found.Searches() && ctx.Err() == nil {
+			moved, probable := found.FindCommits(ctx, r)
 			a.update(func() {
 				if gen != a.gen {
 					return
 				}
-				live.MovedTo, live.Probably = moved[""], probable[""]
-				if !slices.Contains(a.archived, live) {
-					a.movedTo = live.MovedTo
-				}
-				for _, e := range archived {
-					e.MovedTo, e.Probably = moved[e.ID()], probable[e.ID()]
-				}
+				a.movedTo = a.reviews.Located(found, moved, probable)
 			})
 		}
 		for _, f := range files {
@@ -842,69 +764,29 @@ func (a *app) firstPaint(rev *review.Review, page string, fresh bool) []string {
 	return slices.Compact(paths)
 }
 
-// adopt takes over the saved review src, which was written for the same
-// changes as the current scope has. A review of uncommitted changes
-// moves, because those changes are gone from the working tree; any other
-// one is copied.
-func (a *app) adopt(src *review.Review) error {
-	if !a.rev.Empty() {
-		return nil
+// settle applies a decision on the review of the scope. It runs while
+// a.rev is still the review the decision started from. A failure goes to
+// the notice, which stays, because a load runs it each time.
+func (a *app) settle(out continuity.Outcome) {
+	for _, r := range out.Dropped {
+		delete(a.runs, r)
 	}
-	srcScope := src.Scope
-	srcKey := reviewKey(a.repo.Root, srcScope)
-	from := a.reviews[srcKey]
-	if from != nil && a.reviewBusy(from) {
-		return nil
+	if old := out.Archived; old != nil && a.leaveReview() {
+		a.saved(a.store.SaveReview(old))
 	}
-	move := srcScope.Kind == gitx.ScopeUncommitted || srcScope.Kind == gitx.ScopeArchived
-	var err error
-	if move {
-		err = a.store.MoveReview(a.repo.Root, srcScope, a.scope)
-	} else {
-		err = a.store.CopyReview(a.repo.Root, srcScope, a.scope)
+	a.rev = out.Rev
+	if out.Archived != nil {
+		a.movedTo = ""
+		a.resetNav()
 	}
-	if err != nil {
-		return fmt.Errorf("adopt review: %w", err)
+	if out.Err != nil {
+		a.saveErr = out.Err.Error()
 	}
-	if move && from != nil {
-		delete(a.reviews, srcKey)
-		delete(a.runs, from)
-	}
-	delete(a.runs, a.rev)
-	if from != nil {
-		// A run on the open review can save after src was read.
-		a.rev = a.store.LoadReview(a.repo.Root, a.scope)
-	} else {
-		rev := *src
-		rev.Repo, rev.Scope = a.repo.Root, a.scope
-		a.rev = &rev
-	}
-	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
-	a.adoptedFrom = &srcScope
-	return nil
 }
 
-// archivable reports whether the review of the uncommitted changes can
-// go to the archive: it has an overview, no agent writes into it, and the
-// user did not restore it in this session.
-func (a *app) archivable() bool {
-	ov := a.rev.Overview
-	return a.scope.Kind == gitx.ScopeUncommitted && ov.Done() && a.patchKnown && !a.kept[continuity.ArchiveID(ov)] && !a.reviewBusy(a.rev)
-}
-
-func (a *app) earlierReview(id string) *continuity.Earlier {
-	for _, e := range a.archived {
-		if e.ID() == id {
-			return e
-		}
-	}
-	return nil
-}
-
-// dropEarlier takes an archived review off the list, and leaves its page
-// when it is open.
+// dropEarlier leaves the page of an archived review that went off the
+// list, when it is open.
 func (a *app) dropEarlier(e *continuity.Earlier) {
-	a.archived = slices.DeleteFunc(a.archived, func(x *continuity.Earlier) bool { return x == e })
 	if a.page == "archived:"+e.ID() {
 		a.goBack()
 	}
@@ -913,41 +795,18 @@ func (a *app) dropEarlier(e *continuity.Earlier) {
 	}
 }
 
-// archiveCurrent moves the review of the uncommitted changes into the
-// archive and starts an empty one. e holds the commits found for the
-// review's changes.
-func (a *app) archiveCurrent(e *continuity.Earlier) error {
-	old := a.rev
-	to, err := a.store.ArchiveReview(a.repo.Root, continuity.ArchiveID(old.Overview))
-	if err != nil {
-		return fmt.Errorf("archive review: %w", err)
-	}
-	delete(a.runs, old)
-	old.Scope = to
-	if a.leaveReview() {
-		a.saved(a.store.SaveReview(old))
-	}
-	e.Rev = old
-	a.archived = append([]*continuity.Earlier{e}, a.archived...)
-	a.movedTo, a.adoptedFrom = "", nil
-	a.rev = review.New(a.repo.Root, a.scope)
-	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
-	a.resetNav()
-	return nil
-}
-
 // restoreArchived brings an archived review back to the uncommitted
 // scope, which keeps it from then on.
 func (a *app) restoreArchived(e *continuity.Earlier) {
 	if !a.rev.Empty() {
 		return
 	}
-	if err := a.adopt(e.Rev); err != nil {
-		a.showError("Could not restore the review", err)
+	out := a.reviews.Restore(e, a.rev, a.reviewBusy)
+	if out.Err != nil {
+		a.showError("Could not restore the review", out.Err)
 		return
 	}
-	a.kept[continuity.ArchiveID(e.Rev.Overview)] = true
-	a.adoptedFrom = nil
+	a.settle(out)
 	a.dropEarlier(e)
 	a.openPage("overview")
 }
@@ -957,19 +816,19 @@ func (a *app) restoreArchived(e *continuity.Earlier) {
 // opens the commit.
 func (a *app) moveArchived(e *continuity.Earlier) {
 	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: e.Probably}
-	if a.store.LoadReview(a.repo.Root, to).Empty() {
-		if err := a.store.MoveReview(a.repo.Root, e.Rev.Scope, to); err != nil {
-			a.showError("Could not move the review", err)
-			return
-		}
-		delete(a.reviews, reviewKey(a.repo.Root, to))
+	moved, err := a.reviews.MoveTo(a.repo.Root, e, to)
+	if err != nil {
+		a.showError("Could not move the review", err)
+		return
+	}
+	if moved {
 		a.dropEarlier(e)
 	}
 	a.setScope(to)
 }
 
 func (a *app) deleteArchived(e *continuity.Earlier) {
-	if err := a.store.DeleteReview(a.repo.Root, e.Rev.Scope); err != nil {
+	if err := a.reviews.Delete(a.repo.Root, e); err != nil {
 		a.showError("Could not delete the review", err)
 		return
 	}
@@ -1183,7 +1042,7 @@ func (a *app) startOver() {
 	delete(a.runs, a.rev)
 	a.leaveReview()
 	a.rev = review.New(a.repo.Root, a.scope)
-	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
+	a.reviews.Replace(a.rev)
 	a.resetNav()
 	a.drafts = map[string]string{}
 }
@@ -1236,19 +1095,13 @@ func (a *app) saveReview() {
 // was started over or replaced is obsolete, and a late agent answer must
 // not write it back.
 func (a *app) saveReviewOf(r *review.Review) {
-	if a.obsolete(r) {
+	if a.reviews.Obsolete(r) {
 		return
 	}
 	if r == a.rev {
 		a.keepSnippets()
 	}
 	a.saved(a.store.SaveReview(r))
-}
-
-// obsolete reports whether r is no longer the review the app keeps for
-// its scope.
-func (a *app) obsolete(r *review.Review) bool {
-	return a.reviews[reviewKey(r.Repo, r.Scope)] != r
 }
 
 func (a *app) saveConfig() {

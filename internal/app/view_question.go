@@ -46,7 +46,7 @@ func (a *app) questionDraftKey(w *review.Walk, target askTarget) string {
 	if w != nil {
 		return "question:" + w.ID
 	}
-	return fmt.Sprintf("ask:%s:%s:%d", reviewKey(a.rev.Repo, a.rev.Scope), target.parent, target.step)
+	return fmt.Sprintf("ask:%s\x00%s:%s:%d", a.rev.Repo, a.rev.Scope.Key(), target.parent, target.step)
 }
 
 func (a *app) questionOpen() bool {
