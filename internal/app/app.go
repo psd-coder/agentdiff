@@ -101,10 +101,15 @@ type app struct {
 	// drafts holds the unsent text of each thread and question for the
 	// session, by questionDraftKey or thread ID.
 	drafts map[string]string
-	runner runner
+	runner *runner
 	// streams counts the goroutines that stream agent runs into the store,
 	// so a test can wait for them before its store is removed.
 	streams sync.WaitGroup
+	// logs is the run log of each review, newest first, in memory.
+	logs map[*review.Review][]*logRun
+	// unseen holds the reviews whose overview run ended while another
+	// review was on screen.
+	unseen map[*review.Review]bool
 
 	sidebarW    float32
 	scopePct    float32
@@ -235,7 +240,7 @@ func newPerLoad() perLoad {
 }
 
 func newApp(s store.Store) *app {
-	return &app{
+	a := &app{
 		store:       s,
 		cfg:         s.LoadConfig(),
 		startAgent:  agent.Run,
@@ -244,13 +249,16 @@ func newApp(s store.Store) *app {
 		reviews:     continuity.New(s),
 		logPct:      50,
 		drafts:      map[string]string{},
-		runner:      newRunner(),
+		logs:        map[*review.Review][]*logRun{},
+		unseen:      map[*review.Review]bool{},
 		groupsOpen:  map[string]*bool{},
 		sidebarW:    280,
 		scopePct:    34,
 		mainPct:     62,
 		exportAgent: true,
 	}
+	a.runner = newRunner(a.stream, a.saveReviewOf)
+	return a
 }
 
 // update runs fn on the main thread. Tests have no window and run it at
@@ -555,7 +563,7 @@ func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 	}
 	a.reviews.ClearAdopted()
 	a.scope, a.rev = s, rev
-	delete(a.runner.unseen, rev)
+	delete(a.unseen, rev)
 }
 
 // contents is a file read for a diff or a code snippet.

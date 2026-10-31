@@ -224,7 +224,7 @@ func (a *app) questionComposer(c *ui.Context, w *review.Walk, target *askTarget)
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Cmd+Enter asks").FontSize(11).TextColor(t.TextMuted).Grow(1)
 			if busy {
-				ui.Button(c, "Stop").OnClick(func() { a.stopWalk(w.ID) })
+				ui.Button(c, "Stop").OnClick(func() { a.runner.stop(a.rev, w.ID) })
 			}
 			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).OnClick(func() { send(draft) })
 		})

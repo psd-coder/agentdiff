@@ -126,14 +126,14 @@ func (r *logRun) text() string {
 // logsOf returns the runs of a review, newest first, reading the list
 // from the store the first time.
 func (a *app) logsOf(rev *review.Review) []*logRun {
-	if runs, ok := a.runner.logs[rev]; ok {
+	if runs, ok := a.logs[rev]; ok {
 		return runs
 	}
 	var runs []*logRun
 	for _, info := range a.store.Runs(rev.Repo, rev.Scope) {
 		runs = append(runs, &logRun{info: info})
 	}
-	a.runner.logs[rev] = runs
+	a.logs[rev] = runs
 	return runs
 }
 
@@ -166,7 +166,7 @@ func (a *app) loadRun(rev *review.Review, r *logRun) {
 func (a *app) startRun(rev *review.Review, info store.RunInfo) *logRun {
 	run := &logRun{info: info, loaded: true, running: true}
 	runs := append([]*logRun{run}, a.logsOf(rev)...)
-	a.runner.logs[rev] = runs[:min(len(runs), store.MaxRuns)]
+	a.logs[rev] = runs[:min(len(runs), store.MaxRuns)]
 	return run
 }
 
@@ -231,12 +231,4 @@ func (f *runFile) closeLocked() {
 
 func (a *app) showLog(target string) {
 	a.logOpen, a.logTarget = true, target
-}
-
-func newRunInfo(target, title, note string, cfg agent.Config) store.RunInfo {
-	now := time.Now()
-	return store.RunInfo{
-		ID: store.NewRunID(now), Target: target, Title: title, Note: note,
-		Agent: cfg.Provider, Model: cfg.Model, Effort: cfg.Effort, Started: now,
-	}
 }

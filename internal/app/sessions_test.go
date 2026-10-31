@@ -46,7 +46,7 @@ func lastResumed(a *app) string { return a.logsOf(a.rev)[0].info.Resumed }
 
 // goDeeper starts the walkthrough of a step as Go deeper does.
 func goDeeper(a *app, parent string, step int) {
-	a.runWalk(a.rev, a.rev.AddWalk(parent, step, ""), false)
+	a.runWalk(a.rev, a.rev.AddWalk(parent, step, ""))
 }
 
 func withRootOverview(a *app) {

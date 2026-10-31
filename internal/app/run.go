@@ -109,16 +109,16 @@ func (a *app) generateOverview() {
 	cfg := a.cfg.Agent.Auto()
 	changes := review.ChangeSet{Diffstat: a.diffstatOf(rev), Files: a.fileNames(), PatchID: a.fp.Patch, FileIDs: a.fp.Files}
 	ex := review.OverviewExchange(rev, changes, cfg, a.cfg.Questions)
-	a.launch(&agentRun{kind: overviewKind, ex: ex, ended: func(answered bool) {
+	a.runner.start(ex, "Overview", "", func(answered bool) {
 		if rev == a.rev {
 			a.leaveGone()
 		} else {
-			a.runner.unseen[rev] = true
+			a.unseen[rev] = true
 		}
 		if answered {
 			a.deeperAhead(rev)
 		}
-	}}, newRunInfo(store.TargetOverview, "Overview", "", cfg))
+	})
 }
 
 // answer is the final text of a run: the result the CLI reports, or the
@@ -153,14 +153,14 @@ func (a *app) regenerate(parent string) {
 				steps = append(steps, w.ID)
 			}
 		}
-		a.stopRuns(rev, steps)
+		a.runner.stop(rev, steps...)
 		rev.DeleteStepWalks(parent)
 		a.closeGoneQuestion()
 		a.leaveGone()
 		if parent == "" {
 			a.generateOverview()
 		} else if w := rev.Walk(parent); w != nil {
-			a.runWalk(rev, w, false)
+			a.runWalk(rev, w)
 		}
 	}
 	if !a.rev.HasStepWalks(parent) {
@@ -170,14 +170,12 @@ func (a *app) regenerate(parent string) {
 	a.confirm("Regenerate this walkthrough?", "The new walkthrough has new steps, so the deeper walkthroughs into the current steps are deleted. Questions about the page as a whole stay.", "Regenerate", run)
 }
 
-func (a *app) stopOverview() { a.stopRun(a.rev, store.TargetOverview) }
-
 // deeper starts a walkthrough one level below parent: into one of its
 // steps, or about the question for step -1.
 func (a *app) deeper(parent string, step int, question string) {
 	w := a.rev.AddWalk(parent, step, question)
 	a.nav.goTo(page{kindWalk, w.ID})
-	a.runWalk(a.rev, w, false)
+	a.runWalk(a.rev, w)
 }
 
 // askQuestion starts a question's conversation about a step of parent, or about
@@ -189,7 +187,7 @@ func (a *app) askQuestion(parent string, step int, question string) {
 	}
 	w := a.rev.AddWalk(parent, step, question)
 	a.openQuestion(w.ID)
-	a.runWalk(a.rev, w, false)
+	a.runWalk(a.rev, w)
 }
 
 // deeperAhead queues a deeper walkthrough of every step of the overview,
@@ -206,28 +204,36 @@ func (a *app) deeperAhead(rev *review.Review) {
 	}
 	a.saveReviewOf(rev)
 	for _, w := range walks {
-		a.runAhead(rev, w.ID, func() {
-			if rev.Walk(w.ID) != nil {
-				a.runWalk(rev, w, true)
+		a.runner.ahead(rev, w.ID, func() (*review.Exchange, string, bool) {
+			if rev.Walk(w.ID) == nil {
+				return nil, "", false
 			}
+			ex, title := a.walkExchange(rev, w, true)
+			return ex, title, true
 		})
 	}
 }
 
 // runWalk asks the agent for a walk's walkthrough. Walks next to each
 // other stay apart, because each forks the session of the walkthrough
-// above. An auto walk is one the app writes ahead of the reviewer.
-func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
+// above.
+func (a *app) runWalk(rev *review.Review, w *review.Walk) {
+	ex, title := a.walkExchange(rev, w, false)
+	a.runner.start(ex, title, "", nil)
+}
+
+// walkExchange is the exchange for a walk's walkthrough and its title in
+// the run log. An auto walk is one the app writes ahead of the reviewer.
+func (a *app) walkExchange(rev *review.Review, w *review.Walk, auto bool) (*review.Exchange, string) {
 	cfg := a.cfg.Agent
 	if auto {
 		cfg = cfg.Auto()
 	}
-	ex := review.DeeperExchange(rev, w, cfg, a.diffstatOf(rev))
 	title := "Deeper: " + rev.WalkTitle(w)
 	if w.Question != "" {
 		title = "Question: " + w.Question
 	}
-	a.launch(&agentRun{kind: walkKind, ahead: auto, ex: ex}, newRunInfo(w.ID, title, "", cfg))
+	return review.DeeperExchange(rev, w, cfg, a.diffstatOf(rev)), title
 }
 
 // askMore asks a follow-up question in a question's conversation.
@@ -238,7 +244,7 @@ func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 	}
 	cfg := a.cfg.Agent
 	ex := review.FollowupExchange(rev, w, cfg, a.diffstatOf(rev), q)
-	a.launch(&agentRun{kind: walkKind, ex: ex}, newRunInfo(w.ID, "Follow-up: "+q, "", cfg))
+	a.runner.start(ex, "Follow-up: "+q, "", nil)
 }
 
 // diffstatOf is the diffstat of rev's changes. The app only reads it for
@@ -249,8 +255,6 @@ func (a *app) diffstatOf(rev *review.Review) string {
 	}
 	return a.diffstat
 }
-
-func (a *app) stopWalk(id string) { a.stopRuns(a.rev, []string{id}) }
 
 // deleteWalk deletes a walk and the walks under it, and goes to its
 // parent.
@@ -263,7 +267,7 @@ func (a *app) deleteWalk(w *review.Walk) {
 			gone = append(gone, x.ID)
 		}
 	}
-	a.stopRuns(a.rev, gone)
+	a.runner.stop(a.rev, gone...)
 	a.closeGoneQuestion()
 	if w.Parent != "" {
 		a.nav.replace(page{kindWalk, w.Parent})
@@ -291,10 +295,8 @@ func (a *app) ask(rev *review.Review, t *review.Thread, text string) {
 	}
 	cfg := a.cfg.Agent
 	ex := review.ThreadExchange(rev, t, cfg, a.diffstatOf(rev), text)
-	a.launch(&agentRun{kind: threadKind, ex: ex}, newRunInfo(t.ID, t.Anchor.Label(), excerpt(text, 160), cfg))
+	a.runner.start(ex, t.Anchor.Label(), excerpt(text, 160), nil)
 }
-
-func (a *app) stopThread(t *review.Thread) { a.stopRun(a.rev, t.ID) }
 
 func providerName(p agent.Provider) string {
 	if p == agent.Codex {
@@ -302,3 +304,15 @@ func providerName(p agent.Provider) string {
 	}
 	return "Claude Code"
 }
+
+// release forgets rev: it stops every run of rev and the walks queued
+// for it without writing into rev, and drops its run log from memory.
+func (a *app) release(rev *review.Review) {
+	a.runner.release(rev)
+	delete(a.logs, rev)
+	delete(a.unseen, rev)
+}
+
+// busy reports whether a run writes into the review on screen for
+// target, or waits in the queue to.
+func (a *app) busy(target string) bool { return a.runner.busy(a.rev, target) }
