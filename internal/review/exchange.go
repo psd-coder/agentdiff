@@ -129,6 +129,41 @@ func ThreadExchange(r *Review, t *Thread, cfg agent.Config, diffstat, question s
 	return &Exchange{Request: req, rev: r, cfg: cfg, thread: t, reply: len(t.Messages)}
 }
 
+// TargetOverview is the target of the overview's exchange.
+const TargetOverview = "overview"
+
+// Kind is what an exchange writes: the overview, a walk or a thread.
+type Kind int
+
+const (
+	KindOverview Kind = iota
+	KindWalk
+	KindThread
+)
+
+// Kind is what the exchange writes.
+func (e *Exchange) Kind() Kind {
+	switch {
+	case e.thread != nil:
+		return KindThread
+	case e.walk != nil:
+		return KindWalk
+	}
+	return KindOverview
+}
+
+// Target is what the exchange writes into: TargetOverview, or the ID of
+// the walk or the thread.
+func (e *Exchange) Target() string {
+	switch {
+	case e.thread != nil:
+		return e.thread.ID
+	case e.walk != nil:
+		return e.walk.ID
+	}
+	return TargetOverview
+}
+
 // Review is the review the exchange writes into.
 func (e *Exchange) Review() *Review { return e.rev }
 

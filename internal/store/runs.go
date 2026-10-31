@@ -17,13 +17,14 @@ import (
 
 	"github.com/psd-coder/agentdiff/internal/agent"
 	"github.com/psd-coder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/review"
 )
 
 // MaxRuns is how many agent runs a review keeps logs of. Older logs go
 // when a new run starts.
 const MaxRuns = 50
 
-const TargetOverview = "overview"
+const TargetOverview = review.TargetOverview
 
 // RunInfo describes one agent run. Target is TargetOverview or the ID of
 // the thread the run answered.
