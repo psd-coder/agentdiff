@@ -187,23 +187,25 @@ func (s Store) rescope(repo string, scope gitx.Scope) error {
 const maxArchived = 20
 
 // ArchiveReview moves the review of the uncommitted changes, which are
-// gone from the working tree, under id. It deletes the oldest archived
-// reviews past maxArchived.
+// gone from the working tree, under id.
 func (s Store) ArchiveReview(repo, id string) (gitx.Scope, error) {
 	to := gitx.ArchivedScope(id)
 	if err := s.MoveReview(repo, gitx.Scope{Kind: gitx.ScopeUncommitted}, to); err != nil {
 		return to, err
 	}
 	// Saving marks the time of archiving, which orders the archive.
-	if err := s.SaveReview(s.LoadReview(repo, to)); err != nil {
-		return to, err
-	}
+	return to, s.SaveReview(s.LoadReview(repo, to))
+}
+
+// PruneArchive deletes the oldest archived reviews of repo past
+// maxArchived.
+func (s Store) PruneArchive(repo string) error {
 	archived := s.Archived(repo)
 	var errs []error
 	for _, r := range archived[min(len(archived), maxArchived):] {
 		errs = append(errs, s.DeleteReview(repo, r.Scope))
 	}
-	return to, errors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 // Archived returns the archived reviews of repo that have an overview,

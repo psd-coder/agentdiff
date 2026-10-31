@@ -328,6 +328,9 @@ func TestArchiveReview(t *testing.T) {
 		if _, err := s.ArchiveReview("/repo", r.Overview.PatchID); err != nil {
 			t.Fatal(err)
 		}
+		if err := s.PruneArchive("/repo"); err != nil {
+			t.Fatal(err)
+		}
 		time.Sleep(time.Millisecond)
 	}
 	if s.LoadReview("/repo", uncommitted).Overview != nil {

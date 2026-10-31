@@ -111,7 +111,10 @@ type Review struct {
 	Threads  []*Thread       `json:"threads"`
 	Walks    []*Walk         `json:"walks,omitempty"`
 	Viewed   map[string]bool `json:"viewed,omitempty"`
-	Updated  time.Time       `json:"updated"`
+	// Kept is set on a review the user restored from the archive, which
+	// stays even when none of its files is changed.
+	Kept    bool      `json:"kept,omitempty"`
+	Updated time.Time `json:"updated"`
 }
 
 func New(repo string, scope gitx.Scope) *Review {
