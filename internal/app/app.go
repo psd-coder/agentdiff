@@ -123,6 +123,8 @@ type app struct {
 	// fileIDs maps the changed files to the IDs of their changes, see
 	// gitx.Fingerprint.
 	fileIDs map[string]string
+	// grouped caches groups, which a frame reads several times.
+	grouped groupsCache
 	// archived are the archived reviews, the newest first, listed on the
 	// overview of the uncommitted changes.
 	archived []*earlier
@@ -1129,11 +1131,42 @@ func (a *app) isFolded(file string) bool {
 	return a.rev.Viewed[file]
 }
 
+// groups are the groups the sidebar lists the files in. Callers must
+// not change the slice they get.
 func (a *app) groups() []review.Group {
-	if a.rev.Overview != nil && len(a.rev.Overview.Groups) > 0 {
-		return review.NormalizeGroups(a.rev.Overview.Groups, a.fileNames())
+	var from []review.Group
+	if a.rev.Overview != nil {
+		from = a.rev.Overview.Groups
 	}
-	return review.DirectoryGroups(a.fileNames())
+	if g := &a.grouped; sameSlice(g.from, from) && sameSlice(g.files, a.files) {
+		return g.groups
+	}
+	var groups []review.Group
+	if len(from) > 0 {
+		groups = review.NormalizeGroups(from, a.fileNames())
+	} else {
+		groups = review.DirectoryGroups(a.fileNames())
+	}
+	a.grouped = groupsCache{groups: groups, from: from, files: a.files}
+	return groups
+}
+
+// groupsCache holds the groups made from the groups of an overview and
+// the changed files. Every change of the files or the overview groups
+// puts a new slice in place, so the same slices give the same groups.
+// The cache keeps the slices it was made from, so a new slice cannot
+// get the address of an old one. The zero cache holds the groups of no
+// files: none.
+type groupsCache struct {
+	groups []review.Group
+	from   []review.Group
+	files  []gitx.FileChange
+}
+
+// sameSlice reports whether x and y are the same elements of the same
+// array.
+func sameSlice[T any](x, y []T) bool {
+	return len(x) == len(y) && (len(x) == 0 || &x[0] == &y[0])
 }
 
 // startOver forgets the review of the current scope: its overview,

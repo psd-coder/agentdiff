@@ -670,6 +670,52 @@ func TestScopeSwitchKeepsReview(t *testing.T) {
 	}
 }
 
+func TestGroupsFollowChanges(t *testing.T) {
+	a := newTestApp(t)
+	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": [{"title": "Cache keys", "files": ["cache/cache.go"]}]}` + "\n```"
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	a.cfg.DeeperAhead = false
+	a.queue = make(chan func(), 64)
+	want := func(step string, titles ...string) {
+		t.Helper()
+		var got []string
+		for _, g := range a.groups() {
+			got = append(got, g.Title)
+		}
+		if !slices.Equal(got, titles) {
+			t.Fatalf("%s: groups %q, want %q", step, got, titles)
+		}
+	}
+	loaded := func(what string) {
+		t.Helper()
+		pump(t, a, what, func() bool { return !a.loading && !a.switching })
+		drain(a)
+	}
+	want("first load", "api", "cache")
+
+	write(t, a.repo.Root, "docs/new.md", "# New\n")
+	a.refresh()
+	loaded("the reload")
+	want("reload", "api", "cache", "docs")
+
+	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{{Title: "Docs first", Files: []string{"docs/new.md"}}}}
+	want("overview written", "Docs first", "Other changes")
+
+	a.regenerate("")
+	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
+	want("regenerate", "Cache keys", "Other changes")
+
+	a.startOver()
+	want("start over", "api", "cache", "docs")
+
+	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	loaded("the commit")
+	want("commit scope", "Repository root", "cache")
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	loaded("the uncommitted changes")
+	want("uncommitted scope", "api", "cache", "docs")
+}
+
 func TestCompareBranches(t *testing.T) {
 	a := newTestApp(t)
 	dir := a.repo.Root
