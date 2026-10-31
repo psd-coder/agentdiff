@@ -108,7 +108,7 @@ func (a *app) generateOverview() {
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &overviewRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.overviews[rev] = run
-	changes := review.ChangeSet{Diffstat: a.diffstat, Files: a.fileNames(), PatchID: a.patch, FileIDs: a.fileIDs}
+	changes := review.ChangeSet{Diffstat: a.diffstatOf(rev), Files: a.fileNames(), PatchID: a.patch, FileIDs: a.fileIDs}
 	ex := review.OverviewExchange(rev, changes, cfg, questions)
 	info := newRunInfo(store.TargetOverview, "Overview", "", cfg)
 	a.stream(ctx, cfg, ex.Request, rev, info, func(ev agent.Event) {
@@ -264,125 +264,79 @@ func (a *app) unqueue(id string) {
 // walkBusy reports whether a walk is being written or waits for its turn.
 func (a *app) walkBusy(id string) bool { return a.walkRuns[id] != nil || a.queued(id) }
 
-// runWalk asks the agent for a walk's walkthrough. It forks the session
-// of the walkthrough above, so the agent knows what the reviewer read on
-// the way down, and walks next to each other stay apart. An auto walk is
-// one the app writes ahead of the reviewer.
+// runWalk asks the agent for a walk's walkthrough. Walks next to each
+// other stay apart, because each forks the session of the walkthrough
+// above. An auto walk is one the app writes ahead of the reviewer.
 func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 	a.unqueue(w.ID)
 	if run := a.walkRuns[w.ID]; run != nil {
 		run.cancel()
 	}
-	diffstat := ""
-	if rev == a.rev {
-		diffstat = a.diffstat
-	}
 	cfg := a.cfg.Agent
 	if auto {
 		cfg = cfg.Auto()
 	}
-	parentSession := ""
-	if p := rev.Walk(w.Parent); p != nil {
-		parentSession = p.Sessions[cfg.Provider]
-	} else if ov := rev.Overview; w.Parent == "" && ov != nil {
-		parentSession = ov.Sessions[cfg.Provider]
-	}
-	d := review.DeeperRequest{
-		Question: w.Question,
-		Known:    parentSession != "",
-		NewRev:   rev.Scope.NewRev(),
-	}
-	if s, ok := rev.StepOf(w); ok {
-		d.Step = &s
-	}
-	req := agent.Request{Dir: rev.Repo, SystemPrompt: review.SystemPrompt}
-	if d.Known {
-		req.ResumeID, req.Fork = parentSession, true
-	} else {
-		d.Context = review.ContextPrompt(rev.Scope.Describe(), diffstat)
-		path := rev.WalkPath(w.ID)
-		for _, p := range path[:len(path)-1] {
-			d.Path = append(d.Path, rev.WalkTitle(p))
-		}
-	}
-	req.Prompt = review.DeeperPrompt(d)
-
-	w.Content, w.Markdown, w.Err, w.More, w.Agent, w.Model = nil, "", "", nil, "", ""
-	delete(w.Sessions, cfg.Provider)
+	ex := review.DeeperExchange(rev, w, cfg, a.diffstatOf(rev))
 	title := "Deeper: " + rev.WalkTitle(w)
 	if w.Question != "" {
 		title = "Question: " + w.Question
 	}
-	a.streamWalk(rev, w, cfg, req, title)
+	a.streamWalk(rev, w, cfg, ex, title)
 }
 
-// askMore asks a follow-up question in a question's conversation. It goes
-// on in the conversation's own session.
+// askMore asks a follow-up question in a question's conversation.
 func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 	q = strings.TrimSpace(q)
 	if q == "" || a.walkBusy(w.ID) {
 		return
 	}
 	cfg := a.cfg.Agent
-	session := w.Sessions[cfg.Provider]
-	f := review.FollowupRequest{Question: q, Known: session != "", NewRev: rev.Scope.NewRev()}
-	req := agent.Request{Dir: rev.Repo, SystemPrompt: review.SystemPrompt}
-	if f.Known {
-		req.ResumeID = session
-	} else {
-		diffstat := ""
-		if rev == a.rev {
-			diffstat = a.diffstat
-		}
-		f.Context = review.ContextPrompt(rev.Scope.Describe(), diffstat)
-		f.Earlier = w.Turns()
+	ex := review.FollowupExchange(rev, w, cfg, a.diffstatOf(rev), q)
+	a.streamWalk(rev, w, cfg, ex, "Follow-up: "+q)
+}
+
+// diffstatOf is the diffstat of rev's changes. The app only reads it for
+// the review on screen, so it is empty for any other review.
+func (a *app) diffstatOf(rev *review.Review) string {
+	if rev != a.rev {
+		return ""
 	}
-	req.Prompt = review.FollowupPrompt(f)
-	w.More = append(w.More, review.Turn{Question: q, Generated: time.Now()})
-	a.streamWalk(rev, w, cfg, req, "Follow-up: "+q)
+	return a.diffstat
 }
 
 // streamWalk runs the agent for the latest turn of a walk.
-func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, req agent.Request, title string) {
+func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, ex *review.Exchange, title string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &walkRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
 	a.walkRuns[w.ID] = run
 	a.saveReviewOf(rev)
 	info := newRunInfo(w.ID, title, "", cfg)
-	a.stream(ctx, cfg, req, rev, info, func(ev agent.Event) {
+	a.stream(ctx, cfg, ex.Request, rev, info, func(ev agent.Event) {
 		if a.walkRuns[w.ID] != run {
 			return
 		}
 		switch ev.Kind {
 		case agent.EventSession:
-			w.Sessions.Set(cfg.Provider, ev.SessionID)
+			ex.Started(ev.SessionID)
 		case agent.EventText:
 			run.text += ev.Text
 			run.activity = "Writing the walkthrough…"
 		case agent.EventActivity:
 			run.activity = ev.Text
 		case agent.EventDone:
-			text := answer(ev.Text, run.text)
-			if wt, ok := review.ParseWalkthrough(text); ok {
-				w.SetAnswer(wt, "", "", time.Now())
-			} else {
-				w.SetAnswer(nil, text, "", time.Now())
-			}
-			if len(w.More) == 0 {
-				w.Agent, w.Model = cfg.Provider, cfg.Model
-			}
+			ex.Answered(answer(ev.Text, run.text), time.Now())
 			cancel()
 			delete(a.walkRuns, w.ID)
 			a.saveReviewOf(rev)
 			a.startAhead()
 		case agent.EventError:
-			msg := ev.Err.Error()
 			if ctx.Err() != nil {
-				msg = "Stopped"
+				ex.Stopped(time.Now())
+			} else {
+				ex.Failed(ev.Err.Error(), time.Now())
 			}
 			cancel()
 			delete(a.walkRuns, w.ID)
-			w.SetAnswer(nil, "", msg, time.Now())
 			a.saveReviewOf(rev)
 			a.startAhead()
 		}
@@ -450,7 +404,7 @@ func (a *app) ask(t *review.Thread, text string) {
 	case overviewSession != "":
 		req.ResumeID, req.Fork = overviewSession, true
 	default:
-		prompt = review.ContextPrompt(a.scope.Describe(), a.diffstat) + prompt
+		prompt = review.ContextPrompt(a.scope.Describe(), a.diffstatOf(rev)) + prompt
 	}
 	req.Prompt = prompt
 	t.Agent = cfg.Provider

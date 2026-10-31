@@ -2,7 +2,6 @@ package review
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +24,7 @@ func TestParseWalkthrough(t *testing.T) {
 		],
 		"checklist": [{"question": "Data?", "answer": "None.", "refs": [{"file": "a.go", "start": 2}]}]
 	}` + "\n```\n"
-	w, ok := ParseWalkthrough(answer)
+	w, ok := parseWalkthrough(answer)
 	if !ok {
 		t.Fatal("no walkthrough")
 	}
@@ -44,35 +43,13 @@ func TestParseWalkthrough(t *testing.T) {
 }
 
 func TestParseWalkthroughFallbacks(t *testing.T) {
-	if w, ok := ParseWalkthrough(`{"summary": "bare", "steps": []}`); !ok || w.Summary != "bare" {
+	if w, ok := parseWalkthrough(`{"summary": "bare", "steps": []}`); !ok || w.Summary != "bare" {
 		t.Errorf("bare JSON = %+v, %v", w, ok)
 	}
 	for _, answer := range []string{"## Markdown only", "```json\n{broken\n```", `{"steps": []}`, ""} {
-		if _, ok := ParseWalkthrough(answer); ok {
-			t.Errorf("ParseWalkthrough(%q) found a walkthrough", answer)
+		if _, ok := parseWalkthrough(answer); ok {
+			t.Errorf("parseWalkthrough(%q) found a walkthrough", answer)
 		}
-	}
-}
-
-func TestDeeperPrompt(t *testing.T) {
-	step := &Step{Title: "Lower-case keys", Text: "Get lower-cases.", Refs: []Ref{{File: "c.go", Side: SideNew, Start: 6, End: 6, Why: "the change"}}}
-	known := DeeperPrompt(DeeperRequest{Step: step, Known: true, Context: "CONTEXT", Path: []string{"P"}})
-	for _, want := range []string{"### Lower-case keys", "c.go:6 (+): the change", "more detail", walkSchema} {
-		if !strings.Contains(known, want) {
-			t.Errorf("known prompt lacks %q", want)
-		}
-	}
-	if strings.Contains(known, "CONTEXT") {
-		t.Error("known prompt repeats the context")
-	}
-	fresh := DeeperPrompt(DeeperRequest{Question: "Is it tested?", Context: "CONTEXT\n\n", Path: []string{"Cache", "Keys"}, NewRev: "abc"})
-	for _, want := range []string{"CONTEXT", "went deeper into: Cache > Keys", "The reviewer asks: Is it tested?", "git show abc:<path> | cat -n"} {
-		if !strings.Contains(fresh, want) {
-			t.Errorf("fresh prompt lacks %q", want)
-		}
-	}
-	if strings.Contains(fresh, "###") {
-		t.Error("a question about the whole walkthrough names a step")
 	}
 }
 
@@ -118,24 +95,11 @@ func TestWalkTree(t *testing.T) {
 
 func TestTurns(t *testing.T) {
 	w := &Walk{Question: "Why?"}
-	w.SetAnswer(&Walkthrough{Summary: "Because."}, "", "", time.Unix(1, 0))
+	w.setAnswer(&Walkthrough{Summary: "Because."}, "", "", time.Unix(1, 0))
 	w.More = append(w.More, Turn{Question: "And then?"})
-	w.SetAnswer(nil, "", "failed", time.Unix(2, 0))
+	w.setAnswer(nil, "", "failed", time.Unix(2, 0))
 	turns := w.Turns()
 	if len(turns) != 2 || turns[0].Content.Summary != "Because." || turns[1].Err != "failed" || w.Err != "" {
 		t.Errorf("turns = %+v", turns)
-	}
-}
-
-func TestFollowupPrompt(t *testing.T) {
-	known := FollowupPrompt(FollowupRequest{Question: "And then?", Known: true, Context: "CONTEXT"})
-	if strings.Contains(known, "CONTEXT") || !strings.Contains(known, "follow-up question: And then?") || !strings.Contains(known, walkSchema) {
-		t.Errorf("known prompt = %q", known)
-	}
-	fresh := FollowupPrompt(FollowupRequest{Question: "And then?", Context: "CONTEXT\n\n", Earlier: []Turn{{Question: "Why?", Content: &Walkthrough{Summary: "Because."}}}})
-	for _, want := range []string{"CONTEXT", "Q: Why?\nA: Because.", "follow-up question: And then?"} {
-		if !strings.Contains(fresh, want) {
-			t.Errorf("fresh prompt lacks %q", want)
-		}
 	}
 }

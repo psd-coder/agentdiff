@@ -67,19 +67,23 @@ func TestEndToEnd(t *testing.T) {
 	}
 	checkRefs(t, ctx, repo, scope, ov.Walk)
 
-	step := ov.Walk.Steps[0]
-	deeper := review.DeeperPrompt(review.DeeperRequest{Step: &step, Known: true, NewRev: scope.NewRev()})
+	w := rev.AddWalk("", 0, "")
+	deeper := review.DeeperExchange(rev, w, cfg, stat)
 	session := ov.Sessions[provider]
-	answer, forked := runAgent(t, ctx, cfg, agent.Request{Dir: repo.Root, Prompt: deeper, SystemPrompt: review.SystemPrompt, ResumeID: session, Fork: true})
+	if deeper.Request.ResumeID != session || !deeper.Request.Fork {
+		t.Errorf("deeper request resumes %q (fork %v), want a fork of %q", deeper.Request.ResumeID, deeper.Request.Fork, session)
+	}
+	answer, forked := runAgent(t, ctx, cfg, deeper.Request)
 	if session == "" || forked == "" || forked == session {
 		t.Errorf("fork session = %q, overview session = %q", forked, session)
 	}
-	w, ok := review.ParseWalkthrough(answer)
-	if !ok {
+	deeper.Started(forked)
+	deeper.Answered(answer, time.Now())
+	if w.Content == nil {
 		t.Fatalf("no deeper walkthrough in:\n%s", answer)
 	}
-	logWalk(t, w)
-	checkRefs(t, ctx, repo, scope, w)
+	logWalk(t, w.Content)
+	checkRefs(t, ctx, repo, scope, w.Content)
 }
 
 func logWalk(t *testing.T, w *review.Walkthrough) {
