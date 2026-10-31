@@ -311,6 +311,8 @@ func (a *app) closeRepo() {
 	a.unwatch()
 	a.cancelLoad()
 	a.gen++
+	a.loading, a.switching, a.loadingScope = false, false, nil
+	a.perLoad = newPerLoad()
 	a.projectsOpen, a.shown = false, false
 	a.commits.reset()
 	if a.win != nil {
