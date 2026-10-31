@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/psd-coder/agentdiff/internal/agent"
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
@@ -13,7 +12,7 @@ import (
 func finishOverview(t *testing.T, a *app, groupsJSON string) {
 	t.Helper()
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": ` + groupsJSON + "}\n```"
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "s1", answer)}
+	newFakeAgent(t, a).answer("s1", answer)
 	a.cfg.DeeperAhead = false
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })

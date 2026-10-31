@@ -34,7 +34,7 @@ The `validate` skill (`.agents/skills/validate/validate.sh`) runs golangci-lint 
 
 Threading: the views never block. Git and agent work runs on goroutines and returns through `a.update(fn)`, which calls `Window.Update` in the app and sends to `a.queue` in tests. Every run belongs to the `*review.Review` it started for, so a run keeps going when the user switches scope. Results check the generation counters (`gen`, `commitsGen`) and drop stale data.
 
-Tests in `internal/app` drive a window-less app: `newTestApp` creates a fixture repo and a temp store, and `ui.NewTester` renders the views headless.
+Tests in `internal/app` drive a window-less app: `newTestApp` creates a fixture repo and a temp store, and `ui.NewTester` renders the views headless. Every agent run starts through `app.startAgent`, which is `agent.Run` in the app. Tests replace it with `newFakeAgent` (`fakeagent_test.go`). The fake answers in process and records the requests. It can hold a run until the test releases it or the run is cancelled. `TestAgentLog` runs a real process.
 
 ## MyGo rules
 
