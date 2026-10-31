@@ -414,6 +414,7 @@ func (a *app) threadCard(c *ui.Context, th *review.Thread) {
 			ui.Text(c, excerpt(first, 160)).MaxLines(1)
 			ui.Text(c, a.threadMeta(th)).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
+		targetMark(c, a.state(th.ID))
 	})
 	if card.Clicked() {
 		a.openThread(th.ID)

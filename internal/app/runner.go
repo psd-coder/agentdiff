@@ -50,9 +50,9 @@ type buildFunc func() (ex *review.Exchange, title string, ok bool)
 // review, and a run writes its events into its exchange until it ends.
 //
 // A run ends once: the runner forgets it, writes the result into the
-// exchange, saves the review, calls the run's ended and starts the queued
-// walks that now have a slot. A run that a new run of the same target
-// replaces, or that release drops, ends without a write and without
+// exchange, saves the review, calls onEnd and the run's ended and starts
+// the queued walks that now have a slot. A run that a new run of the same
+// target replaces, or that release drops, ends without a write, onEnd and
 // ended, and its later events change nothing.
 //
 // All methods and the events run on the main thread, so the runner has
@@ -60,7 +60,10 @@ type buildFunc func() (ex *review.Exchange, title string, ok bool)
 type runner struct {
 	stream streamFunc
 	save   func(*review.Review)
-	runs   map[runKey]*agentRun
+	// onEnd runs after every run that ends with a write, nil for none.
+	// ahead marks a write-ahead walk.
+	onEnd func(key runKey, ahead bool)
+	runs  map[runKey]*agentRun
 	// waiting is oldest first.
 	waiting []waitingRun
 }
@@ -237,6 +240,9 @@ func (r *runner) end(key runKey, run *agentRun, answered bool, write func(time.T
 	run.cancel()
 	write(time.Now())
 	r.save(key.rev)
+	if r.onEnd != nil {
+		r.onEnd(key, run.ahead)
+	}
 	if run.ended != nil {
 		run.ended(answered)
 	}

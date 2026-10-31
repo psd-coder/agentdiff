@@ -26,7 +26,8 @@ func settled(t *testing.T, a *app, rev *review.Review) {
 
 // TestStopOverviewKeepsOldContent stops an overview that replaces a
 // written one: the run ends at once, "Stopped" shows over the old
-// overview, and the agent's late events change nothing.
+// overview without the box of a failure, and the agent's late events
+// change nothing.
 func TestStopOverviewKeepsOldContent(t *testing.T) {
 	a := newTestApp(t)
 	a.queue = make(chan func(), 64)
@@ -45,9 +46,10 @@ func TestStopOverviewKeepsOldContent(t *testing.T) {
 	}
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
-	if !tt.HasText("Stopped") || !tt.HasText("The old overview.") {
+	if !tt.HasText("Stopped") || !tt.HasText("The old overview.") || tt.HasText("The agent failed") {
 		t.Errorf("texts %q", tt.Texts())
 	}
+	snapshot(t, tt, "overview-stopped")
 	saved := a.store.LoadReview(a.repo.Root, a.scope).Overview
 	if saved == nil || saved.Err != "Stopped" {
 		t.Errorf("saved overview %+v", saved)

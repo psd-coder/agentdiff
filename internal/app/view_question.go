@@ -157,7 +157,6 @@ func (a *app) turnView(c *ui.Context, w *review.Walk, turn review.Turn, last boo
 }
 
 func (a *app) answerView(c *ui.Context, turn review.Turn) {
-	t := c.Theme()
 	switch {
 	case turn.Content != nil:
 		a.compactWalk(c, turn.Content)
@@ -165,7 +164,7 @@ func (a *app) answerView(c *ui.Context, turn review.Turn) {
 		markdown.View(c, turn.Markdown, &a.md)
 	}
 	if turn.Err != "" {
-		ui.Text(c, turn.Err).FontSize(12).TextColor(t.Danger).Selectable()
+		errorText(c, turn.Err)
 	}
 }
 

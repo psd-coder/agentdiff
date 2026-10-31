@@ -1270,14 +1270,15 @@ func TestDeeperAhead(t *testing.T) {
 // opens, and Back leads past the parent to the page before it.
 func TestWalkRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		err    string
-		more   []review.Turn
-		failed bool
+		name string
+		err  string
+		more []review.Turn
+		mark string
 	}{
-		{name: "a failed answer", err: "boom", failed: true},
-		{name: "a failed follow-up after a good answer", more: []review.Turn{{Question: "More?", Err: "boom"}}, failed: true},
+		{name: "a failed answer", err: "boom", mark: "failed"},
+		{name: "a failed follow-up after a good answer", more: []review.Turn{{Question: "More?", Err: "boom"}}, mark: "failed"},
 		{name: "a good follow-up after a failed answer", err: "boom", more: []review.Turn{{Question: "More?", Markdown: "Fine."}}},
+		{name: "a stopped answer", err: review.Stopped, mark: "stopped"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := newTestApp(t)
@@ -1290,10 +1291,72 @@ func TestWalkRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
 			if !tt.HasText("Why?") {
 				t.Fatalf("texts %q", tt.Texts())
 			}
-			if got := tt.HasText("failed"); got != tc.failed {
-				t.Errorf("shows failed = %v, want %v", got, tc.failed)
+			for _, mark := range []string{"failed", "stopped"} {
+				if got := tt.HasText(mark); got != (mark == tc.mark) {
+					t.Errorf("shows %q = %v, want %v", mark, got, mark == tc.mark)
+				}
 			}
+			snapshot(t, tt, "walk-row-"+strings.ReplaceAll(tc.name, " ", "-"))
 		})
+	}
+}
+
+// TestThreadRowShowsWhetherTheLatestAnswerFailed lists a thread on the
+// page of questions and comments. Its row tells a failed answer from a
+// stopped one.
+func TestThreadRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  string
+		mark string
+	}{
+		{name: "a failed answer", err: "boom", mark: "failed"},
+		{name: "a stopped answer", err: review.Stopped, mark: "stopped"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newTestApp(t)
+			th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+			th.Messages = []review.Message{{Role: review.RoleUser, Text: "Why?"}, {Role: review.RoleAgent, Err: tc.err}}
+			a.nav.goTo(page{kind: kindThreads})
+			tt := ui.NewTester(a.view, 1300, 800)
+			tt.Frame()
+			if !tt.HasText("Why?") {
+				t.Fatalf("texts %q", tt.Texts())
+			}
+			for _, mark := range []string{"failed", "stopped"} {
+				if got := tt.HasText(mark); got != (mark == tc.mark) {
+					t.Errorf("shows %q = %v, want %v", mark, got, mark == tc.mark)
+				}
+			}
+			snapshot(t, tt, "thread-row-"+tc.mark)
+		})
+	}
+}
+
+// TestUnseenAnswerMarksItsRows asks in a thread that is not open. When
+// the answer comes, the thread and its scope stay unseen until the user
+// opens the thread.
+func TestUnseenAnswerMarksItsRows(t *testing.T) {
+	a := newTestApp(t)
+	a.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, a)
+	fake.answer("t1", "Because.")
+	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	a.ask(a.rev, th, "Why?")
+	pump(t, a, "the answer", func() bool { return !a.busy(th.ID) })
+	if got := a.state(th.ID); got != (targetState{status: targetAnswered, unseen: true}) {
+		t.Fatalf("state after the answer = %+v", got)
+	}
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	snapshot(t, tt, "unseen-thread")
+	if !a.targets.unseenIn(a.rev) {
+		t.Error("the scope of the thread is not unseen")
+	}
+	a.openThread(th.ID)
+	tt.Frame()
+	if a.state(th.ID).unseen || a.targets.unseenIn(a.rev) {
+		t.Error("the open thread stays unseen")
 	}
 }
 
@@ -3054,29 +3117,31 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
 	a.setScope(commit)
 	pump(t, a, "the commit", func() bool { return !a.switching && !a.loading })
+	rev := a.rev
+	overviewOf := func() targetState { return a.targets.state(rev, review.TargetOverview) }
 	a.generateOverview()
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
-	if got := a.overviewStateOf(commit); got != overviewWriting {
-		t.Fatalf("state while the overview runs = %d", got)
+	if got := overviewOf(); got.status != targetRunning {
+		t.Fatalf("state while the overview runs = %+v", got)
 	}
 	tt := ui.NewTester(a.view, 1300, 900)
 	tt.Frame()
 	snapshot(t, tt, "commit-row-writing")
 	fake.release()
-	pump(t, a, "the overview", func() bool { return a.overviewStateOf(commit) != overviewWriting })
-	if got := a.overviewStateOf(commit); got != overviewReady {
-		t.Fatalf("state after the overview = %d, want ready", got)
+	pump(t, a, "the overview", func() bool { return !overviewOf().busy() })
+	if got := overviewOf(); got != (targetState{status: targetAnswered, unseen: true}) {
+		t.Fatalf("state after the overview = %+v, want answered and unseen", got)
 	}
 	tt.Frame()
 	snapshot(t, tt, "commit-row-ready")
-	if got := a.overviewStateOf(gitx.Scope{Kind: gitx.ScopeUncommitted}); got != overviewQuiet {
-		t.Errorf("uncommitted changes state = %d, want quiet", got)
+	if a.targets.unseenIn(a.rev) {
+		t.Error("the uncommitted changes have an unseen answer")
 	}
 	a.setScope(commit)
 	pump(t, a, "the commit again", func() bool { return !a.switching && !a.loading })
-	if got := a.overviewStateOf(commit); got != overviewQuiet {
-		t.Errorf("state after opening the commit = %d, want quiet", got)
+	if overviewOf().unseen {
+		t.Error("the overview stays unseen after opening the commit")
 	}
 
 	fake.fail(errors.New("claude: executable file not found in $PATH"))
@@ -3085,8 +3150,8 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
 	fake.release()
-	pump(t, a, "the failed overview", func() bool { return a.overviewStateOf(commit) != overviewWriting })
-	if got := a.overviewStateOf(commit); got != overviewFailed {
-		t.Errorf("state after a failed overview = %d, want failed", got)
+	pump(t, a, "the failed overview", func() bool { return !overviewOf().busy() })
+	if got := overviewOf(); got != (targetState{status: targetFailed, unseen: true}) {
+		t.Errorf("state after a failed overview = %+v, want failed and unseen", got)
 	}
 }

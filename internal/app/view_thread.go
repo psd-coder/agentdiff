@@ -114,7 +114,7 @@ func (a *app) message(c *ui.Context, th *review.Thread, i int) {
 			markdown.View(c, m.Text, &a.md)
 		}
 		if m.Err != "" {
-			ui.Text(c, m.Err).FontSize(12).TextColor(t.Danger).Selectable()
+			errorText(c, m.Err)
 		}
 	})
 }
@@ -191,7 +191,10 @@ func (a *app) threadRow(c *ui.Context, th *review.Thread) {
 			first = th.Messages[0].Text
 		}
 		ui.Text(c, excerpt(first, 300)).MaxLines(2)
-		ui.Text(c, a.threadMeta(th)).FontSize(11).TextColor(t.TextMuted)
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, a.threadMeta(th)).FontSize(11).TextColor(t.TextMuted)
+			targetMark(c, a.state(th.ID))
+		})
 	})
 	if row.Clicked() {
 		a.openThread(th.ID)

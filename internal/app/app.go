@@ -106,10 +106,8 @@ type app struct {
 	// so a test can wait for them before its store is removed.
 	streams sync.WaitGroup
 	// logs is the run log of each review, newest first, in memory.
-	logs map[*review.Review][]*logRun
-	// unseen holds the reviews whose overview run ended while another
-	// review was on screen.
-	unseen map[*review.Review]bool
+	logs    map[*review.Review][]*logRun
+	targets *targets
 
 	sidebarW    float32
 	scopePct    float32
@@ -250,7 +248,6 @@ func newApp(s store.Store) *app {
 		logPct:      50,
 		drafts:      map[string]string{},
 		logs:        map[*review.Review][]*logRun{},
-		unseen:      map[*review.Review]bool{},
 		groupsOpen:  map[string]*bool{},
 		sidebarW:    280,
 		scopePct:    34,
@@ -258,6 +255,7 @@ func newApp(s store.Store) *app {
 		exportAgent: true,
 	}
 	a.runner = newRunner(a.stream, a.saveReviewOf)
+	a.targets = newTargets(a.runner, a.onScreen)
 	return a
 }
 
@@ -563,7 +561,7 @@ func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 	}
 	a.reviews.ClearAdopted()
 	a.scope, a.rev = s, rev
-	delete(a.unseen, rev)
+	a.targets.seen(rev, review.TargetOverview)
 }
 
 // contents is a file read for a diff or a code snippet.

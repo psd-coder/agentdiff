@@ -181,11 +181,8 @@ func (a *app) overviewPage(c *ui.Context) {
 			default:
 				a.overviewSections(c, ov)
 			}
-			if ov != nil && ov.Err != "" && run == nil {
-				ui.Column(c).Gap(4).Padding(12).Radius(8).Border(1, t.Danger).Children(func() {
-					ui.Text(c, "The agent failed").Bold().TextColor(t.Danger)
-					ui.Text(c, ov.Err).FontSize(12).Font("monospace").Selectable()
-				})
+			if s := a.state(review.TargetOverview).status; s == targetFailed || s == targetStopped {
+				failureBox(c, ov.Err)
 			}
 			if len(a.files) > 0 && !a.loading {
 				a.groupCards(c)

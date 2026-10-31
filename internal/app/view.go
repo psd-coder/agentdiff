@@ -11,7 +11,6 @@ import (
 
 	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
-	"github.com/psd-coder/agentdiff/internal/store"
 )
 
 func (a *app) view(c *ui.Context) {
@@ -23,6 +22,7 @@ func (a *app) view(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
+	a.markSeen()
 	a.keys(c)
 	ui.Column(c).Fill().Children(func() {
 		a.toolbar(c)
@@ -152,13 +152,13 @@ func (a *app) scopeList(c *ui.Context) {
 			cm := rows.commit(i)
 			changeItem(c, commitIcon, cm.Subject, look, func() {
 				s, _ := rows.scope(i)
-				a.overviewMark(c, s)
+				a.scopeMark(c, s)
 				ui.Text(c, age(cm.Time)).FontSize(11).TextColor(t.TextMuted).SingleLine()
 			}).Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04"))
 		default:
 			row := rows.above[i]
 			item := changeItem(c, row.icon, row.text, look, func() {
-				a.overviewMark(c, row.scope)
+				a.scopeMark(c, row.scope)
 				if row.badge != "" {
 					ui.Badge(c, row.badge)
 				}
@@ -176,48 +176,76 @@ func (a *app) scopeList(c *ui.Context) {
 	}
 }
 
-// overviewState is how far the overview of a scope in the list of
-// changes has come, as its row shows it.
-type overviewState uint8
-
-const (
-	overviewQuiet overviewState = iota
-	overviewWriting
-	// overviewReady and overviewFailed are an overview run that ended
-	// while another scope was open, until the user opens its scope.
-	overviewReady
-	overviewFailed
-)
-
-func (a *app) overviewStateOf(s gitx.Scope) overviewState {
+// scopeMark shows in the row of scope s in the list of changes what its
+// review has new: a spinner while the agent writes the overview, and a dot
+// while a run ended that the user did not see.
+func (a *app) scopeMark(c *ui.Context, s gitx.Scope) {
+	t := c.Theme()
 	rev := a.reviews.Kept(a.repo.Root, s)
-	switch {
-	case rev == nil:
-		return overviewQuiet
-	case a.runner.run(rev, store.TargetOverview) != nil:
-		return overviewWriting
-	case !a.unseen[rev]:
-		return overviewQuiet
-	case rev.Overview != nil && rev.Overview.Err != "":
-		return overviewFailed
+	if rev == nil {
+		return
 	}
-	return overviewReady
+	ov := a.targets.state(rev, review.TargetOverview)
+	switch {
+	case ov.status == targetRunning:
+		ui.Spinner(c).Size(12, 12).Tooltip("Writing the overview")
+	case ov.unseen && ov.status == targetFailed:
+		unseenDot(c, t.Danger, "The overview failed")
+	case ov.unseen:
+		unseenDot(c, t.Accent, "The overview is ready")
+	case a.targets.unseenIn(rev):
+		unseenDot(c, t.Accent, "New answers")
+	}
 }
 
-// overviewMark shows the state of the overview of scope s in its row of
-// the list of changes: a spinner while the agent writes it, and a dot when
-// it ended while another scope was open.
-func (a *app) overviewMark(c *ui.Context, s gitx.Scope) {
+func unseenDot(c *ui.Context, color ui.Color, tip string) {
+	ui.Box(c).Size(8, 8).Radius(4).Background(color).Tooltip(tip)
+}
+
+// targetMark shows the state of a run target in a row that links to it:
+// a spinner while the agent writes it, "failed" or "stopped" when its
+// latest answer did not come, and a dot while the user did not see the end
+// of its run.
+func targetMark(c *ui.Context, s targetState) {
 	t := c.Theme()
-	switch a.overviewStateOf(s) {
-	case overviewWriting:
-		ui.Spinner(c).Size(12, 12).Tooltip("Writing the overview")
-	case overviewReady:
-		ui.Box(c).Size(8, 8).Radius(4).Background(t.Accent).Tooltip("The overview is ready")
-	case overviewFailed:
-		ui.Box(c).Size(8, 8).Radius(4).Background(t.Danger).Tooltip("The overview failed")
-	case overviewQuiet:
+	switch s.status {
+	case targetQueued, targetRunning:
+		ui.Spinner(c).Size(12, 12)
+		return
+	case targetFailed:
+		ui.Text(c, "failed").FontSize(11).TextColor(t.Danger)
+	case targetStopped:
+		ui.Text(c, "stopped").FontSize(11).TextColor(t.TextMuted)
+	case targetIdle, targetAnswered:
 	}
+	if s.unseen {
+		unseenDot(c, t.Accent, "New answer")
+	}
+}
+
+// errorText shows why an answer did not come: the agent's error, or
+// Stopped in gray for a run the user stopped.
+func errorText(c *ui.Context, err string) {
+	t := c.Theme()
+	if err == review.Stopped {
+		ui.Text(c, err).FontSize(12).TextColor(t.TextMuted)
+		return
+	}
+	ui.Text(c, err).FontSize(12).TextColor(t.Danger).Selectable()
+}
+
+// failureBox shows the error of a page's answer in a red box, or Stopped
+// in gray for a run the user stopped.
+func failureBox(c *ui.Context, err string) {
+	t := c.Theme()
+	if err == review.Stopped {
+		errorText(c, err)
+		return
+	}
+	ui.Column(c).Gap(4).Padding(12).Radius(8).Border(1, t.Danger).Children(func() {
+		ui.Text(c, "The agent failed").Bold().TextColor(t.Danger)
+		ui.Text(c, err).FontSize(12).Font("monospace").Selectable()
+	})
 }
 
 // itemLook is how a row of the list of changes shows that it is chosen.
@@ -435,10 +463,7 @@ func (a *app) reviewNav(c *ui.Context) {
 	chosen := a.nav.page.String()
 	nav := ui.Sidebar(c, &chosen, func() {
 		sidebarHeading(c, "Review", nil)
-		ov := ui.SidebarItem(c, overview.String(), overviewIcon, "Overview")
-		if a.busy(store.TargetOverview) {
-			ov.Children(func() { ui.Spinner(c).Size(12, 12) })
-		}
+		ui.SidebarItem(c, overview.String(), overviewIcon, "Overview").Children(func() { targetMark(c, a.state(review.TargetOverview)) })
 		a.walkItems(c, "", 1)
 		ui.SidebarItem(c, page{kind: kindAll}.String(), filesIcon, "All files diff")
 		threads := len(a.rev.Threads)
@@ -541,9 +566,7 @@ func (a *app) walkItems(c *ui.Context, parent string, depth int) {
 			continue
 		}
 		item := ui.SidebarItem(c, page{kindWalk, w.ID}.String(), nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))
-		if a.busy(w.ID) {
-			item.Children(func() { ui.Spinner(c).Size(12, 12) })
-		}
+		item.Children(func() { targetMark(c, a.state(w.ID)) })
 		if depth < 8 {
 			a.walkItems(c, w.ID, depth+1)
 		}

@@ -87,12 +87,7 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 	row.Children(func() {
 		ui.Text(c, "›").TextColor(t.Accent)
 		ui.Text(c, a.rev.WalkTitle(w)).SingleLine().Shrink(1).Grow(1)
-		switch {
-		case a.busy(w.ID):
-			ui.Spinner(c).Size(12, 12)
-		case w.Failed():
-			ui.Text(c, "failed").FontSize(11).TextColor(t.Danger)
-		}
+		targetMark(c, a.state(w.ID))
 	})
 	if row.Clicked() {
 		if w.Question != "" {
@@ -348,6 +343,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 		return
 	}
 	run := a.runner.run(a.rev, w.ID)
+	st := a.state(w.ID)
 	path := a.rev.WalkPath(w.ID)
 	a.pageScroll(c, page{kindWalk, w.ID}).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
@@ -382,7 +378,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
 				})
-			case a.runner.queued(a.rev, w.ID):
+			case st.status == targetQueued:
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(14, 14)
 					ui.Text(c, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(t.TextMuted)
@@ -403,14 +399,11 @@ func (a *app) walkPage(c *ui.Context, id string) {
 					a.answerView(c, turn)
 				})
 			}
-			if w.Question != "" && run == nil && !a.runner.queued(a.rev, w.ID) {
+			if w.Question != "" && !st.busy() {
 				ui.Button(c, "Ask a follow-up").Tooltip("Continue this conversation in the side panel").OnClick(func() { a.openQuestion(w.ID) })
 			}
 			if w.Err != "" && run == nil {
-				ui.Column(c).Gap(4).Padding(12).Radius(8).Border(1, t.Danger).Children(func() {
-					ui.Text(c, "The agent failed").Bold().TextColor(t.Danger)
-					ui.Text(c, w.Err).FontSize(12).Font("monospace").Selectable()
-				})
+				failureBox(c, w.Err)
 			}
 			if run == nil && w.Agent != "" {
 				ui.Text(c, writtenBy(w.Agent, w.Model, w.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(t.TextMuted)

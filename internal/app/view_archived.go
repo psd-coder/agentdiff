@@ -131,7 +131,7 @@ func (a *app) savedWalk(c *ui.Context, rev *review.Review, w *review.Walk, seen 
 				case turn.Markdown != "":
 					markdown.View(c, turn.Markdown, &a.md)
 				case turn.Err != "":
-					ui.Text(c, turn.Err).FontSize(12).TextColor(t.Danger)
+					errorText(c, turn.Err)
 				}
 			})
 		}

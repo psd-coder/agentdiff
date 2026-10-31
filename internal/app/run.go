@@ -112,8 +112,6 @@ func (a *app) generateOverview() {
 	a.runner.start(ex, "Overview", "", func(answered bool) {
 		if rev == a.rev {
 			a.leaveGone()
-		} else {
-			a.unseen[rev] = true
 		}
 		if answered {
 			a.deeperAhead(rev)
@@ -310,9 +308,12 @@ func providerName(p agent.Provider) string {
 func (a *app) release(rev *review.Review) {
 	a.runner.release(rev)
 	delete(a.logs, rev)
-	delete(a.unseen, rev)
+	a.targets.forget(rev)
 }
+
+// state is the state of target of the review on screen.
+func (a *app) state(target string) targetState { return a.targets.state(a.rev, target) }
 
 // busy reports whether a run writes into the review on screen for
 // target, or waits in the queue to.
-func (a *app) busy(target string) bool { return a.runner.busy(a.rev, target) }
+func (a *app) busy(target string) bool { return a.state(target).busy() }
