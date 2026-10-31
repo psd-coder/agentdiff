@@ -66,7 +66,23 @@ func (a *app) pageExists(page string) bool {
 	if id, ok := strings.CutPrefix(page, "archived:"); ok {
 		return a.earlierReview(id) != nil
 	}
+	if g, ok := strings.CutPrefix(page, "group:"); ok {
+		if _, found := a.groupIndex(g); !found {
+			return false
+		}
+	}
 	return page != a.page
+}
+
+// leaveGoneGroup replaces an open group page with the Overview when the
+// groups have changed and none has its id any more. History does not
+// keep the gone page.
+func (a *app) leaveGoneGroup() {
+	if g, ok := strings.CutPrefix(a.page, "group:"); ok {
+		if _, found := a.groupIndex(g); !found {
+			a.page = "overview"
+		}
+	}
 }
 
 // resetNav forgets the history and the scroll places, for another scope.

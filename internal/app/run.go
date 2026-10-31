@@ -157,6 +157,9 @@ func (a *app) generateOverview() {
 			cancel()
 			delete(a.overviews, rev)
 			a.saveReviewOf(rev)
+			if rev == a.rev {
+				a.leaveGoneGroup()
+			}
 			a.deeperAhead(rev)
 		case agent.EventError:
 			stopped := ctx.Err() != nil
@@ -172,6 +175,9 @@ func (a *app) generateOverview() {
 			}
 			rev.Overview = ov
 			a.saveReviewOf(rev)
+			if rev == a.rev {
+				a.leaveGoneGroup()
+			}
 		}
 	})
 }
