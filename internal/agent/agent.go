@@ -157,7 +157,7 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 	_, _ = io.Copy(io.Discard, pr)
 	exitErr := <-waitErr
 	stderrLines.flush()
-	log.add(LogExit, exitText(ctx, exitErr))
+	log.add(LogExit, exitText(ctx, exitErr, done))
 	if done {
 		return
 	}
