@@ -1267,6 +1267,35 @@ func TestDeeperAhead(t *testing.T) {
 
 // TestDeleteOpenWalkLeavesNoHistory deletes the open walk: its parent
 // opens, and Back leads past the parent to the page before it.
+func TestWalkRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    string
+		more   []review.Turn
+		failed bool
+	}{
+		{name: "a failed answer", err: "boom", failed: true},
+		{name: "a failed follow-up after a good answer", more: []review.Turn{{Question: "More?", Err: "boom"}}, failed: true},
+		{name: "a good follow-up after a failed answer", err: "boom", more: []review.Turn{{Question: "More?", Markdown: "Fine."}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newTestApp(t)
+			a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+				Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
+			}}
+			a.rev.Walks = append(a.rev.Walks, &review.Walk{ID: "q", Step: 0, Question: "Why?", Err: tc.err, More: tc.more})
+			tt := ui.NewTester(a.view, 1300, 800)
+			tt.Frame()
+			if !tt.HasText("Why?") {
+				t.Fatalf("texts %q", tt.Texts())
+			}
+			if got := tt.HasText("failed"); got != tc.failed {
+				t.Errorf("shows failed = %v, want %v", got, tc.failed)
+			}
+		})
+	}
+}
+
 func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
 	a := newTestApp(t)
 	parent := a.rev.AddWalk("", 0, "")

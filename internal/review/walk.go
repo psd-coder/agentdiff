@@ -80,6 +80,14 @@ type Turn struct {
 	Generated time.Time    `json:"generated"`
 }
 
+// Failed reports whether the latest answer of the walk failed.
+func (w *Walk) Failed() bool {
+	if n := len(w.More); n > 0 {
+		return w.More[n-1].Err != ""
+	}
+	return w.Err != ""
+}
+
 // Turns returns the walk's first question and answer, then the
 // follow-ups.
 func (w *Walk) Turns() []Turn {
