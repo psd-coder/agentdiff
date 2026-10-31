@@ -189,6 +189,9 @@ func (a *app) regenerate(parent string) {
 			}
 		}
 		rev.DeleteStepWalks(parent)
+		if rev == a.rev {
+			a.closeGoneQuestion()
+		}
 		if parent == "" {
 			a.generateOverview()
 		} else if w := rev.Walk(parent); w != nil {
@@ -419,6 +422,7 @@ func (a *app) deleteWalk(w *review.Walk) {
 			a.stopWalk(x.ID)
 		}
 	}
+	a.closeGoneQuestion()
 	a.page = "overview"
 	if w.Parent != "" {
 		a.page = "walk:" + w.Parent

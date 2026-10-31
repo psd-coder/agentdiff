@@ -1207,7 +1207,7 @@ func TestQuestionPanel(t *testing.T) {
 		t.Fatalf("panel not open; page %q", a.page)
 	}
 	a.queue = make(chan func(), 64)
-	a.paneDraft = "Why lower-case?"
+	tt.Type("Why lower-case?")
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	w := a.rev.Walk(a.question)
@@ -1244,6 +1244,195 @@ func TestQuestionPanel(t *testing.T) {
 	}
 	if a.question != w.ID {
 		t.Errorf("question = %q", a.question)
+	}
+}
+
+// TestLeavingReviewClosesAskPanel leaves a review while its Ask panel is
+// open: the panel closes, and a question sent after that goes nowhere.
+func TestLeavingReviewClosesAskPanel(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		leave func(a *app)
+	}{
+		{"scope switch", func(a *app) {
+			a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+			pump(t, a, "the commit", func() bool { return !a.switching })
+		}},
+		{"start over", func(a *app) { a.startOver() }},
+		{"archive", func(a *app) {
+			if err := a.archiveCurrent(&earlier{}); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newTestApp(t)
+			a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "q1", "Because.")}
+			a.queue = make(chan func(), 64)
+			left := a.rev
+			left.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+				Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
+			}}
+			a.saveReview()
+			tt := ui.NewTester(a.view, 1400, 900)
+			tt.Frame()
+			if err := tt.Click("Ask about this step"); err != nil {
+				t.Fatal(err)
+			}
+			tt.Frame()
+			tt.Type("Why lower-case?")
+			tt.Frame()
+
+			tc.leave(a)
+			tt.Frame()
+			tt.Key(ui.Cmd, ui.KeyEnter)
+			tt.Frame()
+			if a.questionOpen() || tt.HasText("About: Lower-case keys") {
+				t.Error("the Ask panel stayed open")
+			}
+			if len(left.Walks) != 0 || len(a.rev.Walks) != 0 {
+				t.Errorf("questions: %d in the left review, %d in the new one", len(left.Walks), len(a.rev.Walks))
+			}
+		})
+	}
+}
+
+// TestArchiveDropsSavedNote archives a review whose feedback was saved:
+// the feedback page of the new review shows no "Saved to" note.
+func TestArchiveDropsSavedNote(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Markdown: "x"}
+	a.saveReview()
+	a.savedPath = "/tmp/feedback.md"
+	a.page = "feedback"
+	tt := ui.NewTester(a.view, 1400, 900)
+	tt.Frame()
+	if !tt.HasText("Saved to /tmp/feedback.md") {
+		t.Fatal("the note does not show before archiving")
+	}
+	if err := a.archiveCurrent(&earlier{}); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if tt.HasText("Saved to") {
+		t.Error("the feedback page kept the Saved to note of the archived review")
+	}
+}
+
+// TestLeavingReviewDropsEmptyThread opens a thread on a line, writes
+// nothing, and switches scope and back: the thread is gone from the
+// review, its file and its saved copy.
+func TestLeavingReviewDropsEmptyThread(t *testing.T) {
+	a := newTestApp(t)
+	first := a.rev
+	a.page = "file:cache/cache.go"
+	a.lineThread("cache/cache.go", lineRange(5, 5))
+	a.saveReview()
+	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if a.rev != first {
+		t.Fatal("switching back loaded a second copy of the review")
+	}
+	if len(first.Threads) != 0 || first.ThreadCounts()["cache/cache.go"] != 0 || !first.Empty() {
+		t.Errorf("threads = %d, counts %v", len(first.Threads), first.ThreadCounts())
+	}
+	if saved := a.store.LoadReview(a.repo.Root, a.scope); len(saved.Threads) != 0 {
+		t.Errorf("saved threads = %d", len(saved.Threads))
+	}
+
+	a.lineThread("cache/cache.go", lineRange(5, 5))
+	a.comment(a.rev.Thread(a.thread), "Why lower-case?")
+	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if len(first.Threads) != 1 {
+		t.Errorf("leaving the review dropped a thread with a comment: %d threads", len(first.Threads))
+	}
+}
+
+// TestDeleteWalkClosesItsAskPanel deletes the parent of the walk the Ask
+// panel asks about, or of the question the panel shows: the panel closes.
+// Deleting another walk keeps it.
+func TestDeleteWalkClosesItsAskPanel(t *testing.T) {
+	a := newTestApp(t)
+	parent := a.rev.AddWalk("", 0, "")
+	child := a.rev.AddWalk(parent.ID, 1, "")
+	other := a.rev.AddWalk("", 1, "")
+	a.askAbout(other.ID, 0)
+	a.deleteWalk(a.rev.AddWalk("", 2, ""))
+	if !a.questionOpen() {
+		t.Fatal("deleting another walk closed the Ask panel")
+	}
+	a.askAbout(child.ID, 0)
+	a.deleteWalk(parent)
+	if a.questionOpen() {
+		t.Error("the Ask panel of a deleted walk stayed open")
+	}
+	parent = a.rev.AddWalk("", 0, "")
+	a.openQuestion(a.rev.AddWalk(parent.ID, 0, "Why?").ID)
+	a.deleteWalk(parent)
+	if a.question != "" {
+		t.Error("the panel of a deleted question stayed open")
+	}
+}
+
+// TestRegenerateClosesAskPanelOfItsStepWalk regenerates a walk while the
+// Ask panel asks about a step of a deeper walk under it: that deeper walk
+// goes, and the panel closes.
+func TestRegenerateClosesAskPanelOfItsStepWalk(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: fakeClaude(t, "w1", "Because.")}
+	a.queue = make(chan func(), 64)
+	parent := a.rev.AddWalk("", 0, "")
+	deeper := a.rev.AddWalk(parent.ID, 0, "")
+	a.askAbout(deeper.ID, 0)
+	a.regenerate(parent.ID)
+	pump(t, a, "the regenerated walk", func() bool { return !a.walkBusy(parent.ID) })
+	if a.rev.Walk(deeper.ID) != nil || a.questionOpen() {
+		t.Errorf("deeper walk kept %v, panel open %v", a.rev.Walk(deeper.ID) != nil, a.questionOpen())
+	}
+}
+
+// TestQuestionDraftsPerTarget types in the Ask panel of two steps and in
+// the reply box of two questions: each text comes back with its target.
+func TestQuestionDraftsPerTarget(t *testing.T) {
+	a := newTestApp(t)
+	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "s", Steps: []review.Step{{Title: "One", Text: "t"}, {Title: "Two", Text: "t"}},
+	}}
+	q1 := a.rev.AddWalk("", 0, "First?")
+	q2 := a.rev.AddWalk("", 1, "Second?")
+	tt := ui.NewTester(a.view, 1400, 900)
+	// shown is the text of the focused box, read through the clipboard.
+	shown := func(open func()) string {
+		t.Helper()
+		open()
+		tt.Frame()
+		tt.SetClipboard("")
+		tt.Key(ui.Cmd, ui.KeyA)
+		tt.Key(ui.Cmd, ui.KeyC)
+		tt.Frame()
+		return tt.Clipboard()
+	}
+	targets := []struct {
+		open func()
+		text string
+	}{
+		{func() { a.askAbout("", 0) }, "draft of step one"},
+		{func() { a.askAbout("", 1) }, "draft of step two"},
+		{func() { a.openQuestion(q1.ID) }, "reply to the first"},
+		{func() { a.openQuestion(q2.ID) }, "reply to the second"},
+	}
+	for _, tc := range targets {
+		if got := shown(tc.open); got != "" {
+			t.Fatalf("before %q was typed, the box shows %q", tc.text, got)
+		}
+		tt.Type(tc.text)
+		tt.Frame()
+	}
+	for _, tc := range targets {
+		if got := shown(tc.open); got != tc.text {
+			t.Errorf("the box shows %q, want %q", got, tc.text)
+		}
 	}
 }
 

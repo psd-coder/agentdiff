@@ -166,10 +166,8 @@ type app struct {
 	exportAgent bool
 	exportDone  bool
 	savedPath   string
-	askDraft    string
 	question    string
 	asking      *askTarget
-	paneDraft   string
 	extra       map[string]*extraFile
 	reveal      *reveal
 
@@ -588,11 +586,13 @@ type scopeLoad struct {
 
 // enterScope makes s, with its review rev, the scope the window shows.
 func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
+	if a.leaveReview() {
+		a.saveReview()
+	}
 	a.scope, a.rev = s, rev
 	a.resetNav()
 	a.folded = map[string]bool{}
-	a.thread = ""
-	a.exportDone, a.savedPath = false, ""
+	a.exportDone = false
 	a.adoptedFrom = nil
 }
 
@@ -958,12 +958,14 @@ func (a *app) archiveCurrent(e *earlier) error {
 	}
 	delete(a.runs, old)
 	old.Scope = to
+	if a.leaveReview() {
+		a.saved(a.store.SaveReview(old))
+	}
 	e.rev = old
 	a.archived = append([]*earlier{e}, a.archived...)
 	a.movedTo, a.adoptedFrom = "", nil
 	a.rev = review.New(a.repo.Root, a.scope)
 	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
-	a.thread = ""
 	a.resetNav()
 	return nil
 }
@@ -1188,9 +1190,9 @@ func (a *app) startOver() {
 		a.stopWalk(w.ID)
 	}
 	delete(a.runs, a.rev)
+	a.leaveReview()
 	a.rev = review.New(a.repo.Root, a.scope)
 	a.reviews[reviewKey(a.repo.Root, a.scope)] = a.rev
-	a.thread, a.savedPath = "", ""
 	a.resetNav()
 	a.drafts = map[string]string{}
 }
@@ -1285,15 +1287,30 @@ func (a *app) openThread(id string) {
 }
 
 // closeEmptyThread drops a thread the user opened and left without
-// writing anything, unless it is the one being opened.
-func (a *app) closeEmptyThread(keep string) {
+// writing anything, unless it is the one being opened. It reports whether
+// it dropped one.
+func (a *app) closeEmptyThread(keep string) bool {
 	if a.thread == "" || a.thread == keep || a.rev == nil {
-		return
+		return false
 	}
-	if t := a.rev.Thread(a.thread); t != nil && len(t.Messages) == 0 {
-		a.rev.DeleteThread(t.ID)
-		delete(a.drafts, t.ID)
+	t := a.rev.Thread(a.thread)
+	if t == nil || len(t.Messages) > 0 {
+		return false
 	}
+	a.rev.DeleteThread(t.ID)
+	delete(a.drafts, t.ID)
+	return true
+}
+
+// leaveReview closes the side panels and the export note of the review
+// the window shows, before another review takes its place. It reports
+// whether it dropped an empty thread. Then the caller saves the review.
+func (a *app) leaveReview() bool {
+	dropped := a.closeEmptyThread("")
+	a.thread = ""
+	a.closeQuestion()
+	a.savedPath = ""
+	return dropped
 }
 
 func (a *app) newThread(anchor review.Anchor) {
