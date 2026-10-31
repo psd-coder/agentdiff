@@ -57,10 +57,13 @@ type runner struct {
 	waiting []waitingRun
 	// logs is the run log of each review, newest first, in memory.
 	logs map[*review.Review][]*logRun
+	// unseen holds the reviews whose overview run ended while another
+	// review was on screen.
+	unseen map[*review.Review]bool
 }
 
 func newRunner() runner {
-	return runner{runs: map[runKey]*agentRun{}, logs: map[*review.Review][]*logRun{}}
+	return runner{runs: map[runKey]*agentRun{}, logs: map[*review.Review][]*logRun{}, unseen: map[*review.Review]bool{}}
 }
 
 type waitingRun struct {
@@ -204,6 +207,7 @@ func (a *app) release(rev *review.Review) {
 	}
 	a.runner.waiting = slices.DeleteFunc(a.runner.waiting, func(q waitingRun) bool { return q.key.rev == rev })
 	delete(a.runner.logs, rev)
+	delete(a.runner.unseen, rev)
 	a.startWaiting()
 }
 

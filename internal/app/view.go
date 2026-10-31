@@ -151,11 +151,14 @@ func (a *app) scopeList(c *ui.Context) {
 		case k == commitRow:
 			cm := rows.commit(i)
 			changeItem(c, commitIcon, cm.Subject, look, func() {
+				s, _ := rows.scope(i)
+				a.overviewMark(c, s)
 				ui.Text(c, age(cm.Time)).FontSize(11).TextColor(t.TextMuted).SingleLine()
 			}).Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04"))
 		default:
 			row := rows.above[i]
 			item := changeItem(c, row.icon, row.text, look, func() {
+				a.overviewMark(c, row.scope)
 				if row.badge != "" {
 					ui.Badge(c, row.badge)
 				}
@@ -170,6 +173,50 @@ func (a *app) scopeList(c *ui.Context) {
 		if scope, ok := rows.scope(sel); ok && scope.Key() != a.chosen.Key() {
 			a.setScope(scope)
 		}
+	}
+}
+
+// overviewState is how far the overview of a scope in the list of
+// changes has come, as its row shows it.
+type overviewState uint8
+
+const (
+	overviewQuiet overviewState = iota
+	overviewWriting
+	// overviewReady and overviewFailed are an overview run that ended
+	// while another scope was open, until the user opens its scope.
+	overviewReady
+	overviewFailed
+)
+
+func (a *app) overviewStateOf(s gitx.Scope) overviewState {
+	rev := a.reviews.Kept(a.repo.Root, s)
+	switch {
+	case rev == nil:
+		return overviewQuiet
+	case a.runner.run(rev, store.TargetOverview) != nil:
+		return overviewWriting
+	case !a.runner.unseen[rev]:
+		return overviewQuiet
+	case rev.Overview != nil && rev.Overview.Err != "":
+		return overviewFailed
+	}
+	return overviewReady
+}
+
+// overviewMark shows the state of the overview of scope s in its row of
+// the list of changes: a spinner while the agent writes it, and a dot when
+// it ended while another scope was open.
+func (a *app) overviewMark(c *ui.Context, s gitx.Scope) {
+	t := c.Theme()
+	switch a.overviewStateOf(s) {
+	case overviewWriting:
+		ui.Spinner(c).Size(12, 12).Tooltip("Writing the overview")
+	case overviewReady:
+		ui.Box(c).Size(8, 8).Radius(4).Background(t.Accent).Tooltip("The overview is ready")
+	case overviewFailed:
+		ui.Box(c).Size(8, 8).Radius(4).Background(t.Danger).Tooltip("The overview failed")
+	case overviewQuiet:
 	}
 }
 

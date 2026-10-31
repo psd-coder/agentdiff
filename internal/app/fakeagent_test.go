@@ -27,7 +27,8 @@ type fakeReply struct {
 	session string
 	answer  string
 	err     error
-	// hold keeps the run going until release or until it is cancelled.
+	// hold keeps the run going until release or until it is cancelled. A
+	// run that fails waits for release only.
 	hold bool
 	// streamed and activity reach the app before the hold, as text the
 	// agent writes and as what it does now.
@@ -118,6 +119,9 @@ func (f *fakeAgent) run(ctx context.Context, cfg agent.Config, req agent.Request
 			}
 		}
 		if r.err != nil {
+			if release != nil {
+				<-release
+			}
 			log(agent.LogExit, "Could not start: "+r.err.Error())
 			ch <- agent.Event{Kind: agent.EventError, Err: r.err}
 			return

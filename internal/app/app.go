@@ -548,6 +548,7 @@ func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
 		a.saveReview()
 	}
 	a.scope, a.rev = s, rev
+	delete(a.runner.unseen, rev)
 }
 
 // contents is a file read for a diff or a code snippet.

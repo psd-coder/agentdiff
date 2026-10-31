@@ -112,6 +112,8 @@ func (a *app) generateOverview() {
 	a.launch(&agentRun{kind: overviewKind, ex: ex, ended: func(answered bool) {
 		if rev == a.rev {
 			a.leaveGone()
+		} else {
+			a.runner.unseen[rev] = true
 		}
 		if answered {
 			a.deeperAhead(rev)
