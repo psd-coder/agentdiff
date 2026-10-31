@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 
+	"github.com/psd-coder/agentdiff/internal/continuity"
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
@@ -19,7 +20,7 @@ func (a *app) archivedPage(c *ui.Context, id string) {
 		return
 	}
 	t := c.Theme()
-	rev, ov := e.rev, e.rev.Overview
+	rev, ov := e.Rev, e.Rev.Overview
 	a.pageScroll(c, "archived:"+id).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
@@ -46,13 +47,13 @@ func (a *app) archivedPage(c *ui.Context, id string) {
 }
 
 // earlierStatus says where the changes of an archived review are now.
-func (a *app) earlierStatus(e *earlier) string {
+func (a *app) earlierStatus(e *continuity.Earlier) string {
 	text := "It was written for uncommitted changes that are no longer in the working tree. It comes back by itself when those changes do."
 	switch {
-	case e.movedTo != "":
-		text = "It was written for changes that are now commit " + a.commitName(e.movedTo) + ". The review moves there when you open the commit."
-	case e.probably != "":
-		text = "Its files were probably committed in " + a.commitName(e.probably) + ", which changes all of them. The commit has other changes too, so the review does not move there by itself."
+	case e.MovedTo != "":
+		text = "It was written for changes that are now commit " + a.commitName(e.MovedTo) + ". The review moves there when you open the commit."
+	case e.Probably != "":
+		text = "Its files were probably committed in " + a.commitName(e.Probably) + ", which changes all of them. The commit has other changes too, so the review does not move there by itself."
 	}
 	if !a.rev.Empty() {
 		text += " Restore works while the uncommitted changes have no review of their own."

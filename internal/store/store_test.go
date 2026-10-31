@@ -291,7 +291,7 @@ func TestFindMoveCopyReview(t *testing.T) {
 	if _, ok := s.FindReview("/repo", uncommitted, "p1"); ok {
 		t.Error("found the review of the scope itself")
 	}
-	if src, ok := s.FindReview("/repo", commit, "p1"); !ok || src != uncommitted {
+	if src, ok := s.FindReview("/repo", commit, "p1"); !ok || src.Scope != uncommitted {
 		t.Fatalf("found %+v, %v", src, ok)
 	}
 	if err := s.MoveReview("/repo", uncommitted, commit); err != nil {
@@ -308,7 +308,7 @@ func TestFindMoveCopyReview(t *testing.T) {
 	}
 	// The same changes again, as a cherry-pick: the review comes from a
 	// commit, which keeps it, and the uncommitted changes stay alone.
-	if src, ok := s.FindReview("/repo", uncommitted, "p1"); !ok || src.Kind != gitx.ScopeCommit {
+	if src, ok := s.FindReview("/repo", uncommitted, "p1"); !ok || src.Scope.Kind != gitx.ScopeCommit {
 		t.Errorf("found %+v, %v; a moved review must name its new scope", src, ok)
 	}
 }
@@ -340,7 +340,7 @@ func TestArchiveReview(t *testing.T) {
 	if latest := archived[0]; latest.Overview.PatchID != fmt.Sprint("p", maxArchived+1) || latest.Scope.Kind != gitx.ScopeArchived {
 		t.Errorf("latest = %+v", latest)
 	}
-	if src, ok := s.FindReview("/repo", uncommitted, "p5"); !ok || src.Kind != gitx.ScopeArchived {
+	if src, ok := s.FindReview("/repo", uncommitted, "p5"); !ok || src.Scope.Kind != gitx.ScopeArchived {
 		t.Errorf("found %+v, %v", src, ok)
 	}
 	if _, ok := s.FindReview("/repo", uncommitted, "p0"); ok {
