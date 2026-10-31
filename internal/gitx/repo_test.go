@@ -1,7 +1,6 @@
 package gitx
 
 import (
-	"context"
 	"errors"
 	"maps"
 	"os"
@@ -56,7 +55,7 @@ func TestOpenWithoutGit(t *testing.T) {
 }
 
 func TestUnbornRepo(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := newTestRepo(t).open()
 	if r.HasHead(ctx) {
 		t.Error("HasHead() = true in a repo without commits")
@@ -75,7 +74,7 @@ func TestUnbornRepo(t *testing.T) {
 }
 
 func TestBranchesAndDefaultBase(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	remote := newTestRepo(t)
 	remote.write("a.txt", "a\n")
 	remote.commit("init")
@@ -124,7 +123,7 @@ func TestDefaultBaseLocal(t *testing.T) {
 			tr := &testRepo{t: t, dir: t.TempDir()}
 			tr.git("init", "-q", "-b", tt.branch)
 			tr.commit("init")
-			if got := tr.open().DefaultBase(context.Background()); got != tt.want {
+			if got := tr.open().DefaultBase(t.Context()); got != tt.want {
 				t.Errorf("DefaultBase() = %q, want %q", got, tt.want)
 			}
 		})
@@ -132,7 +131,7 @@ func TestDefaultBaseLocal(t *testing.T) {
 }
 
 func TestCommits(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.write("a.txt", "1\n")
 	first := tr.commit("first")
@@ -196,7 +195,7 @@ func TestCommits(t *testing.T) {
 }
 
 func TestGitDir(t *testing.T) {
-	got, err := newTestRepo(t).open().GitDir(context.Background())
+	got, err := newTestRepo(t).open().GitDir(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +205,7 @@ func TestGitDir(t *testing.T) {
 }
 
 func TestCommonDirOfLinkedWorktree(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.commit("first")
 	other := filepath.Join(t.TempDir(), "wt")
@@ -233,7 +232,7 @@ func TestIgnored(t *testing.T) {
 	tr.write(".gitignore", "dist/\n*.log\n")
 	tr.write("dist/sub/out.js", "x\n")
 	tr.write("src/a.go", "package a\n")
-	got, err := tr.open().Ignored(context.Background(), []string{".", "dist", "dist/sub", "src", "src/debug.log"})
+	got, err := tr.open().Ignored(t.Context(), []string{".", "dist", "dist/sub", "src", "src/debug.log"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,14 +240,14 @@ func TestIgnored(t *testing.T) {
 	if !maps.Equal(got, want) {
 		t.Errorf("Ignored = %v, want %v", got, want)
 	}
-	got, err = tr.open().Ignored(context.Background(), []string{"src"})
+	got, err = tr.open().Ignored(t.Context(), []string{"src"})
 	if err != nil || len(got) != 0 {
 		t.Errorf("Ignored(src) = %v, %v", got, err)
 	}
 }
 
 func TestOtherBranch(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.write("a.txt", "1\n")
 	tr.commit("first")
@@ -285,7 +284,7 @@ func TestOtherBranch(t *testing.T) {
 }
 
 func TestWorktrees(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tr := newTestRepo(t)
 	tr.write("a.txt", "1\n")
 	tr.commit("first")
@@ -318,7 +317,7 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	tr.write("old.txt", "old\n")
 	tr.commit("init")
 	r := tr.open()
-	ctx := context.Background()
+	ctx := t.Context()
 	uncommitted := Scope{Kind: ScopeUncommitted}
 	if fp, err := r.Fingerprint(ctx, uncommitted); err != nil || fp.Patch != "" || len(fp.Files) != 0 {
 		t.Fatalf("clean tree: %+v, err %v", fp, err)

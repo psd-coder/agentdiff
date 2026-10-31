@@ -1,7 +1,6 @@
 package gitx
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -25,7 +24,7 @@ func TestContentsUncommitted(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			old, new, err := r.Contents(context.Background(), s, tt.file)
+			old, new, err := r.Contents(t.Context(), s, tt.file)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -71,7 +70,7 @@ func TestContentsCommitted(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			old, new, err := r.Contents(context.Background(), tt.scope, tt.file)
+			old, new, err := r.Contents(t.Context(), tt.scope, tt.file)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -103,13 +102,13 @@ func TestContentsErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := r.Contents(context.Background(), s, tt.file)
+			_, _, err := r.Contents(t.Context(), s, tt.file)
 			if !errors.Is(err, tt.want) {
 				t.Errorf("Contents() error = %v, want %v", err, tt.want)
 			}
 		})
 	}
-	if _, _, err := r.Contents(context.Background(), s, FileChange{Path: "missing.txt", Status: StatusModified}); err == nil {
+	if _, _, err := r.Contents(t.Context(), s, FileChange{Path: "missing.txt", Status: StatusModified}); err == nil {
 		t.Error("Contents() of a file missing from HEAD succeeded")
 	}
 }
@@ -118,7 +117,7 @@ func TestContentsLargeBlob(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.write("big.txt", strings.Repeat("y", maxContentSize+1))
 	sha := tr.commit("big")
-	_, _, err := tr.open().Contents(context.Background(), Scope{Kind: ScopeCommit, Commit: sha}, FileChange{Path: "big.txt", Status: StatusAdded})
+	_, _, err := tr.open().Contents(t.Context(), Scope{Kind: ScopeCommit, Commit: sha}, FileChange{Path: "big.txt", Status: StatusAdded})
 	if !errors.Is(err, ErrTooLarge) {
 		t.Errorf("Contents() error = %v, want ErrTooLarge", err)
 	}
@@ -136,7 +135,7 @@ func TestContentsSymlink(t *testing.T) {
 	if c := changes["link"]; !c.Untracked || c.Additions != 1 {
 		t.Errorf("symlink change = %+v", c)
 	}
-	_, new, err := r.Contents(context.Background(), Scope{Kind: ScopeUncommitted}, changes["link"])
+	_, new, err := r.Contents(t.Context(), Scope{Kind: ScopeUncommitted}, changes["link"])
 	if err != nil || new != "target.txt" {
 		t.Errorf("Contents(link) = %q, %v", new, err)
 	}

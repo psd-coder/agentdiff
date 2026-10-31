@@ -1,7 +1,6 @@
 package gitx
 
 import (
-	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -9,7 +8,7 @@ import (
 
 func TestDiffStatUncommitted(t *testing.T) {
 	r := uncommittedFixture(t).open()
-	stat, err := r.DiffStat(context.Background(), Scope{Kind: ScopeUncommitted})
+	stat, err := r.DiffStat(t.Context(), Scope{Kind: ScopeUncommitted})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +30,7 @@ func TestDiffStatUncommitted(t *testing.T) {
 
 func TestDiffStatBranch(t *testing.T) {
 	h := newHistoryFixture(t)
-	stat, err := h.open().DiffStat(context.Background(), Scope{Kind: ScopeBranch, Base: "main"})
+	stat, err := h.open().DiffStat(t.Context(), Scope{Kind: ScopeBranch, Base: "main"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +41,7 @@ func TestDiffStatBranch(t *testing.T) {
 
 func TestPatchUncommitted(t *testing.T) {
 	r := uncommittedFixture(t).open()
-	patch, truncated, err := r.Patch(context.Background(), Scope{Kind: ScopeUncommitted}, 0)
+	patch, truncated, err := r.Patch(t.Context(), Scope{Kind: ScopeUncommitted}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +65,7 @@ func TestPatchUncommitted(t *testing.T) {
 
 func TestPatchTruncates(t *testing.T) {
 	r := uncommittedFixture(t).open()
-	full, _, err := r.Patch(context.Background(), Scope{Kind: ScopeUncommitted}, 0)
+	full, _, err := r.Patch(t.Context(), Scope{Kind: ScopeUncommitted}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +81,7 @@ func TestPatchTruncates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			patch, truncated, err := r.Patch(context.Background(), Scope{Kind: ScopeUncommitted}, tt.max)
+			patch, truncated, err := r.Patch(t.Context(), Scope{Kind: ScopeUncommitted}, tt.max)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +104,7 @@ func TestPatchTruncates(t *testing.T) {
 func TestPatchCommit(t *testing.T) {
 	h := newHistoryFixture(t)
 	r := h.open()
-	patch, _, err := r.Patch(context.Background(), Scope{Kind: ScopeCommit, Commit: h.root}, 0)
+	patch, _, err := r.Patch(t.Context(), Scope{Kind: ScopeCommit, Commit: h.root}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +118,7 @@ func TestPatchUnbornHead(t *testing.T) {
 	tr.write("staged.txt", "s\n")
 	tr.git("add", "staged.txt")
 	tr.write("new file.txt", "n\n")
-	patch, _, err := tr.open().Patch(context.Background(), Scope{Kind: ScopeUncommitted}, 0)
+	patch, _, err := tr.open().Patch(t.Context(), Scope{Kind: ScopeUncommitted}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,6 @@
 package gitx
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -91,7 +90,7 @@ func (tr *testRepo) open() *Repo {
 
 func changesByPath(t *testing.T, r *Repo, s Scope) map[string]FileChange {
 	t.Helper()
-	changes, err := r.Changes(context.Background(), s)
+	changes, err := r.Changes(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
 	}

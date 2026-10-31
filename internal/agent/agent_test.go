@@ -219,7 +219,7 @@ func TestRunFixtures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
 			bin := writeScript(t, "/bin/cat "+fixturePath(t, tt.fixture))
-			ch := Run(context.Background(), Config{Provider: tt.provider, Binary: bin}, Request{Dir: t.TempDir(), Prompt: "q"})
+			ch := Run(t.Context(), Config{Provider: tt.provider, Binary: bin}, Request{Dir: t.TempDir(), Prompt: "q"})
 			events := collect(t, ch, 5*time.Second)
 			last := assertOneTerminal(t, events)
 			if last.Kind != EventDone || last.Text != tt.answer || last.SessionID != tt.session {
@@ -237,7 +237,7 @@ func TestRunPassesPromptOnStdin(t *testing.T) {
 	out := filepath.Join(dir, "stdin.txt")
 	bin := writeScript(t, "/bin/cat > "+out+"\n/bin/cat "+fixturePath(t, "codex_exec.jsonl"))
 	req := Request{Dir: dir, Prompt: "question", SystemPrompt: "rules"}
-	last := assertOneTerminal(t, collect(t, Run(context.Background(), Config{Provider: Codex, Binary: bin}, req), 5*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Codex, Binary: bin}, req), 5*time.Second))
 	if last.Kind != EventDone {
 		t.Fatalf("last = %+v", last)
 	}
@@ -278,7 +278,7 @@ func TestRunErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bin := writeScript(t, tt.script)
-			ch := Run(context.Background(), Config{Provider: tt.provider, Binary: bin}, Request{Dir: t.TempDir()})
+			ch := Run(t.Context(), Config{Provider: tt.provider, Binary: bin}, Request{Dir: t.TempDir()})
 			last := assertOneTerminal(t, collect(t, ch, 5*time.Second))
 			if last.Kind != EventError {
 				t.Fatalf("last = %+v", last)
@@ -294,7 +294,7 @@ func TestRunErrors(t *testing.T) {
 
 func TestRunStderrTail(t *testing.T) {
 	bin := writeScript(t, "i=0\nwhile [ $i -lt 500 ]; do echo \"line $i\" >&2; i=$((i+1)); done\necho END >&2\nexit 2")
-	last := assertOneTerminal(t, collect(t, Run(context.Background(), Config{Provider: Claude, Binary: bin}, Request{}), 5*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Claude, Binary: bin}, Request{}), 5*time.Second))
 	msg := last.Err.Error()
 	if !strings.Contains(msg, "END") || strings.Contains(msg, "line 1\n") || len(msg) > stderrTailSize+100 {
 		t.Errorf("unexpected error message (%d bytes): %.200q", len(msg), msg)
@@ -303,7 +303,7 @@ func TestRunStderrTail(t *testing.T) {
 
 func TestRunDoneThenNonZeroExit(t *testing.T) {
 	bin := writeScript(t, "/bin/cat "+fixturePath(t, "claude_stream.jsonl")+"\nexit 3")
-	events := collect(t, Run(context.Background(), Config{Provider: Claude, Binary: bin}, Request{}), 5*time.Second)
+	events := collect(t, Run(t.Context(), Config{Provider: Claude, Binary: bin}, Request{}), 5*time.Second)
 	if last := assertOneTerminal(t, events); last.Kind != EventDone {
 		t.Errorf("last = %+v", last)
 	}
@@ -311,7 +311,7 @@ func TestRunDoneThenNonZeroExit(t *testing.T) {
 
 func TestRunCancel(t *testing.T) {
 	bin := writeScript(t, `echo '{"type":"system","session_id":"s1"}'`+"\nsleep 30")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	ch := Run(ctx, Config{Provider: Claude, Binary: bin}, Request{})
 	first := <-ch
@@ -327,7 +327,7 @@ func TestRunCancel(t *testing.T) {
 }
 
 func TestRunCancelledBeforeStart(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	bin := writeScript(t, "sleep 30")
 	last := assertOneTerminal(t, collect(t, Run(ctx, Config{Provider: Codex, Binary: bin}, Request{}), 2*time.Second))
@@ -343,7 +343,7 @@ func TestRunBinaryNotFound(t *testing.T) {
 		{Provider: "gemini"},
 	}
 	for _, cfg := range tests {
-		last := assertOneTerminal(t, collect(t, Run(context.Background(), cfg, Request{}), 2*time.Second))
+		last := assertOneTerminal(t, collect(t, Run(t.Context(), cfg, Request{}), 2*time.Second))
 		if last.Kind != EventError {
 			t.Errorf("%+v: last = %+v", cfg, last)
 		}
@@ -352,7 +352,7 @@ func TestRunBinaryNotFound(t *testing.T) {
 
 func TestAvailable(t *testing.T) {
 	bin := writeScript(t, `[ "$1" = "--version" ] && echo "2.1.0 (Claude Code)"`)
-	path, version, err := Available(context.Background(), Config{Provider: Claude, Binary: bin})
+	path, version, err := Available(t.Context(), Config{Provider: Claude, Binary: bin})
 	if err != nil || path != bin || version != "2.1.0 (Claude Code)" {
 		t.Errorf("Available = %q, %q, %v", path, version, err)
 	}
@@ -371,7 +371,7 @@ func TestAvailableErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, _, err := Available(context.Background(), tt.cfg); err == nil {
+			if _, _, err := Available(t.Context(), tt.cfg); err == nil {
 				t.Error("want error")
 			}
 		})
@@ -380,7 +380,7 @@ func TestAvailableErrors(t *testing.T) {
 
 func TestAvailableTimeout(t *testing.T) {
 	bin := writeScript(t, "sleep 30")
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
 	if _, _, err := Available(ctx, Config{Provider: Claude, Binary: bin}); !errors.Is(err, context.DeadlineExceeded) {

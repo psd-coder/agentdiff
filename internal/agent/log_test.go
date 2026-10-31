@@ -32,7 +32,7 @@ func TestRunLog(t *testing.T) {
 	fixture := fixturePath(t, "codex_exec.jsonl")
 	bin := writeScript(t, "/bin/cat > /dev/null\necho 'warning: slow' >&2\n/bin/cat "+fixture+"\nprintf 'no newline' >&2")
 	dir := t.TempDir()
-	entries := runLog(t, context.Background(), Config{Provider: Codex, Binary: bin}, Request{Dir: dir, Prompt: "question"})
+	entries := runLog(t, t.Context(), Config{Provider: Codex, Binary: bin}, Request{Dir: dir, Prompt: "question"})
 
 	lines, err := os.ReadFile(fixture)
 	if err != nil {
@@ -68,14 +68,14 @@ func TestRunLog(t *testing.T) {
 func TestRunLogExit(t *testing.T) {
 	t.Run("status", func(t *testing.T) {
 		bin := writeScript(t, "exit 3")
-		entries := runLog(t, context.Background(), Config{Provider: Claude, Binary: bin}, Request{})
+		entries := runLog(t, t.Context(), Config{Provider: Claude, Binary: bin}, Request{})
 		if last := entries[len(entries)-1]; last.Text != "Exited with status 3" {
 			t.Errorf("last = %+v", last)
 		}
 	})
 	t.Run("stopped", func(t *testing.T) {
 		bin := writeScript(t, "sleep 10")
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		time.AfterFunc(200*time.Millisecond, cancel)
 		entries := runLog(t, ctx, Config{Provider: Claude, Binary: bin}, Request{})
 		if last := entries[len(entries)-1]; last.Text != exitStopped {
@@ -83,7 +83,7 @@ func TestRunLogExit(t *testing.T) {
 		}
 	})
 	t.Run("missing binary", func(t *testing.T) {
-		entries := runLog(t, context.Background(), Config{Provider: Claude, Binary: "/nonexistent/claude"}, Request{})
+		entries := runLog(t, t.Context(), Config{Provider: Claude, Binary: "/nonexistent/claude"}, Request{})
 		if !slices.Equal(logKinds(entries), []LogKind{LogExit}) || !strings.HasPrefix(entries[0].Text, "Could not start: ") {
 			t.Errorf("entries = %+v", entries)
 		}
