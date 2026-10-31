@@ -137,10 +137,7 @@ type app struct {
 	lists   map[string]*cardPage
 	thread  string
 	drafts  map[string]string
-	// agentRuns holds every agent run. A run belongs to the review it
-	// was started for, so switching scopes leaves it running.
-	agentRuns map[runKey]*agentRun
-	ahead     []queuedWalk
+	runner  runner
 
 	sidebarW    float32
 	scopePct    float32
@@ -199,7 +196,7 @@ func newApp(s store.Store) *app {
 		runs:        map[*review.Review][]*logRun{},
 		logPct:      50,
 		drafts:      map[string]string{},
-		agentRuns:   map[runKey]*agentRun{},
+		runner:      runner{runs: map[runKey]*agentRun{}},
 		extra:       map[string]*extraFile{},
 		groupsOpen:  map[string]*bool{},
 		sidebarW:    280,
@@ -828,16 +825,6 @@ func (a *app) deleteArchived(e *continuity.Earlier) {
 		return
 	}
 	a.dropEarlier(e)
-}
-
-// reviewBusy reports whether an agent run writes into rev.
-func (a *app) reviewBusy(rev *review.Review) bool {
-	for key := range a.agentRuns {
-		if key.rev == rev {
-			return true
-		}
-	}
-	return slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev })
 }
 
 // stale reports whether the overview was written for other changes than

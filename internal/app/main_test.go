@@ -1169,8 +1169,8 @@ func TestDeeperAhead(t *testing.T) {
 	a.queue = make(chan func(), 256)
 	a.generateOverview()
 	pump(t, a, "the overview", func() bool { return a.overviewRunning() == nil })
-	if len(a.rev.Walks) != 4 || a.walkRunCount() != maxAhead || !a.queued(a.rev, a.rev.Walks[3].ID) {
-		t.Fatalf("%d walks, %d running", len(a.rev.Walks), a.walkRunCount())
+	if len(a.rev.Walks) != 4 || a.aheadCount() != maxAhead || !a.queued(a.rev, a.rev.Walks[3].ID) {
+		t.Fatalf("%d walks, %d write-ahead walks running", len(a.rev.Walks), a.aheadCount())
 	}
 	for i, w := range a.rev.Walks {
 		if w.Step != i || w.Question != "" {
@@ -1183,7 +1183,7 @@ func TestDeeperAhead(t *testing.T) {
 				return false
 			}
 		}
-		return a.walkRunCount() == 0 && len(a.ahead) == 0
+		return !a.reviewBusy(a.rev)
 	})
 	for _, w := range a.rev.Walks {
 		if w.Content == nil || w.Sessions[agent.Claude] != "s1" {
@@ -1223,7 +1223,7 @@ func TestDeeperAhead(t *testing.T) {
 	snapshot(t, tt, "deeper-ahead")
 
 	a.askQuestion("", -1, "Why?")
-	pump(t, a, "the question", func() bool { return a.walkRunCount() == 0 })
+	pump(t, a, "the question", func() bool { return !a.reviewBusy(a.rev) })
 	if r := a.runsOf(a.rev)[0]; r.info.Effort != "high" {
 		t.Errorf("a question ran at %q effort, want the main one", r.info.Effort)
 	}

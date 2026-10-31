@@ -145,7 +145,7 @@ func (a *app) regenerate(parent string) {
 				steps = append(steps, w.ID)
 			}
 		}
-		a.stopWalks(rev, steps)
+		a.stopRuns(rev, steps)
 		rev.DeleteStepWalks(parent)
 		a.closeGoneQuestion()
 		if parent == "" {
@@ -183,50 +183,26 @@ func (a *app) askQuestion(parent string, step int, question string) {
 	a.runWalk(a.rev, w, false)
 }
 
-// maxAhead is how many walkthroughs the app writes at once ahead of the
-// reviewer.
-const maxAhead = 3
-
-type queuedWalk struct {
-	rev *review.Review
-	w   *review.Walk
-}
-
 // deeperAhead queues a deeper walkthrough of every step of the overview,
 // so that Go deeper opens one that is already written.
 func (a *app) deeperAhead(rev *review.Review) {
 	if !a.cfg.DeeperAhead || rev.Overview == nil || rev.Overview.Walk == nil {
 		return
 	}
+	var walks []*review.Walk
 	for i := range rev.Overview.Walk.Steps {
 		if !slices.ContainsFunc(rev.WalksOn("", i), func(w *review.Walk) bool { return w.Question == "" }) {
-			a.ahead = append(a.ahead, queuedWalk{rev, rev.AddWalk("", i, "")})
+			walks = append(walks, rev.AddWalk("", i, ""))
 		}
 	}
 	a.saveReviewOf(rev)
-	a.startAhead()
-}
-
-func (a *app) startAhead() {
-	for len(a.ahead) > 0 && a.walkRunCount() < maxAhead {
-		q := a.ahead[0]
-		a.ahead = a.ahead[1:]
-		if q.rev.Walk(q.w.ID) != nil {
-			a.runWalk(q.rev, q.w, true)
-		}
+	for _, w := range walks {
+		a.runAhead(rev, w.ID, func() {
+			if rev.Walk(w.ID) != nil {
+				a.runWalk(rev, w, true)
+			}
+		})
 	}
-}
-
-func (a *app) queued(rev *review.Review, id string) bool {
-	return slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev && q.w.ID == id })
-}
-
-func (a *app) unqueue(rev *review.Review, id string) {
-	a.ahead = slices.DeleteFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev && q.w.ID == id })
-}
-
-func (a *app) unqueueReview(rev *review.Review) {
-	a.ahead = slices.DeleteFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev })
 }
 
 // walkBusy reports whether a walk of the review on screen is being
@@ -237,7 +213,6 @@ func (a *app) walkBusy(id string) bool { return a.running(a.rev, id) != nil || a
 // other stay apart, because each forks the session of the walkthrough
 // above. An auto walk is one the app writes ahead of the reviewer.
 func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
-	a.unqueue(rev, w.ID)
 	cfg := a.cfg.Agent
 	if auto {
 		cfg = cfg.Auto()
@@ -247,7 +222,7 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 	if w.Question != "" {
 		title = "Question: " + w.Question
 	}
-	a.launchWalk(ex, newRunInfo(w.ID, title, "", cfg))
+	a.launch(&agentRun{kind: walkKind, ahead: auto, ex: ex}, newRunInfo(w.ID, title, "", cfg))
 }
 
 // askMore asks a follow-up question in a question's conversation.
@@ -258,13 +233,7 @@ func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 	}
 	cfg := a.cfg.Agent
 	ex := review.FollowupExchange(rev, w, cfg, a.diffstatOf(rev), q)
-	a.launchWalk(ex, newRunInfo(w.ID, "Follow-up: "+q, "", cfg))
-}
-
-// launchWalk runs the agent for the latest turn of a walk. The next
-// queued walk starts when it ends.
-func (a *app) launchWalk(ex *review.Exchange, info store.RunInfo) {
-	a.launch(&agentRun{kind: walkKind, ex: ex, ended: func(bool) { a.startAhead() }}, info)
+	a.launch(&agentRun{kind: walkKind, ex: ex}, newRunInfo(w.ID, "Follow-up: "+q, "", cfg))
 }
 
 // diffstatOf is the diffstat of rev's changes. The app only reads it for
@@ -276,18 +245,7 @@ func (a *app) diffstatOf(rev *review.Review) string {
 	return a.diffstat
 }
 
-func (a *app) stopWalk(id string) { a.stopWalks(a.rev, []string{id}) }
-
-// stopWalks stops walks of rev. It takes them all off the queue first,
-// so that a stop does not start a queued walk among them.
-func (a *app) stopWalks(rev *review.Review, ids []string) {
-	for _, id := range ids {
-		a.unqueue(rev, id)
-	}
-	for _, id := range ids {
-		a.stopRun(rev, id)
-	}
-}
+func (a *app) stopWalk(id string) { a.stopRuns(a.rev, []string{id}) }
 
 // deleteWalk deletes a walk and the walks under it, and goes to its
 // parent.
@@ -300,7 +258,7 @@ func (a *app) deleteWalk(w *review.Walk) {
 			gone = append(gone, x.ID)
 		}
 	}
-	a.stopWalks(a.rev, gone)
+	a.stopRuns(a.rev, gone)
 	a.closeGoneQuestion()
 	a.page = "overview"
 	if w.Parent != "" {
