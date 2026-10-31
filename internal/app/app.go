@@ -795,8 +795,10 @@ func (a *app) restoreArchived(e *continuity.Earlier) {
 		return
 	}
 	out := a.reviews.Restore(e, a.rev, a.reviewBusy)
-	if out.Err != nil {
-		a.showError("Could not restore the review", out.Err)
+	if out.Rev == a.rev {
+		if out.Err != nil {
+			a.showError("Could not restore the review", out.Err)
+		}
 		return
 	}
 	a.settle(out)
@@ -809,7 +811,7 @@ func (a *app) restoreArchived(e *continuity.Earlier) {
 // opens the commit.
 func (a *app) moveArchived(e *continuity.Earlier) {
 	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: e.Probably}
-	moved, err := a.reviews.MoveTo(a.repo.Root, e, to)
+	moved, err := a.reviews.MoveTo(a.repo.Root, e, to, a.reviewBusy)
 	if err != nil {
 		a.showError("Could not move the review", err)
 		return
@@ -1013,15 +1015,15 @@ func sameSlice[T any](x, y []T) bool {
 // startOver forgets the review of the current scope: its overview,
 // threads and viewed files.
 func (a *app) startOver() {
-	if err := a.store.DeleteReview(a.repo.Root, a.scope); err != nil {
+	rev, err := a.reviews.StartOver(a.repo.Root, a.scope)
+	if err != nil {
 		a.showError("Could not start the review over", err)
 		return
 	}
 	a.dropRuns(a.rev)
 	delete(a.runs, a.rev)
 	a.leaveReview()
-	a.rev = review.New(a.repo.Root, a.scope)
-	a.reviews.Replace(a.rev)
+	a.rev = rev
 	a.resetNav()
 	a.drafts = map[string]string{}
 }
