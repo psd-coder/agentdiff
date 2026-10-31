@@ -241,8 +241,8 @@ func TestSummarizeEdgeCases(t *testing.T) {
 		entry LogEntry
 		want  []LogItem
 	}{
-		{"exit ok", Claude, LogEntry{Kind: LogExit, Text: exitOK}, []LogItem{{Title: exitOK}}},
-		{"exit stopped", Claude, LogEntry{Kind: LogExit, Text: exitStopped}, []LogItem{{Title: exitStopped, Failed: true}}},
+		{"exit ok", Claude, LogEntry{Kind: LogExit, Text: exitOK}, []LogItem{{Title: exitOK, exit: RunDone}}},
+		{"exit stopped", Claude, LogEntry{Kind: LogExit, Text: exitStopped}, []LogItem{{Title: exitStopped, Failed: true, exit: RunStopped}}},
 		{"blank stderr", Claude, LogEntry{Kind: LogStderr, Text: "  "}, nil},
 		{"plain stdout", Codex, LogEntry{Kind: LogStdout, Text: "Reading prompt from stdin..."}, []LogItem{{Title: "Output", Detail: "Reading prompt from stdin..."}}},
 		{"stream event", Claude, LogEntry{Kind: LogStdout, Text: `{"type":"stream_event","event":{}}`}, nil},
@@ -254,7 +254,7 @@ func TestSummarizeEdgeCases(t *testing.T) {
 		{
 			"failed result", Claude,
 			LogEntry{Kind: LogStdout, Text: `{"type":"result","subtype":"error_max_turns","is_error":true,"result":"too long","num_turns":9}`},
-			[]LogItem{{Title: "Result: error_max_turns", Detail: "too long\n9 turns, 0.0 s\n0 tokens processed: 0 in, 0 cache read, 0 cache write, 0 out", Failed: true, Usage: &Usage{}}},
+			[]LogItem{{Title: "Result: error_max_turns", Detail: "too long\n9 turns, 0.0 s\n0 tokens processed: 0 in, 0 cache read, 0 cache write, 0 out", Failed: true, Usage: &Usage{}, result: RunFailed}},
 		},
 		{
 			"failed command", Codex,
@@ -264,7 +264,7 @@ func TestSummarizeEdgeCases(t *testing.T) {
 		{
 			"turn failed", Codex,
 			LogEntry{Kind: LogStdout, Text: `{"type":"turn.failed","error":{"message":"quota"}}`},
-			[]LogItem{{Title: "Turn failed", Detail: "quota", Failed: true}},
+			[]LogItem{{Title: "Turn failed", Detail: "quota", Failed: true, result: RunFailed}},
 		},
 	}
 	for _, tt := range tests {

@@ -20,6 +20,7 @@ type logRun struct {
 	running bool
 	open    bool
 	err     string
+	end     agent.RunStatus
 }
 
 type logItem struct {
@@ -36,34 +37,50 @@ func logItems(p agent.Provider, e agent.LogEntry) []logItem {
 	return items
 }
 
-// status is how the run ended, read from its last item.
+// add appends items to the run and reads how it ended from all its
+// items. It returns what they report as spent, nil when none does.
+func (r *logRun) add(items []logItem) *agent.Usage {
+	r.items = append(r.items, items...)
+	all := make([]agent.LogItem, len(r.items))
+	for i, it := range r.items {
+		all[i] = it.LogItem
+	}
+	r.end = agent.Status(all)
+	return agent.SumUsage(all)
+}
+
 func (r *logRun) status() string {
 	if r.running {
 		return "running"
 	}
-	if !r.loaded || len(r.items) == 0 {
-		return ""
-	}
-	last := r.items[len(r.items)-1]
-	switch {
-	case last.Title == "Stopped":
-		return "stopped"
-	case last.Failed:
+	switch r.end {
+	case agent.RunFailed:
 		return "failed"
+	case agent.RunStopped:
+		return "stopped"
+	case agent.RunUnknown, agent.RunDone:
 	}
 	return ""
 }
 
-// addUsage counts what the items of a run report as spent.
-func (r *logRun) addUsage(items []logItem) {
-	for _, it := range items {
-		if it.Usage == nil {
-			continue
+// runCost is what run r spent itself. The run it resumed is looked up in
+// runs.
+func runCost(runs []*logRun, r *logRun) float64 {
+	var parent *agent.Usage
+	if p := resumedRun(runs, r); p != nil {
+		parent = p.info.Usage
+	}
+	return agent.OwnCost(*r.info.Usage, r.info.Resumed != "", parent)
+}
+
+// fillCosts works out the own cost of the runs that only know the cost of
+// their session. A run read from its log without a usage file is one, and
+// so is a run whose resumed run had no usage when it ended.
+func fillCosts(runs []*logRun) {
+	for _, r := range runs {
+		if u := r.info.Usage; u != nil && !r.running && u.CostUSD == 0 && u.SessionCost > 0 {
+			u.CostUSD = runCost(runs, r)
 		}
-		if r.info.Usage == nil {
-			r.info.Usage = &agent.Usage{}
-		}
-		r.info.Usage.Add(*it.Usage)
 	}
 }
 
@@ -131,9 +148,10 @@ func (a *app) loadRun(rev *review.Review, r *logRun) {
 			items = append(items, logItems(provider, e)...)
 		}
 		a.update(func() {
-			r.items, r.loaded, r.loading = items, true, false
-			if r.info.Usage == nil {
-				r.addUsage(items)
+			r.loaded, r.loading = true, false
+			if u := r.add(items); r.info.Usage == nil && u != nil {
+				r.info.Usage = u
+				fillCosts(a.runsOf(rev))
 			}
 			if err != nil {
 				r.err = err.Error()

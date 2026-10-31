@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"context"
 	"log"
 	"slices"
@@ -59,8 +58,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 			pending.Reset()
 			last = time.Now()
 			a.update(func() {
-				run.items = append(run.items, items...)
-				run.addUsage(items)
+				run.info.Usage = run.add(items)
 				if text != "" {
 					fn(agent.Event{Kind: agent.EventText, Text: text})
 				}
@@ -86,30 +84,13 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 		a.update(func() {
 			run.running = false
 			if u := run.info.Usage; u != nil && !a.obsolete(rev) {
-				u.CostUSD = a.runCost(rev, run, req.ResumeID)
+				u.CostUSD = runCost(a.runsOf(rev), run)
 				if err := a.store.SaveRunUsage(rev.Repo, rev.Scope, info.ID, *u); err != nil {
 					log.Printf("run usage: %v", err)
 				}
 			}
 		})
 	}()
-}
-
-// runCost is what a run spent itself. Claude reports the cost of the
-// whole session, so a run that resumed a session costs the difference to
-// the run it resumed. The cost stays unknown, 0, when that run is not in
-// the log anymore.
-func (a *app) runCost(rev *review.Review, run *logRun, resumed string) float64 {
-	u := run.info.Usage
-	if u.SessionCost == 0 || resumed == "" {
-		return cmp.Or(u.SessionCost, u.CostUSD)
-	}
-	for _, r := range a.runsOf(rev) {
-		if r != run && r.info.Usage != nil && r.info.Usage.Session == resumed {
-			return max(0, u.SessionCost-r.info.Usage.SessionCost)
-		}
-	}
-	return 0
 }
 
 func (a *app) overviewRunning() *overviewRun { return a.overviews[a.rev] }
