@@ -93,59 +93,24 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 	}()
 }
 
-func (a *app) overviewRunning() *overviewRun { return a.overviews[a.rev] }
+func (a *app) overviewRunning() *agentRun { return a.running(a.rev, store.TargetOverview) }
 
 func (a *app) generateOverview() {
 	if a.rev == nil || len(a.files) == 0 {
 		return
 	}
 	rev := a.rev
-	if run := a.overviews[rev]; run != nil {
-		run.cancel()
-	}
-	cfg, questions := a.cfg.Agent, a.cfg.Questions
-	cfg = cfg.Auto()
-	ctx, cancel := context.WithCancel(context.Background())
-	run := &overviewRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
-	a.overviews[rev] = run
+	cfg := a.cfg.Agent.Auto()
 	changes := review.ChangeSet{Diffstat: a.diffstatOf(rev), Files: a.fileNames(), PatchID: a.patch, FileIDs: a.fileIDs}
-	ex := review.OverviewExchange(rev, changes, cfg, questions)
-	info := newRunInfo(store.TargetOverview, "Overview", "", cfg)
-	a.stream(ctx, cfg, ex.Request, rev, info, func(ev agent.Event) {
-		if a.overviews[rev] != run {
-			return
+	ex := review.OverviewExchange(rev, changes, cfg, a.cfg.Questions)
+	a.launch(&agentRun{kind: overviewKind, ex: ex, ended: func(answered bool) {
+		if rev == a.rev {
+			a.leaveGoneGroup()
 		}
-		switch ev.Kind {
-		case agent.EventSession:
-			ex.Started(ev.SessionID)
-		case agent.EventText:
-			run.text += ev.Text
-			run.activity = ""
-		case agent.EventActivity:
-			run.activity = ev.Text
-		case agent.EventDone:
-			ex.Answered(answer(ev.Text, run.text), time.Now())
-			cancel()
-			delete(a.overviews, rev)
-			a.saveReviewOf(rev)
-			if rev == a.rev {
-				a.leaveGoneGroup()
-			}
+		if answered {
 			a.deeperAhead(rev)
-		case agent.EventError:
-			if ctx.Err() != nil {
-				ex.Stopped(time.Now())
-			} else {
-				ex.Failed(ev.Err.Error(), time.Now())
-			}
-			cancel()
-			delete(a.overviews, rev)
-			a.saveReviewOf(rev)
-			if rev == a.rev {
-				a.leaveGoneGroup()
-			}
 		}
-	})
+	}}, newRunInfo(store.TargetOverview, "Overview", "", cfg))
 }
 
 // answer is the final text of a run: the result the CLI reports, or the
@@ -159,45 +124,44 @@ func answer(result, streamed string) string {
 
 // regenerate rewrites the walkthrough of parent: the overview for "".
 // The deeper walkthroughs into its steps go with the old steps, so the
-// user confirms that first.
+// user confirms that first. A reload can put another review on screen
+// while the dialog is open. Regenerate rewrites the review on screen at
+// the moment the user confirms.
 func (a *app) regenerate(parent string) {
-	rev := a.rev
+	shown, repo, scope := a.rev, a.rev.Repo, a.rev.Scope
 	run := func() {
+		rev := a.rev
+		if rev == nil || rev.Repo != repo || rev.Scope != scope {
+			return
+		}
+		// The user did not see the deeper walkthroughs of a review that
+		// came in during the dialog, so they stay.
+		if rev != shown && rev.HasStepWalks(parent) {
+			return
+		}
+		var steps []string
 		for _, w := range rev.Walks {
 			if w.Parent == parent && w.Step >= 0 {
-				a.stopWalk(w.ID)
+				steps = append(steps, w.ID)
 			}
 		}
+		a.stopWalks(rev, steps)
 		rev.DeleteStepWalks(parent)
-		if rev == a.rev {
-			a.closeGoneQuestion()
-		}
+		a.closeGoneQuestion()
 		if parent == "" {
 			a.generateOverview()
 		} else if w := rev.Walk(parent); w != nil {
 			a.runWalk(rev, w, false)
 		}
 	}
-	if !rev.HasStepWalks(parent) {
+	if !a.rev.HasStepWalks(parent) {
 		run()
 		return
 	}
 	a.confirm("Regenerate this walkthrough?", "The new walkthrough has new steps, so the deeper walkthroughs into the current steps are deleted. Questions about the page as a whole stay.", "Regenerate", run)
 }
 
-func (a *app) stopOverview() {
-	if run := a.overviews[a.rev]; run != nil {
-		run.cancel()
-		delete(a.overviews, a.rev)
-	}
-}
-
-// walkRun is a walkthrough being written for a walk.
-type walkRun struct {
-	text     string
-	activity string
-	cancel   context.CancelFunc
-}
+func (a *app) stopOverview() { a.stopRun(a.rev, store.TargetOverview) }
 
 // deeper starts a walkthrough one level below parent: into one of its
 // steps, or about the question for step -1.
@@ -244,7 +208,7 @@ func (a *app) deeperAhead(rev *review.Review) {
 }
 
 func (a *app) startAhead() {
-	for len(a.ahead) > 0 && len(a.walkRuns) < maxAhead {
+	for len(a.ahead) > 0 && a.walkRunCount() < maxAhead {
 		q := a.ahead[0]
 		a.ahead = a.ahead[1:]
 		if q.rev.Walk(q.w.ID) != nil {
@@ -253,25 +217,27 @@ func (a *app) startAhead() {
 	}
 }
 
-func (a *app) queued(id string) bool {
-	return slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.w.ID == id })
+func (a *app) queued(rev *review.Review, id string) bool {
+	return slices.ContainsFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev && q.w.ID == id })
 }
 
-func (a *app) unqueue(id string) {
-	a.ahead = slices.DeleteFunc(a.ahead, func(q queuedWalk) bool { return q.w.ID == id })
+func (a *app) unqueue(rev *review.Review, id string) {
+	a.ahead = slices.DeleteFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev && q.w.ID == id })
 }
 
-// walkBusy reports whether a walk is being written or waits for its turn.
-func (a *app) walkBusy(id string) bool { return a.walkRuns[id] != nil || a.queued(id) }
+func (a *app) unqueueReview(rev *review.Review) {
+	a.ahead = slices.DeleteFunc(a.ahead, func(q queuedWalk) bool { return q.rev == rev })
+}
+
+// walkBusy reports whether a walk of the review on screen is being
+// written or waits for its turn.
+func (a *app) walkBusy(id string) bool { return a.running(a.rev, id) != nil || a.queued(a.rev, id) }
 
 // runWalk asks the agent for a walk's walkthrough. Walks next to each
 // other stay apart, because each forks the session of the walkthrough
 // above. An auto walk is one the app writes ahead of the reviewer.
 func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
-	a.unqueue(w.ID)
-	if run := a.walkRuns[w.ID]; run != nil {
-		run.cancel()
-	}
+	a.unqueue(rev, w.ID)
 	cfg := a.cfg.Agent
 	if auto {
 		cfg = cfg.Auto()
@@ -281,18 +247,24 @@ func (a *app) runWalk(rev *review.Review, w *review.Walk, auto bool) {
 	if w.Question != "" {
 		title = "Question: " + w.Question
 	}
-	a.streamWalk(rev, w, cfg, ex, title)
+	a.launchWalk(ex, newRunInfo(w.ID, title, "", cfg))
 }
 
 // askMore asks a follow-up question in a question's conversation.
 func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 	q = strings.TrimSpace(q)
-	if q == "" || a.walkBusy(w.ID) {
+	if q == "" || a.running(rev, w.ID) != nil || a.queued(rev, w.ID) {
 		return
 	}
 	cfg := a.cfg.Agent
 	ex := review.FollowupExchange(rev, w, cfg, a.diffstatOf(rev), q)
-	a.streamWalk(rev, w, cfg, ex, "Follow-up: "+q)
+	a.launchWalk(ex, newRunInfo(w.ID, "Follow-up: "+q, "", cfg))
+}
+
+// launchWalk runs the agent for the latest turn of a walk. The next
+// queued walk starts when it ends.
+func (a *app) launchWalk(ex *review.Exchange, info store.RunInfo) {
+	a.launch(&agentRun{kind: walkKind, ex: ex, ended: func(bool) { a.startAhead() }}, info)
 }
 
 // diffstatOf is the diffstat of rev's changes. The app only reads it for
@@ -304,49 +276,16 @@ func (a *app) diffstatOf(rev *review.Review) string {
 	return a.diffstat
 }
 
-// streamWalk runs the agent for the latest turn of a walk.
-func (a *app) streamWalk(rev *review.Review, w *review.Walk, cfg agent.Config, ex *review.Exchange, title string) {
-	ctx, cancel := context.WithCancel(context.Background())
-	run := &walkRun{cancel: cancel, activity: "Starting " + providerName(cfg.Provider) + "…"}
-	a.walkRuns[w.ID] = run
-	a.saveReviewOf(rev)
-	info := newRunInfo(w.ID, title, "", cfg)
-	a.stream(ctx, cfg, ex.Request, rev, info, func(ev agent.Event) {
-		if a.walkRuns[w.ID] != run {
-			return
-		}
-		switch ev.Kind {
-		case agent.EventSession:
-			ex.Started(ev.SessionID)
-		case agent.EventText:
-			run.text += ev.Text
-			run.activity = "Writing the walkthrough…"
-		case agent.EventActivity:
-			run.activity = ev.Text
-		case agent.EventDone:
-			ex.Answered(answer(ev.Text, run.text), time.Now())
-			cancel()
-			delete(a.walkRuns, w.ID)
-			a.saveReviewOf(rev)
-			a.startAhead()
-		case agent.EventError:
-			if ctx.Err() != nil {
-				ex.Stopped(time.Now())
-			} else {
-				ex.Failed(ev.Err.Error(), time.Now())
-			}
-			cancel()
-			delete(a.walkRuns, w.ID)
-			a.saveReviewOf(rev)
-			a.startAhead()
-		}
-	})
-}
+func (a *app) stopWalk(id string) { a.stopWalks(a.rev, []string{id}) }
 
-func (a *app) stopWalk(id string) {
-	a.unqueue(id)
-	if run := a.walkRuns[id]; run != nil {
-		run.cancel()
+// stopWalks stops walks of rev. It takes them all off the queue first,
+// so that a stop does not start a queued walk among them.
+func (a *app) stopWalks(rev *review.Review, ids []string) {
+	for _, id := range ids {
+		a.unqueue(rev, id)
+	}
+	for _, id := range ids {
+		a.stopRun(rev, id)
 	}
 }
 
@@ -355,11 +294,13 @@ func (a *app) stopWalk(id string) {
 func (a *app) deleteWalk(w *review.Walk) {
 	walks := slices.Clone(a.rev.Walks)
 	a.rev.DeleteWalk(w.ID)
+	var gone []string
 	for _, x := range walks {
 		if a.rev.Walk(x.ID) == nil {
-			a.stopWalk(x.ID)
+			gone = append(gone, x.ID)
 		}
 	}
+	a.stopWalks(a.rev, gone)
 	a.closeGoneQuestion()
 	a.page = "overview"
 	if w.Parent != "" {
@@ -381,68 +322,24 @@ func (a *app) comment(t *review.Thread, text string) {
 	a.saveReview()
 }
 
-// threadRun is an answer being written in a thread. reply is where the
-// answer goes in the thread's messages.
-type threadRun struct {
-	text     string
-	activity string
-	started  time.Time
-	reply    int
-	cancel   context.CancelFunc
-}
-
 // ask sends a thread's question to the agent, in the repository and the
 // scope of rev.
 func (a *app) ask(rev *review.Review, t *review.Thread, text string) {
 	text = strings.TrimSpace(text)
-	if text == "" || a.threadBusy(t.ID) {
+	if text == "" || a.running(rev, t.ID) != nil {
 		return
 	}
 	cfg := a.cfg.Agent
 	ex := review.ThreadExchange(rev, t, cfg, a.diffstatOf(rev), text)
-	ctx, cancel := context.WithCancel(context.Background())
-	run := &threadRun{activity: "Thinking…", started: time.Now(), reply: len(t.Messages), cancel: cancel}
-	a.threadRuns[t.ID] = run
-	a.saveReviewOf(rev)
-	info := newRunInfo(t.ID, t.Anchor.Label(), excerpt(text, 160), cfg)
-	a.stream(ctx, cfg, ex.Request, rev, info, func(ev agent.Event) {
-		if a.threadRuns[t.ID] != run {
-			return
-		}
-		switch ev.Kind {
-		case agent.EventSession:
-			ex.Started(ev.SessionID)
-		case agent.EventText:
-			run.text += ev.Text
-			run.activity = ""
-		case agent.EventActivity:
-			run.activity = ev.Text
-		case agent.EventDone:
-			ex.Answered(answer(ev.Text, run.text), time.Now())
-			cancel()
-			delete(a.threadRuns, t.ID)
-			a.saveReviewOf(rev)
-		case agent.EventError:
-			if ctx.Err() != nil {
-				ex.Stopped(time.Now())
-			} else {
-				ex.Failed(ev.Err.Error(), time.Now())
-			}
-			cancel()
-			delete(a.threadRuns, t.ID)
-			a.saveReviewOf(rev)
-		}
-	})
+	run := &agentRun{kind: threadKind, ex: ex, reply: len(t.Messages)}
+	a.launch(run, newRunInfo(t.ID, t.Anchor.Label(), excerpt(text, 160), cfg))
 }
 
-// threadBusy reports whether the agent answers in the thread.
-func (a *app) threadBusy(id string) bool { return a.threadRuns[id] != nil }
+// threadBusy reports whether the agent answers in a thread of the review
+// on screen.
+func (a *app) threadBusy(id string) bool { return a.running(a.rev, id) != nil }
 
-func (a *app) stopThread(t *review.Thread) {
-	if run := a.threadRuns[t.ID]; run != nil {
-		run.cancel()
-	}
-}
+func (a *app) stopThread(t *review.Thread) { a.stopRun(a.rev, t.ID) }
 
 func providerName(p agent.Provider) string {
 	if p == agent.Codex {
