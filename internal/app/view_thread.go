@@ -18,19 +18,19 @@ func (a *app) threadPanel(c *ui.Context) {
 	}
 	ui.Column(c).Fill().Background(t.Background).BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Children(func() {
 		ui.Row(c).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			target := ""
+			target, linked := overview, true
 			switch {
 			case th.Anchor.File != "":
-				target = "file:" + th.Anchor.File
-			case th.Anchor.Kind == review.AnchorSection:
-				target = "overview"
+				target = page{kindFile, th.Anchor.File}
+			case th.Anchor.Kind != review.AnchorSection:
+				linked = false
 			}
-			if target == "" {
+			if !linked {
 				ui.Text(c, th.Anchor.Label()).Bold().SingleLine().Shrink(1).Grow(1)
 			} else {
 				title := textLink(c, th.Anchor.Label(), func(e ui.Element) { e.Bold().TextColor(t.Text) }).Grow(1).Justify(ui.Start).Tooltip("Go to it")
 				if title.Clicked() {
-					a.goTo(target)
+					a.nav.goTo(target)
 				}
 			}
 			a.cmdButton(c, "thread-log", th.ID, "Log")
@@ -159,7 +159,7 @@ func (a *app) composer(c *ui.Context, th *review.Thread) {
 
 func (a *app) threadsPage(c *ui.Context) {
 	t := c.Theme()
-	a.pageScroll(c, "threads").Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, page{kind: kindThreads}).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
 			ui.Text(c, "Questions").FontSize(22).Bold()
 			a.questionsList(c)
@@ -196,7 +196,7 @@ func (a *app) threadRow(c *ui.Context, th *review.Thread) {
 	if row.Clicked() {
 		a.openThread(th.ID)
 		if th.Anchor.File != "" {
-			a.goTo("file:" + th.Anchor.File)
+			a.nav.goTo(page{kindFile, th.Anchor.File})
 		}
 	}
 }

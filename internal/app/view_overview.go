@@ -86,7 +86,7 @@ func (a *app) earlierList(c *ui.Context) {
 				ui.Text(c, strings.Join(a.earlierMeta(e), " · ")).FontSize(12).TextColor(t.TextMuted).SingleLine()
 			})
 			if open.Clicked() {
-				a.goTo("archived:" + e.ID())
+				a.nav.goTo(page{kindArchived, e.ID()})
 			}
 			a.cmdButton(c, "delete-archived", e.ID(), "Delete")
 		})
@@ -142,7 +142,7 @@ func (a *app) overviewPage(c *ui.Context) {
 	cfg := a.cfg.Agent
 	run := a.runner.run(a.rev, store.TargetOverview)
 	ov := a.rev.Overview
-	a.pageScroll(c, "overview").Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, overview).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Overview").FontSize(22).Bold()
@@ -302,7 +302,7 @@ func (a *app) groupCards(c *ui.Context) {
 		card.Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold().Grow(1)
-				open := ui.Button(c, "Review group").OnClick(func() { a.goTo("group:" + a.groupID(gi)) })
+				open := ui.Button(c, "Review group").OnClick(func() { a.nav.goTo(page{kindGroup, a.groupID(gi)}) })
 				// Shown while the pointer is over the card, or the focus in
 				// it; hidden, it keeps its room and its stop of Tab.
 				if !card.Hovered() && !card.FocusWithin() {
@@ -322,7 +322,7 @@ func (a *app) groupCards(c *ui.Context) {
 					ui.Text(c, mark).Width(14).TextColor(t.Success)
 					link := textLink(c, f, func(e ui.Element) { e.Font("monospace").FontSize(12) })
 					if link.Clicked() {
-						a.goTo("file:" + f)
+						a.nav.goTo(page{kindFile, f})
 					}
 					if d != nil {
 						ui.Text(c, fmt.Sprintf("+%d −%d", d.change.Additions, d.change.Deletions)).FontSize(11).TextColor(t.TextMuted)

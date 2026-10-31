@@ -113,8 +113,8 @@ func TestOverviewAndGroups(t *testing.T) {
 	if err := tt.Click("Review group"); err != nil {
 		t.Fatal(err)
 	}
-	if a.page != "group:Cache keys" {
-		t.Errorf("page = %q", a.page)
+	if a.nav.page != (page{kindGroup, "Cache keys"}) {
+		t.Errorf("page = %q", a.nav.page.String())
 	}
 	tt.Advance(time.Second)
 	snapshot(t, tt, "group")
@@ -132,7 +132,7 @@ func TestOverviewAndGroups(t *testing.T) {
 
 func TestCommentOnFileAndExport(t *testing.T) {
 	a := newTestApp(t)
-	a.page = "file:cache/cache.go"
+	a.nav.page = page{kindFile, "cache/cache.go"}
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("Comment on file"); err != nil {
@@ -154,7 +154,7 @@ func TestCommentOnFileAndExport(t *testing.T) {
 	if !strings.Contains(got, "## cache/cache.go (file-level)\nKeep keys case-sensitive.") {
 		t.Errorf("feedback =\n%s", got)
 	}
-	a.page = "feedback"
+	a.nav.page = page{kind: kindFeedback}
 	tt.Frame()
 	if err := tt.Click("Copy feedback"); err != nil {
 		t.Fatal(err)
@@ -171,7 +171,7 @@ func TestCommentOnFileAndExport(t *testing.T) {
 
 func TestLineThreadAnnotation(t *testing.T) {
 	a := newTestApp(t)
-	a.page = "file:cache/cache.go"
+	a.nav.page = page{kindFile, "cache/cache.go"}
 	a.lineThread("cache/cache.go", lineRange(5, 5))
 	th := a.rev.Thread(a.threadID())
 	if th.Anchor.Quote != "\treturn strings.ToLower(key)" || th.Anchor.Label() != "cache/cache.go:6 (+)" {
@@ -1124,8 +1124,8 @@ func TestWalkthrough(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := a.rev.Walks[0]
-	if w.Parent != "" || w.Step != 0 || a.page != "walk:"+w.ID {
-		t.Fatalf("walk = %+v, page %q", w, a.page)
+	if w.Parent != "" || w.Step != 0 || a.nav.page != (page{kindWalk, w.ID}) {
+		t.Fatalf("walk = %+v, page %q", w, a.nav.page.String())
 	}
 	pump(t, a, "the deeper walkthrough", func() bool { return a.runner.run(a.rev, w.ID) == nil })
 	if w.Err != "" || w.Sessions[agent.Claude] != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
@@ -1145,8 +1145,8 @@ func TestWalkthrough(t *testing.T) {
 	if err := tt.Click("cache/cache.go:6 (+)"); err != nil {
 		t.Fatal(err)
 	}
-	if a.page != "file:cache/cache.go" {
-		t.Errorf("page = %q", a.page)
+	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("page = %q", a.nav.page.String())
 	}
 	if r, ok := a.diffs["cache/cache.go"].state.SelectedLines(); !ok || r.Start != 5 || r.End != 5 {
 		t.Errorf("selection = %+v, %v", r, ok)
@@ -1221,6 +1221,51 @@ func TestDeeperAhead(t *testing.T) {
 	}
 }
 
+// TestDeleteOpenWalkLeavesNoHistory deletes the open walk: its parent
+// opens, and Back leads past the parent to the page before it.
+func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
+	a := newTestApp(t)
+	parent := a.rev.AddWalk("", 0, "")
+	child := a.rev.AddWalk(parent.ID, 0, "")
+	a.nav.goTo(page{kindFile, "cache/cache.go"})
+	a.nav.goTo(page{kindWalk, parent.ID})
+	a.nav.goTo(page{kindWalk, child.ID})
+	a.deleteWalk(child)
+	if a.nav.page != (page{kindWalk, parent.ID}) || slices.Contains(a.nav.history, page{kindWalk, child.ID}) {
+		t.Fatalf("page %+v, history %+v", a.nav.page, a.nav.history)
+	}
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if err := tt.Click("‹ Back to cache.go"); err != nil {
+		t.Fatalf("%v; texts %q", err, tt.Texts())
+	}
+	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("back opened %+v", a.nav.page)
+	}
+}
+
+// TestDeleteWalkForgetsItsPagesInHistory deletes a walk while a walk under
+// it is in the history: both leave the history, and the back bar names
+// the page Back opens.
+func TestDeleteWalkForgetsItsPagesInHistory(t *testing.T) {
+	a := newTestApp(t)
+	parent := a.rev.AddWalk("", 0, "")
+	child := a.rev.AddWalk(parent.ID, 0, "")
+	a.nav.goTo(page{kindFile, "cache/cache.go"})
+	a.nav.goTo(page{kindWalk, parent.ID})
+	a.nav.goTo(page{kindWalk, child.ID})
+	a.nav.goTo(page{kindWalk, parent.ID})
+	a.deleteWalk(parent)
+	if a.nav.page != overview || !slices.Equal(a.nav.history, []page{overview, {kindFile, "cache/cache.go"}}) {
+		t.Fatalf("page %+v, history %+v", a.nav.page, a.nav.history)
+	}
+	tt := ui.NewTester(a.view, 1300, 800)
+	tt.Frame()
+	if !tt.HasText("‹ Back to cache.go") {
+		t.Errorf("back bar: %q", tt.Texts())
+	}
+}
+
 func TestBackFromSnippet(t *testing.T) {
 	a := newTestApp(t)
 	var steps []review.Step
@@ -1233,16 +1278,16 @@ func TestBackFromSnippet(t *testing.T) {
 	a.scrollOf("overview").Y = 400
 	tt.Frame()
 	a.openRef(steps[3].Refs[0])
-	if a.page != "file:cache/cache.go" {
-		t.Fatalf("page = %q", a.page)
+	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Fatalf("page = %q", a.nav.page.String())
 	}
 	tt.Frame()
 	if err := tt.Click("‹ Back to Overview"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.page != "overview" || len(a.history) != 0 {
-		t.Errorf("page = %q, history %q", a.page, a.history)
+	if a.nav.page != overview {
+		t.Errorf("page = %q", a.nav.page.String())
 	}
 	if y := a.scrollOf("overview").Y; y != 400 {
 		t.Errorf("overview scrolled to %v, want 400", y)
@@ -1264,16 +1309,16 @@ func TestQuestionPanel(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("About: Lower-case keys") || a.page != "overview" {
-		t.Fatalf("panel not open; page %q", a.page)
+	if !tt.HasText("About: Lower-case keys") || a.nav.page != overview {
+		t.Fatalf("panel not open; page %q", a.nav.page.String())
 	}
 	a.queue = make(chan func(), 64)
 	tt.Type("Why lower-case?")
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	w := a.rev.Walk(a.questionID())
-	if w == nil || w.Question != "Why lower-case?" || w.Step != 0 || a.page != "overview" {
-		t.Fatalf("question = %+v, page %q", w, a.page)
+	if w == nil || w.Question != "Why lower-case?" || w.Step != 0 || a.nav.page != overview {
+		t.Fatalf("question = %+v, page %q", w, a.nav.page.String())
 	}
 	pump(t, a, "the answer", func() bool { return !a.busy(w.ID) })
 	tt.Frame()
@@ -1295,7 +1340,7 @@ func TestQuestionPanel(t *testing.T) {
 	snapshot(t, tt, "question")
 
 	a.closeQuestion()
-	a.goTo("threads")
+	a.nav.goTo(page{kind: kindThreads})
 	tt.Frame()
 	if !tt.HasText("1 follow-ups") && !tt.HasText("Jan") {
 		t.Logf("texts %q", tt.Texts())
@@ -1374,7 +1419,7 @@ func TestArchiveDropsSavedNote(t *testing.T) {
 	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Markdown: "x"}
 	a.saveReview()
 	a.savedPath = "/tmp/feedback.md"
-	a.page = "feedback"
+	a.nav.page = page{kind: kindFeedback}
 	tt := ui.NewTester(a.view, 1400, 900)
 	tt.Frame()
 	if !tt.HasText("Saved to /tmp/feedback.md") {
@@ -1393,10 +1438,10 @@ func TestArchiveDropsSavedNote(t *testing.T) {
 func TestStartOverResetsExport(t *testing.T) {
 	a := newTestApp(t)
 	a.exportDone, a.savedPath = true, "/tmp/feedback.md"
-	a.page = "feedback"
+	a.nav.page = page{kind: kindFeedback}
 	a.startOver()
-	if a.exportDone || a.savedPath != "" || a.page != "overview" {
-		t.Errorf("after Start Over: resolved %v, saved %q, page %q", a.exportDone, a.savedPath, a.page)
+	if a.exportDone || a.savedPath != "" || a.nav.page != overview {
+		t.Errorf("after Start Over: resolved %v, saved %q, page %q", a.exportDone, a.savedPath, a.nav.page.String())
 	}
 }
 
@@ -1439,7 +1484,7 @@ func TestSidePanelShowsOne(t *testing.T) {
 func TestLeavingReviewDropsEmptyThread(t *testing.T) {
 	a := newTestApp(t)
 	first := a.rev
-	a.page = "file:cache/cache.go"
+	a.nav.page = page{kindFile, "cache/cache.go"}
 	a.lineThread("cache/cache.go", lineRange(5, 5))
 	a.saveReview()
 	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
@@ -1556,25 +1601,14 @@ func TestKeyboardNavigation(t *testing.T) {
 	tt.Frame()
 
 	a.stepFile(1)
-	first := a.page
+	first := a.nav.page
 	a.stepFile(1)
-	second := a.page
+	second := a.nav.page
 	a.stepFile(1)
-	if first != "file:api/handler.go" || second != "file:cache/cache.go" || a.page != second {
-		t.Errorf("files: %q, %q, then %q", first, second, a.page)
+	if first != (page{kindFile, "api/handler.go"}) || second != (page{kindFile, "cache/cache.go"}) || a.nav.page != second {
+		t.Errorf("files: %v, %v, then %v", first, second, a.nav.page)
 	}
-	a.goBack()
-	if a.page != first {
-		t.Errorf("back = %q", a.page)
-	}
-	a.goForward()
-	if a.page != second {
-		t.Errorf("forward = %q", a.page)
-	}
-	a.goTo("feedback")
-	if len(a.forward) != 0 {
-		t.Error("a new page kept the forward history")
-	}
+	a.nav.goTo(page{kind: kindFeedback})
 
 	a.newThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
 	a.rev.Thread(a.threadID()).Messages = []review.Message{{Role: review.RoleUser, Text: "x"}}
@@ -1590,8 +1624,8 @@ func TestKeyboardNavigation(t *testing.T) {
 		t.Error("Escape left the log open")
 	}
 	tt.Key(0, ui.KeyBack)
-	if a.page != second {
-		t.Errorf("mouse back = %q", a.page)
+	if a.nav.page != second {
+		t.Errorf("mouse back = %q", a.nav.page.String())
 	}
 
 	seen := map[string]string{}
@@ -1746,8 +1780,8 @@ func TestFlatFiles(t *testing.T) {
 		t.Errorf("flat: %q", tt.Texts())
 	}
 	a.stepFile(1)
-	if a.page != "file:api/handler.go" {
-		t.Errorf("first file in flat order: %q", a.page)
+	if a.nav.page != (page{kindFile, "api/handler.go"}) {
+		t.Errorf("first file in flat order: %q", a.nav.page.String())
 	}
 }
 
@@ -1766,7 +1800,7 @@ func TestFlatFileRows(t *testing.T) {
 	a.cfg.FlatFiles = true
 	a.sidebarW = 220
 	a.cmd("mark-viewed").run(nil, "api/handler.go")
-	a.goTo("file:cache/cache.go")
+	a.nav.goTo(page{kindFile, "cache/cache.go"})
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if r, ok := tt.Find("README.md"); ok {
@@ -1799,8 +1833,8 @@ func TestFlatFileRows(t *testing.T) {
 	tt.Key(0, ui.KeyW)
 	tt.Frame()
 	snapshot(t, tt, "flat-files-narrow-typed")
-	if a.page != "file:"+dir+"/"+name {
-		t.Errorf("typing the name chose %q", a.page)
+	if a.nav.page != (page{kindFile, dir + "/" + name}) {
+		t.Errorf("typing the name chose %q", a.nav.page.String())
 	}
 }
 
@@ -1819,7 +1853,7 @@ func shows(tt *ui.Tester, s string) bool { return slices.Contains(tt.Texts(), s)
 // Shift+click.
 func TestSelectLineRange(t *testing.T) {
 	a := newTestApp(t)
-	a.page = "file:api/handler.go"
+	a.nav.page = page{kindFile, "api/handler.go"}
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText("Click a line number, then Shift+click another to select a range") {
@@ -1870,7 +1904,7 @@ func TestViewedFiles(t *testing.T) {
 	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
-	a.page = "group:Cache keys"
+	a.nav.page = page{kindGroup, "Cache keys"}
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("Mark all as viewed"); err != nil {
@@ -1889,12 +1923,12 @@ func TestViewedFiles(t *testing.T) {
 		t.Errorf("hidden: %q", tt.Texts())
 	}
 	a.stepFile(1)
-	if a.page != "file:api/handler.go" {
-		t.Errorf("next file skips the hidden one: %q", a.page)
+	if a.nav.page != (page{kindFile, "api/handler.go"}) {
+		t.Errorf("next file skips the hidden one: %q", a.nav.page.String())
 	}
 
 	// On a group page, a file marked viewed leaves the sidebar.
-	a.goTo("group:API")
+	a.nav.goTo(page{kindGroup, "API"})
 	tt.Frame()
 	if err := tt.Click("Viewed"); err != nil {
 		t.Fatal(err)
@@ -1906,7 +1940,7 @@ func TestViewedFiles(t *testing.T) {
 	a.rev.Viewed["api/handler.go"] = false
 
 	// The open file leaves the sidebar too when it is marked viewed.
-	a.goTo("file:api/handler.go")
+	a.nav.goTo(page{kindFile, "api/handler.go"})
 	tt.Frame()
 	if err := tt.Click("Viewed"); err != nil {
 		t.Fatal(err)
@@ -1919,8 +1953,8 @@ func TestViewedFiles(t *testing.T) {
 	// Previous file steps from the hidden open file.
 	a.rev.Viewed["cache/cache.go"] = false
 	a.stepFile(-1)
-	if a.page != "file:cache/cache.go" {
-		t.Errorf("previous file: %q", a.page)
+	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("previous file: %q", a.nav.page.String())
 	}
 	a.rev.Viewed["cache/cache.go"] = true
 	tt.Frame()
@@ -1951,15 +1985,15 @@ func TestGroupItem(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.page != "group:Cache keys" {
-		t.Fatalf("page = %q", a.page)
+	if a.nav.page != (page{kindGroup, "Cache keys"}) {
+		t.Fatalf("page = %q", a.nav.page.String())
 	}
 	if err := tt.Click("Hide files"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.page != "group:Cache keys" || shows(tt, "cache.go") || !shows(tt, "handler.go") {
-		t.Errorf("hidden: %q, %q", a.page, tt.Texts())
+	if a.nav.page != (page{kindGroup, "Cache keys"}) || shows(tt, "cache.go") || !shows(tt, "handler.go") {
+		t.Errorf("hidden: %q, %q", a.nav.page.String(), tt.Texts())
 	}
 	tt.Key(0, ui.KeyRight)
 	tt.Frame()
@@ -2041,19 +2075,19 @@ func TestFocusAndShortcuts(t *testing.T) {
 
 	// Focus Files opens the first file, in the list of files only.
 	click("Focus Files")
-	if !tt.Focused("Files") || a.page != "file:api/handler.go" {
-		t.Errorf("files sidebar: focused %v, page %q", tt.Focused("Files"), a.page)
+	if !tt.Focused("Files") || a.nav.page != (page{kindFile, "api/handler.go"}) {
+		t.Errorf("files sidebar: focused %v, page %q", tt.Focused("Files"), a.nav.page.String())
 	}
 	tt.Key(0, ui.KeyUp)
 	tt.Frame()
-	if a.page != "group:api" {
-		t.Errorf("Up in the files sidebar: %q", a.page)
+	if a.nav.page != (page{kindGroup, "api"}) {
+		t.Errorf("Up in the files sidebar: %q", a.nav.page.String())
 	}
 	// It keeps the file open.
-	a.goTo("file:cache/cache.go")
+	a.nav.goTo(page{kindFile, "cache/cache.go"})
 	click("Focus Files")
-	if a.page != "file:cache/cache.go" {
-		t.Errorf("open file: %q", a.page)
+	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("open file: %q", a.nav.page.String())
 	}
 	click("Focus Changes")
 	if !tt.Focused("Changes") {
@@ -2081,7 +2115,7 @@ func TestFocusAndShortcuts(t *testing.T) {
 // apply on the page show, and the ones used last come first.
 func TestCommandPalette(t *testing.T) {
 	a := newTestApp(t)
-	a.page = "file:api/handler.go"
+	a.nav.page = page{kindFile, "api/handler.go"}
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Frame()
 	open := func() {
@@ -2171,7 +2205,7 @@ func TestCommandPalette(t *testing.T) {
 		t.Errorf("Escape: open = %v, log = %v", a.paletteOpen, a.logOpen)
 	}
 
-	a.goTo("overview")
+	a.nav.goTo(overview)
 	tt.Frame()
 	open()
 	if got := titles(); slices.Contains(got, "Mark File as Viewed") || slices.Contains(got, "Comment on File") {
@@ -2206,7 +2240,7 @@ func TestWelcomeList(t *testing.T) {
 // one another command has, which moves, and a standard one, which stays.
 func TestShortcutSettings(t *testing.T) {
 	a := newTestApp(t)
-	a.page = "file:api/handler.go"
+	a.nav.page = page{kindFile, "api/handler.go"}
 	tt := ui.NewTester(a.view, 1300, 800)
 	a.openSettings()
 	a.settings.tab = shortcutsTab
@@ -2366,8 +2400,8 @@ func TestScopeShowsAtOnce(t *testing.T) {
 		t.Fatalf("scope %+v, chosen %+v, switching %v", a.scope, a.chosen, a.switching)
 	}
 	pump(t, a, "the commit", func() bool { return !a.switching })
-	if a.scope != commit || a.page != "overview" {
-		t.Errorf("scope %+v, page %q", a.scope, a.page)
+	if a.scope != commit || a.nav.page != overview {
+		t.Errorf("scope %+v, page %q", a.scope, a.nav.page.String())
 	}
 }
 
@@ -2503,13 +2537,13 @@ func TestOverlayFocus(t *testing.T) {
 	// From the list of files, Cmd+1 moves the focus to the page.
 	menu("focus-files")
 	menu("go-overview")
-	if tt.Focused("Files") || a.page != "overview" {
-		t.Fatalf("files focused %v, page %q", tt.Focused("Files"), a.page)
+	if tt.Focused("Files") || a.nav.page != overview {
+		t.Fatalf("files focused %v, page %q", tt.Focused("Files"), a.nav.page.String())
 	}
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if a.page != "overview" {
-		t.Errorf("Down moved the sidebar to %q", a.page)
+	if a.nav.page != overview {
+		t.Errorf("Down moved the sidebar to %q", a.nav.page.String())
 	}
 }
 
@@ -2537,8 +2571,8 @@ func TestReviewGroupOnHover(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.page != "group:Cache keys" {
-		t.Errorf("page %q", a.page)
+	if a.nav.page != (page{kindGroup, "Cache keys"}) {
+		t.Errorf("page %q", a.nav.page.String())
 	}
 }
 
@@ -2554,17 +2588,17 @@ func TestFocusPage(t *testing.T) {
 		tt.Frame()
 		tt.Frame()
 	}
-	a.goTo("overview")
+	a.nav.goTo(overview)
 	run("focus-files")
-	page := a.page
+	want := a.nav.page
 	run("focus-page")
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if tt.Focused("Files") || a.page != page {
-		t.Errorf("overview: files focused %v, page %q", tt.Focused("Files"), a.page)
+	if tt.Focused("Files") || a.nav.page != want {
+		t.Errorf("overview: files focused %v, page %q", tt.Focused("Files"), a.nav.page.String())
 	}
 
-	a.goTo("file:api/handler.go")
+	a.nav.goTo(page{kindFile, "api/handler.go"})
 	run("focus-files")
 	run("focus-page")
 	if tt.Focused("Files") || !tt.Focused("New text") || a.refocus != "" {
@@ -2585,8 +2619,8 @@ func TestAllFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Advance(time.Second)
-	if a.page != "all" {
-		t.Fatalf("page %q", a.page)
+	if a.nav.page != (page{kind: kindAll}) {
+		t.Fatalf("page %q", a.nav.page.String())
 	}
 	snapshot(t, tt, "all-files")
 	var ys []float32
@@ -2619,7 +2653,7 @@ func TestAllFiles(t *testing.T) {
 // it when the mark goes, and folds it on a click.
 func TestFoldFileCards(t *testing.T) {
 	a := newTestApp(t)
-	a.goTo("all")
+	a.nav.goTo(page{kind: kindAll})
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Advance(time.Second)
 	diffs := func() int { return strings.Count(strings.Join(tt.Texts(), "\n"), "Old text") }
@@ -2668,7 +2702,7 @@ func TestBigFileStartsFolded(t *testing.T) {
 	write(t, dir, "edge.txt", lines(1000))
 	a := newApp(store.Store{Dir: t.TempDir()})
 	a.openRepo(dir)
-	a.goTo("all")
+	a.nav.goTo(page{kind: kindAll})
 	tt := ui.NewTester(a.view, 1300, 800)
 	tt.Advance(time.Second)
 	// Each card has a fold button: Unfold on a folded card, Fold on one open.
@@ -2712,7 +2746,7 @@ func longFilePage(t *testing.T) (a *app, tt *ui.Tester, header func() ui.Rect) {
 	write(t, dir, "more.txt", long.String()+long.String())
 	a = newApp(store.Store{Dir: t.TempDir()})
 	a.openRepo(dir)
-	a.goTo("all")
+	a.nav.goTo(page{kind: kindAll})
 	tt = ui.NewTester(a.view, 1300, 800)
 	tt.Advance(time.Second)
 	header = func() ui.Rect {
@@ -2870,7 +2904,7 @@ func TestEarlierReviewInFull(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.reload()
-	a.goTo("archived:p1")
+	a.nav.goTo(page{kindArchived, "p1"})
 	tt := ui.NewTester(a.view, 1300, 2400)
 	tt.Frame()
 	for _, want := range []string{

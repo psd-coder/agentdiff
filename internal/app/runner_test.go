@@ -328,7 +328,7 @@ func TestStreamingRunsShowProgress(t *testing.T) {
 	streaming("overview-streaming", "## Summary\nKeys are lower-cased now.", "Reading cache/cache.go", a.generateOverview, "Keys are lower-cased now.")
 
 	w := a.rev.AddWalk("", -1, "Why lower-case?")
-	a.goTo("walk:" + w.ID)
+	a.nav.goTo(page{kindWalk, w.ID})
 	streaming("walk-streaming", "Partial walkthrough", "Searching for callers", func() { a.runWalk(a.rev, w, false) })
 
 	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})

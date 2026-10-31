@@ -47,7 +47,7 @@ func (a *app) feedbackPage(c *ui.Context) {
 				ui.Text(c, "Saved to "+a.savedPath).FontSize(12).TextColor(t.TextMuted).Selectable()
 			}
 		})
-		a.pageScroll(c, "feedback").Grow(1).FillWidth().Children(func() {
+		a.pageScroll(c, page{kind: kindFeedback}).Grow(1).FillWidth().Children(func() {
 			ui.Text(c, text).Font("monospace").FontSize(12).Padding(16, 24).Selectable()
 		})
 	})

@@ -21,7 +21,7 @@ func (a *app) archivedPage(c *ui.Context, id string) {
 	}
 	t := c.Theme()
 	rev, ov := e.Rev, e.Rev.Overview
-	a.pageScroll(c, "archived:"+id).Grow(1).FillWidth().Children(func() {
+	a.pageScroll(c, page{kindArchived, id}).Grow(1).FillWidth().Children(func() {
 		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Earlier review").FontSize(22).Bold()

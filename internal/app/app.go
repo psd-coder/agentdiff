@@ -146,11 +146,9 @@ type app struct {
 // perReview is the state of the window for the review it shows. Leaving
 // the review replaces all of it, see leaveReview.
 type perReview struct {
-	page    string
-	history []string
-	forward []string
+	nav     navigation
 	scrolls map[string]*ui.ScrollState
-	lists   map[string]*cardPage
+	lists   map[page]*cardPage
 	panel   sidePanel
 	// exportDone includes the resolved threads in the feedback, and
 	// savedPath is where the feedback was saved last.
@@ -163,9 +161,8 @@ type perReview struct {
 
 func newPerReview() perReview {
 	return perReview{
-		page:    "overview",
 		scrolls: map[string]*ui.ScrollState{},
-		lists:   map[string]*cardPage{},
+		lists:   map[page]*cardPage{},
 		folded:  map[string]bool{},
 	}
 }
@@ -568,9 +565,9 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 	a.stopLoad = cancel
 	a.gen++
 	gen, r := a.gen, a.repo
-	rev, page := a.rev, a.page
+	rev, page := a.rev, a.nav.page
 	if fresh {
-		rev, page = a.reviews.Of(r.Root, s), "overview"
+		rev, page = a.reviews.Of(r.Root, s), overview
 		rev.Scope = s
 	}
 	a.loadingScope = &scopeLoad{s, fresh}
@@ -654,10 +651,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 					a.extra[p] = newExtraFile(c.newText, c.err)
 				}
 			}
-			if f, ok := strings.CutPrefix(a.page, "file:"); ok && a.diffs[f] == nil {
-				a.page = "overview"
-			}
-			a.leaveGoneGroup()
+			a.leaveGone()
 		})
 		if err != nil {
 			return
@@ -700,7 +694,7 @@ func (a *app) cancelLoad() {
 // firstPaint are the files the page shows first: the code snippets of
 // an overview or a walkthrough, the file of a file page, the files of a
 // group page.
-func (a *app) firstPaint(rev *review.Review, page string, fresh bool) []string {
+func (a *app) firstPaint(rev *review.Review, page page, fresh bool) []string {
 	var paths []string
 	walk := func(w *review.Walkthrough) {
 		if w == nil {
@@ -718,16 +712,16 @@ func (a *app) firstPaint(rev *review.Review, page string, fresh bool) []string {
 		}
 	}
 	switch {
-	case page == "overview" && rev.Overview != nil:
+	case page.kind == kindOverview && rev.Overview != nil:
 		walk(rev.Overview.Walk)
-	case strings.HasPrefix(page, "walk:"):
-		if w := rev.Walk(strings.TrimPrefix(page, "walk:")); w != nil {
+	case page.kind == kindWalk:
+		if w := rev.Walk(page.key); w != nil {
 			walk(w.Content)
 		}
-	case strings.HasPrefix(page, "file:"):
-		paths = append(paths, strings.TrimPrefix(page, "file:"))
-	case strings.HasPrefix(page, "group:") && !fresh:
-		paths = append(paths, a.groupFiles(strings.TrimPrefix(page, "group:"))...)
+	case page.kind == kindFile:
+		paths = append(paths, page.key)
+	case page.kind == kindGroup && !fresh:
+		paths = append(paths, a.groupFiles(page.key)...)
 	}
 	slices.Sort(paths)
 	return slices.Compact(paths)
@@ -752,21 +746,10 @@ func (a *app) settle(out continuity.Outcome) {
 	}
 }
 
-// dropEarlier leaves the page of an archived review that went off the
-// list, when it is open.
-func (a *app) dropEarlier(e *continuity.Earlier) {
-	if a.page == "archived:"+e.ID() {
-		a.goBack()
-	}
-	if a.page == "archived:"+e.ID() {
-		a.page = "overview"
-	}
-}
-
 // restoreArchived brings an archived review back to the uncommitted
 // scope, which keeps it from then on.
 func (a *app) restoreArchived(e *continuity.Earlier) {
-	a.showNext(e, a.reviews.Restore(e, a.rev, a.runner.reviewBusy), "Could not restore the review")
+	a.showNext(a.reviews.Restore(e, a.rev, a.runner.reviewBusy), "Could not restore the review")
 }
 
 // moveArchived moves an archived review to the commit that probably
@@ -774,31 +757,31 @@ func (a *app) restoreArchived(e *continuity.Earlier) {
 // opens the commit.
 func (a *app) moveArchived(e *continuity.Earlier) {
 	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: e.Probably}
-	a.showNext(e, a.reviews.MoveTo(a.repo.Root, e, to, a.runner.reviewBusy), "Could not move the review")
+	a.showNext(a.reviews.MoveTo(a.repo.Root, e, to, a.runner.reviewBusy), "Could not move the review")
 }
 
 func (a *app) deleteArchived(e *continuity.Earlier) {
-	a.showNext(e, a.reviews.Delete(a.repo.Root, e), "Could not delete the review")
+	a.showNext(a.reviews.Delete(a.repo.Root, e), "Could not delete the review")
 }
 
-// showNext shows what an action on the archived review e did. When the
+// showNext shows what an action on an archived review did. When the
 // action replaced the review of the scope, its error goes to the notice
 // with the other save errors. Any other error goes to a dialog that says
 // failed.
-func (a *app) showNext(e *continuity.Earlier, next continuity.Next, failed string) {
+func (a *app) showNext(next continuity.Next, failed string) {
 	if next.Rev != nil {
 		a.settle(next.Outcome)
 	} else if next.Err != nil {
 		a.showError(failed, next.Err)
 	}
 	if next.Left {
-		a.dropEarlier(e)
+		a.leaveGone()
 	}
 	if next.Open == nil {
 		return
 	}
 	if *next.Open == a.scope {
-		a.openPage("overview")
+		a.openPage(overview)
 	} else {
 		a.setScope(*next.Open)
 	}
