@@ -9,6 +9,7 @@ AgentDiff is a native macOS app in Go, built on [MyGo](https://mygo.egoist.dev) 
 - `go tool mygo build`: `AgentDiff.app` and a `.dmg` in `build/darwin-<arch>/`.
 - `CGO_ENABLED=0 go test ./...`: all tests, with no network and no agent calls. One test: `go test -run TestName ./internal/app`.
 - `go tool mygo vet ./internal/app`: go vet plus checks for UI elements kept past their build pass and goroutine captures. Run it after UI changes.
+- `golangci-lint run ./...`: the linters in `.golangci.yml`. `.github/workflows/ci.yml` runs it with the other checks.
 - `AGENTDIFF_SNAPSHOTS=<existing dir> go test ./internal/app`: also writes headless PNG screenshots of the main screens.
 - `AGENTDIFF_E2E=claude|codex go test -run TestEndToEnd -v ./internal/app`: real agent run on the user's subscription. Run it only when the user asks.
 
