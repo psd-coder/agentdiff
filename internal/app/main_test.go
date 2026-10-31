@@ -2920,3 +2920,27 @@ func TestEarlierReviewInFull(t *testing.T) {
 		t.Errorf("the root step shows %v times; texts %q", n, tt.Texts())
 	}
 }
+
+// TestOverviewShowsCommitMessage opens a commit: the overview shows its
+// subject and body, and the uncommitted changes show neither.
+func TestOverviewShowsCommitMessage(t *testing.T) {
+	a := newTestApp(t)
+	a.queue = make(chan func(), 64)
+	git(t, a.repo.Root, "commit", "-qam", "Lower the cache keys\n\nKeys differ only by case in some callers.")
+	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	pump(t, a, "the commit", func() bool { return !a.switching && !a.loading })
+	tt := ui.NewTester(a.view, 1300, 900)
+	tt.Frame()
+	snapshot(t, tt, "overview-commit")
+	for _, want := range []string{"Lower the cache keys", "Keys differ only by case in some callers."} {
+		if !tt.HasText(want) {
+			t.Errorf("overview lacks %q", want)
+		}
+	}
+	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	pump(t, a, "the uncommitted changes", func() bool { return !a.switching && !a.loading })
+	tt.Frame()
+	if tt.HasText("Keys differ only by case in some callers.") {
+		t.Error("the uncommitted changes show the commit body")
+	}
+}

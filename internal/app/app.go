@@ -219,6 +219,8 @@ type perLoad struct {
 	diffs      map[string]*fileDiff
 	// extra holds the files the code snippets show that are not changed.
 	extra map[string]*extraFile
+	// commit is the commit under review, for a commit scope.
+	commit *gitx.Commit
 	// movedTo is the commit that now holds the changes a stale overview
 	// of the uncommitted changes was written for.
 	movedTo string
@@ -601,6 +603,14 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 		if perr != nil {
 			log.Printf("fingerprint: %v", perr)
 		}
+		var commit *gitx.Commit
+		if err == nil && s.Kind == gitx.ScopeCommit {
+			if cm, cerr := r.Commit(ctx, s.Commit); cerr == nil {
+				commit = &cm
+			} else {
+				log.Printf("commit message: %v", cerr)
+			}
+		}
 		found := a.reviews.Read(r.Root, s, before, fp, perr)
 		var cr *gitx.ContentReader
 		// The files of the first page, read before it shows.
@@ -640,7 +650,7 @@ func (a *app) load(s gitx.Scope, fresh bool) {
 			}
 			a.perLoad = perLoad{
 				snap: snap, files: files, diffstat: stat, fp: fp, patchKnown: perr == nil,
-				diffs: diffs, extra: map[string]*extraFile{},
+				diffs: diffs, extra: map[string]*extraFile{}, commit: commit,
 			}
 			a.shown = true
 			a.settle(a.reviews.Decide(found, a.rev, a.runner.reviewBusy))

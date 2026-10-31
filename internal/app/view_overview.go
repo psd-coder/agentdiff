@@ -152,6 +152,7 @@ func (a *app) overviewPage(c *ui.Context) {
 				a.cmdButton(c, "overview-log", "", "Log")
 				a.cmdButton(c, "start-over", "", "Start over")
 			})
+			a.commitMessage(c)
 			a.summaryLine(c)
 			if from := a.reviews.AdoptedFrom(); from != nil {
 				verb := "Copied"
@@ -193,6 +194,22 @@ func (a *app) overviewPage(c *ui.Context) {
 			}
 			a.earlierList(c)
 		})
+	})
+}
+
+// commitMessage shows the subject and the body of the commit under review.
+func (a *app) commitMessage(c *ui.Context) {
+	cm := a.commit
+	if cm == nil {
+		return
+	}
+	t := c.Theme()
+	ui.Column(c).Gap(6).Children(func() {
+		ui.Text(c, cm.Subject).FontSize(15).Bold().Selectable()
+		if cm.Body != "" {
+			ui.Text(c, cm.Body).Selectable()
+		}
+		ui.Text(c, cm.Short+" by "+cm.Author+", "+cm.Time.Format("Jan 2 2006 15:04")).FontSize(12).TextColor(t.TextMuted).Selectable()
 	})
 }
 

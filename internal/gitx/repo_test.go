@@ -204,6 +204,28 @@ func TestCommits(t *testing.T) {
 	}
 }
 
+func TestCommit(t *testing.T) {
+	ctx := t.Context()
+	tr := newTestRepo(t)
+	tr.write("a.txt", "1\n")
+	sha := tr.commit("Subject line\n\nFirst body line\nsecond body line")
+	tr.write("a.txt", "2\n")
+	tr.commit("later")
+	r := tr.open()
+	got, err := r.Commit(ctx, "HEAD~1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SHA != sha || got.Subject != "Subject line" || got.Body != "First body line\nsecond body line" {
+		t.Errorf("Commit = %+v", got)
+	}
+	for _, ref := range []string{"nope", "--all"} {
+		if _, err := r.Commit(ctx, ref); err == nil {
+			t.Errorf("Commit(%q) succeeded", ref)
+		}
+	}
+}
+
 // TestCommitLogKeepsItsCommits reads the pages of a log while the branch
 // gets a new commit: they hold the commits of the branch when the log was
 // made, each once.
