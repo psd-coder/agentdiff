@@ -17,7 +17,7 @@ func newTestTargets() (*targets, *runner, *fakeStream, map[string]bool) {
 }
 
 func startThread(r *runner, rev *review.Review, th *review.Thread) {
-	r.start(review.ThreadExchange(rev, th, runnerCfg, "", "Why?"), "Thread", "", nil)
+	r.start(review.ThreadExchange(rev, th, runnerCfg, nil, "", "Why?"), "Thread", "", nil)
 }
 
 func failed(msg string) agent.Event { return agent.Event{Kind: agent.EventError, Err: errors.New(msg)} }
@@ -29,7 +29,7 @@ func TestTargetStateRunBeatsSavedFailure(t *testing.T) {
 	if got := ts.state(rev, review.TargetOverview); got != (targetState{status: targetFailed}) {
 		t.Fatalf("before the run: %+v", got)
 	}
-	r.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, ""), "Overview", "", nil)
+	r.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil), "Overview", "", nil)
 	if got := ts.state(rev, review.TargetOverview); got.status != targetRunning || !got.busy() {
 		t.Errorf("during the run: %+v", got)
 	}

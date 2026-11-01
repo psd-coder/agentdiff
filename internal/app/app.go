@@ -128,6 +128,9 @@ type app struct {
 	// saveErr is why the last write of a review or the settings failed;
 	// it clears once a later write works.
 	saveErr string
+	// promptProblems are the prompt files of the open repository that the
+	// last run could not use.
+	promptProblems []string
 }
 
 // perReview is the state of the window for the review it shows. Leaving
@@ -268,6 +271,7 @@ func (a *app) openRepo(path string) {
 		return
 	}
 	a.repo, a.repoErr = r, ""
+	a.prompts(r.Root)
 	a.watch(r)
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
@@ -297,7 +301,7 @@ func (a *app) openRepo(path string) {
 
 // closeRepo goes back to the welcome screen.
 func (a *app) closeRepo() {
-	a.repo = nil
+	a.repo, a.promptProblems = nil, nil
 	a.unwatch()
 	a.loader.reset()
 	a.perLoad = newPerLoad()
@@ -539,9 +543,11 @@ func (a *app) firstPaint(rev *review.Review, page page, fresh bool) []string {
 				paths = append(paths, r.File)
 			}
 		}
-		for _, c := range w.Checklist {
-			for _, r := range c.Refs {
-				paths = append(paths, r.File)
+		for _, sec := range w.Sections {
+			for _, it := range sec.Items {
+				for _, r := range it.Refs {
+					paths = append(paths, r.File)
+				}
 			}
 		}
 	}

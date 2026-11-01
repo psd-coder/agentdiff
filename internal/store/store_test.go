@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,17 +17,17 @@ import (
 
 func TestConfigRoundTrip(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
-	if got := s.LoadConfig(); got.Agent.Provider != agent.Claude || got.Questions != review.DefaultQuestions {
+	if got := s.LoadConfig(); got.Agent.Provider != agent.Claude || got.Prompts != nil {
 		t.Fatalf("default config = %+v", got)
 	}
 	cfg := DefaultConfig()
 	cfg.Agent = agent.Config{Provider: agent.Codex, Model: "gpt-5"}
-	cfg.Questions = "Q"
+	cfg.Prompts = review.Prompts{review.PromptSystem: "Be brief."}
 	if err := s.SaveConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
 	got := s.LoadConfig()
-	if got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.Questions != "Q" {
+	if got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.Prompts[review.PromptSystem] != "Be brief." {
 		t.Errorf("loaded config = %+v", got)
 	}
 }
@@ -256,15 +258,39 @@ func TestRunsPrunedAndDeleted(t *testing.T) {
 	}
 }
 
-func TestLegacyQuestionsReplaced(t *testing.T) {
-	s := Store{Dir: t.TempDir()}
-	cfg := DefaultConfig()
-	cfg.Questions = review.LegacyQuestions
-	if err := s.SaveConfig(cfg); err != nil {
-		t.Fatal(err)
+func TestSavedQuestionsMoveIntoTheOverviewPrompt(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+		want   review.Prompts
+	}{
+		{"puts rewritten questions into the default overview prompt", `{"questions": "1. Is it fast?\n"}`, review.Prompts{review.PromptOverview: review.DefaultOverview("1. Is it fast?")}},
+		{"drops the default questions", `{"questions": "1. What data changes: schemas, storage, formats?\n2. What UI changes, and how do I see them?\n3. What architecture and API changes?\n4. Which changes are not beautiful?\n5. Which assumptions and rules force the non-beautiful changes?"}`, nil},
+		{"drops the questions of the first versions", `{"questions": "Explain the changes:\n\n1. Explain on high level.\n2. Explain data changes.\n3. Explain UI changes and how to see them.\n4. Explain architecture and API changes.\n5. Explain non-beautiful changes.\n6. Tell about assumptions and rules which force non-beautiful changes."}`, nil},
+		{"keeps an overview prompt the user already rewrote", `{"questions": "1. Is it fast?", "prompts": {"overview": "Mine {{format}} {{files}}"}}`, review.Prompts{review.PromptOverview: "Mine {{format}} {{files}}"}},
+		{"drops empty questions", `{"questions": " "}`, nil},
 	}
-	if got := s.LoadConfig().Questions; got != review.DefaultQuestions {
-		t.Errorf("questions = %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := Store{Dir: t.TempDir()}
+			if err := os.WriteFile(filepath.Join(s.Dir, "config.json"), []byte(tt.config), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg := s.LoadConfig()
+			if !reflect.DeepEqual(cfg.Prompts, tt.want) {
+				t.Errorf("prompts = %q, want %q", cfg.Prompts, tt.want)
+			}
+			if err := s.SaveConfig(cfg); err != nil {
+				t.Fatal(err)
+			}
+			saved, err := os.ReadFile(filepath.Join(s.Dir, "config.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(saved), `"questions"`) {
+				t.Errorf("the saved config still holds the questions: %s", saved)
+			}
+		})
 	}
 }
 

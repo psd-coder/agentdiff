@@ -1,7 +1,9 @@
 package review
 
 import (
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,7 +24,10 @@ func TestParseWalkthrough(t *testing.T) {
 			]},
 			{"title": " ", "text": ""}
 		],
-		"checklist": [{"question": "Data?", "answer": "None.", "refs": [{"file": "a.go", "start": 2}]}]
+		"sections": [
+			{"title": " Risks ", "items": [{"title": "Data?", "text": "None.", "refs": [{"file": "a.go", "start": 2}]}, {"title": "", "text": " "}]},
+			{"title": "Empty", "items": [{"title": " ", "text": ""}]}
+		]
 	}` + "\n```\n"
 	w, ok := parseWalkthrough(answer)
 	if !ok {
@@ -35,10 +40,32 @@ func TestParseWalkthrough(t *testing.T) {
 			{File: "cache/cache.go", Side: SideOld, Start: 4, End: 4},
 			{File: "cache/cache.go", Side: SideNew, Start: 1, End: 15},
 		}}},
-		Checklist: []CheckItem{{Question: "Data?", Answer: "None.", Refs: []Ref{{File: "a.go", Side: SideNew, Start: 2, End: 2}}}},
+		Sections: []Section{{Title: "Risks", Items: []Step{{Title: "Data?", Text: "None.", Refs: []Ref{{File: "a.go", Side: SideNew, Start: 2, End: 2}}}}}},
 	}
 	if !reflect.DeepEqual(w, want) {
 		t.Errorf("got  %+v\nwant %+v", w, want)
+	}
+}
+
+func TestSavedChecklistBecomesTheFirstSection(t *testing.T) {
+	saved := `{"summary": "s", "steps": [], "checklist": [{"question": "Data?", "answer": "None.", "refs": [{"file": "a.go", "side": "new", "start": 2, "end": 3}]}], "sections": [{"title": "Risks", "items": [{"title": "Cache", "text": "Stale."}]}]}`
+	var w Walkthrough
+	if err := json.Unmarshal([]byte(saved), &w); err != nil {
+		t.Fatal(err)
+	}
+	want := []Section{
+		{Title: "Checklist", Items: []Step{{Title: "Data?", Text: "None.", Refs: []Ref{{File: "a.go", Side: SideNew, Start: 2, End: 3}}}}},
+		{Title: "Risks", Items: []Step{{Title: "Cache", Text: "Stale."}}},
+	}
+	if !reflect.DeepEqual(w.Sections, want) {
+		t.Errorf("sections = %+v\nwant %+v", w.Sections, want)
+	}
+	out, err := json.Marshal(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "checklist") {
+		t.Errorf("a saved walkthrough still writes the checklist: %s", out)
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/egoist/mygo/ui/markdown"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
-	"github.com/psd-coder/agentdiff/internal/review"
 )
 
 var providers = agent.Providers()
@@ -30,14 +29,13 @@ type agentForm struct {
 	autoEffort string
 	binary     string
 	extraArgs  string
-	questions  string
 }
 
-func newAgentForm(cfg agent.Config, questions string) agentForm {
+func newAgentForm(cfg agent.Config) agentForm {
 	f := agentForm{
 		model: cfg.Model, effort: cmp.Or(cfg.Effort, defaultEffort),
 		autoModel: cfg.AutoModel, autoEffort: cmp.Or(cfg.AutoEffort, sameEffort),
-		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), questions: questions,
+		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "),
 		provider: max(slices.Index(providers, cfg.Provider), 0),
 	}
 	return f
@@ -66,9 +64,10 @@ func effortOf(p agent.Provider, picked string) string {
 }
 
 type settingsForm struct {
-	open   bool
-	tab    int
-	status map[agent.Provider]string
+	open    bool
+	tab     int
+	status  map[agent.Provider]string
+	prompts promptForm
 	settingsValues
 	// saved is what the form held when it last saved.
 	saved settingsValues
@@ -86,6 +85,7 @@ type settingsValues struct {
 const (
 	appearanceTab = iota
 	agentTab
+	promptsTab
 	shortcutsTab
 )
 
@@ -106,7 +106,8 @@ func (a *app) openSettings() {
 	f := &settingsForm{
 		open:      true,
 		status:    map[agent.Provider]string{},
-		agent:     newAgentForm(a.cfg.Agent, a.cfg.Questions),
+		prompts:   a.newPromptForm(),
+		agent:     newAgentForm(a.cfg.Agent),
 		ahead:     a.cfg.DeeperAhead,
 		theme:     themeIndex(a.cfg.Theme),
 		codeTheme: codeThemeNamed(a.cfg.CodeTheme).name,
@@ -134,7 +135,7 @@ func (a *app) saveSettings() {
 	f := a.settings
 	themeChanged := f.theme != f.saved.theme
 	f.saved = f.settingsValues
-	a.cfg.Agent, a.cfg.Questions, a.cfg.DeeperAhead = f.agent.config(), f.agent.questions, f.ahead
+	a.cfg.Agent, a.cfg.DeeperAhead = f.agent.config(), f.ahead
 	a.cfg.Theme = ""
 	if f.theme > 0 {
 		a.cfg.Theme = string(themes[f.theme])
@@ -165,7 +166,7 @@ func (a *app) settingsModal(c *ui.Context) {
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
 		ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
 			ui.Text(c, "Settings").FontSize(18).Bold()
-			a.takeFocus(ui.Tabs(c, &f.tab, "Appearance", "Agent", "Shortcuts").Label("Settings"), "settings")
+			a.takeFocus(ui.Tabs(c, &f.tab, "Appearance", "Agent", "Prompts", "Shortcuts").Label("Settings"), "settings")
 		})
 		ui.Column(c).Gap(14).Shrink(1).MinHeight(0).Children(func() {
 			switch f.tab {
@@ -180,6 +181,8 @@ func (a *app) settingsModal(c *ui.Context) {
 						ui.Text(c, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(t.TextMuted)
 					})
 				})
+			case promptsTab:
+				a.promptsTab(c, &f.prompts)
 			case shortcutsTab:
 				a.shortcutsTab(c)
 			case appearanceTab:
@@ -198,6 +201,7 @@ func (a *app) settingsModal(c *ui.Context) {
 	if f.settingsValues != f.saved {
 		a.saveSettings()
 	}
+	a.savePrompts(&f.prompts)
 	if !f.open {
 		a.settings = nil
 	}
@@ -270,13 +274,6 @@ func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider
 	})
 	field("Extra arguments", func() {
 		ui.TextInput(c, &f.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
-	})
-	field("Checklist questions", func() {
-		ui.TextArea(c, &f.questions).Lines(6, 14).Label("Checklist questions")
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "The overview answers these under its walkthrough, in a sentence or two each. The app adds the scope, the diffstat and the walkthrough format.").FontSize(11).TextColor(t.TextMuted).Grow(1)
-			ui.Button(c, "Reset").OnClick(func() { f.questions = review.DefaultQuestions })
-		})
 	})
 }
 

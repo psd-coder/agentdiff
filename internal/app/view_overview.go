@@ -31,6 +31,21 @@ func (a *app) staleBanner(c *ui.Context) {
 	})
 }
 
+// promptBanner warns about the prompt files of the repository that the
+// runs leave out.
+func (a *app) promptBanner(c *ui.Context) {
+	if len(a.promptProblems) == 0 {
+		return
+	}
+	t := c.Theme()
+	ui.Column(c).Gap(6).Padding(10, 14).Radius(8).Background(t.Warning.Alpha(0.15)).Border(1, t.Warning).Children(func() {
+		ui.Text(c, "The agent runs use the prompts from the settings in place of these files of the repository:")
+		for _, p := range a.promptProblems {
+			ui.Text(c, p).FontSize(12).Selectable()
+		}
+	})
+}
+
 // staleText warns that an overview was written for other changes, and
 // says how its files differ from the changed ones.
 func staleText(d review.Drift) string {
@@ -162,6 +177,7 @@ func (a *app) overviewPage(c *ui.Context) {
 				ui.Text(c, verb+" here from "+strings.ToLower(from.Label())+", which had the same changes.").FontSize(12).TextColor(t.TextMuted)
 			}
 			a.staleBanner(c)
+			a.promptBanner(c)
 			switch {
 			case a.loader.firstLoad():
 				ui.Row(c).Gap(8).Children(func() {
@@ -177,7 +193,6 @@ func (a *app) overviewPage(c *ui.Context) {
 			case ov.Walk != nil:
 				ui.Text(c, writtenBy(ov.Agent, ov.Model, ov.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(t.TextMuted)
 				a.walkthrough(c, "", ov.Walk)
-				a.checklist(c, ov.Walk.Checklist)
 			default:
 				a.overviewSections(c, ov)
 			}
@@ -239,7 +254,7 @@ func (a *app) overviewIntro(c *ui.Context, agentName string) {
 	ui.Column(c).Gap(12).Padding(20).Radius(10).Background(t.Surface).Border(1, t.Border).Children(func() {
 		ui.Text(c, "Get a walkthrough of these changes").FontSize(16).Bold()
 		ui.Text(c, agentName+" reads the changes in read-only mode and walks you through them in a few short steps, each with the code that shows it. Go deeper into any step, or ask about it, and you get a walkthrough one level closer to the code. It also answers your checklist and groups the files in the order to review them.").TextColor(t.TextMuted)
-		ui.Text(c, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the questions in Settings.").FontSize(12).TextColor(t.TextMuted)
+		ui.Text(c, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the prompts in Settings.").FontSize(12).TextColor(t.TextMuted)
 		ui.Row(c).Children(func() {
 			a.cmdPrimaryButton(c, "explain", "", "Explain changes with "+agentName)
 		})

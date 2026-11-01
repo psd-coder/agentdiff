@@ -53,7 +53,7 @@ var runnerCfg = agent.Config{Provider: agent.Claude}
 func done(text string) agent.Event { return agent.Event{Kind: agent.EventDone, Text: text} }
 
 func startWalk(r *runner, rev *review.Review, w *review.Walk) {
-	r.start(review.DeeperExchange(rev, w, runnerCfg, ""), "Deeper", "", nil)
+	r.start(review.DeeperExchange(rev, w, runnerCfg, nil, ""), "Deeper", "", nil)
 }
 
 // writeAhead adds n step walks to rev and queues each to be written
@@ -67,7 +67,7 @@ func writeAhead(r *runner, rev *review.Review, n int) []*review.Walk {
 			if rev.Walk(w.ID) == nil {
 				return nil, "", false
 			}
-			return review.DeeperExchange(rev, w, runnerCfg, ""), fmt.Sprintf("Step %d", i), true
+			return review.DeeperExchange(rev, w, runnerCfg, nil, ""), fmt.Sprintf("Step %d", i), true
 		})
 	}
 	return walks
@@ -213,7 +213,7 @@ func TestReplacedRunIsSilent(t *testing.T) {
 	rev := newRunnerReview()
 	w := rev.AddWalk("", -1, "Why?")
 	var ended []bool
-	r.start(review.DeeperExchange(rev, w, runnerCfg, ""), "Old", "", func(answered bool) { ended = append(ended, answered) })
+	r.start(review.DeeperExchange(rev, w, runnerCfg, nil, ""), "Old", "", func(answered bool) { ended = append(ended, answered) })
 	old := f.last(t, rev, w.ID)
 	startWalk(r, rev, w)
 	if old.ctx.Err() == nil {
@@ -230,7 +230,7 @@ func TestStopWalkRecordsStoppedOnce(t *testing.T) {
 	rev := newRunnerReview()
 	w := rev.AddWalk("", -1, "Why?")
 	var ended []bool
-	r.start(review.DeeperExchange(rev, w, runnerCfg, ""), "Question", "", func(answered bool) { ended = append(ended, answered) })
+	r.start(review.DeeperExchange(rev, w, runnerCfg, nil, ""), "Question", "", func(answered bool) { ended = append(ended, answered) })
 	r.stop(rev, w.ID)
 	if r.busy(rev, w.ID) || w.Err != "Stopped" || !slices.Equal(ended, []bool{false}) {
 		t.Fatalf("busy %v, err %q, ended %v right after Stop", r.busy(rev, w.ID), w.Err, ended)
@@ -246,7 +246,7 @@ func TestStopThreadRecordsStoppedOnce(t *testing.T) {
 	r, f := newTestRunner()
 	rev := newRunnerReview()
 	th := rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-	r.start(review.ThreadExchange(rev, th, runnerCfg, "", "Why?"), "Thread", "Why?", nil)
+	r.start(review.ThreadExchange(rev, th, runnerCfg, nil, "", "Why?"), "Thread", "Why?", nil)
 	r.stop(rev, th.ID)
 	if r.busy(rev, th.ID) {
 		t.Fatal("the thread is busy after Stop")

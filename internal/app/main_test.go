@@ -235,7 +235,7 @@ func TestSettings(t *testing.T) {
 	if got := a.store.LoadConfig(); got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.DeeperAhead {
 		t.Errorf("not saved as changed: %+v", got)
 	}
-	if got := newAgentForm(a.store.LoadConfig().Agent, "").provider; got != 1 {
+	if got := newAgentForm(a.store.LoadConfig().Agent).provider; got != 1 {
 		t.Errorf("settings opened again on provider %d, want Codex", got)
 	}
 
@@ -1149,7 +1149,7 @@ func TestWalkthrough(t *testing.T) {
 			}},
 			{Title: "New handler", Text: "A stub."},
 		},
-		Checklist: []review.CheckItem{{Question: "What data changes?", Answer: "None."}},
+		Sections: []review.Section{{Title: "Checklist", Items: []review.Step{{Title: "What data changes?", Text: "None."}}}},
 	}}
 	deeper := "```json\n" + `{"summary": "Inside Get.", "steps": [{"title": "ToLower call", "text": "Uses strings.", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
 	fake := newFakeAgent(t, a)

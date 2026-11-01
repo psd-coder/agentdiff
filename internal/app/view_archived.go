@@ -87,17 +87,23 @@ func (a *app) savedWalkthrough(c *ui.Context, rev *review.Review, parent string,
 			}
 		})
 	}
-	if len(w.Checklist) > 0 {
-		ui.Text(c, "Checklist").FontSize(18).Bold().Margin(8, 0, 0, 0)
-	}
-	for i, it := range w.Checklist {
-		ui.Column(c.Key(fmt.Sprintf("check-%s-%d", parent, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, t.Border).Children(func() {
-			ui.Text(c, it.Question).Bold()
-			markdown.View(c, it.Answer, &a.md)
-			for ri, r := range it.Refs {
-				a.snippetView(c.Key(fmt.Sprintf("ref-%d", ri)), r, savedSnippet(r))
-			}
-		})
+	for si, sec := range w.Sections {
+		if sec.Title != "" {
+			ui.Text(c.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title).FontSize(18).Bold().Margin(8, 0, 0, 0)
+		}
+		for i, it := range sec.Items {
+			ui.Column(c.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, t.Border).Children(func() {
+				if it.Title != "" {
+					ui.Text(c, it.Title).Bold()
+				}
+				if it.Text != "" {
+					markdown.View(c, it.Text, &a.md)
+				}
+				for ri, r := range it.Refs {
+					a.snippetView(c.Key(fmt.Sprintf("ref-%d", ri)), r, savedSnippet(r))
+				}
+			})
+		}
 	}
 	if !nested {
 		return

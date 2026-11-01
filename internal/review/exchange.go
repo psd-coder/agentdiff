@@ -38,10 +38,10 @@ type Exchange struct {
 // OverviewExchange starts the exchange for a new overview of r. The
 // overview always starts a new session, so it reads the changes as they
 // are now.
-func OverviewExchange(r *Review, changes ChangeSet, cfg agent.Config, questions string) *Exchange {
-	prompt := overviewPrompt(r.Scope.Describe(), changes.Diffstat, r.Scope.NewRev(), changes.Files, questions)
+func OverviewExchange(r *Review, changes ChangeSet, cfg agent.Config, p Prompts) *Exchange {
+	prompt := overviewPrompt(p, r.Scope.Describe(), changes.Diffstat, r.Scope.NewRev(), changes.Files)
 	return &Exchange{
-		Request: agent.Request{Dir: r.Repo, Prompt: prompt, SystemPrompt: systemPrompt},
+		Request: agent.Request{Dir: r.Repo, Prompt: prompt, SystemPrompt: p.System()},
 		rev:     r,
 		cfg:     cfg,
 		changes: changes,
@@ -55,7 +55,7 @@ func OverviewExchange(r *Review, changes ChangeSet, cfg agent.Config, questions 
 // The walk loses its old answers and its sessions, which hold the
 // conversation about those answers. diffstat is empty when the app does
 // not know it.
-func DeeperExchange(r *Review, w *Walk, cfg agent.Config, diffstat string) *Exchange {
+func DeeperExchange(r *Review, w *Walk, cfg agent.Config, p Prompts, diffstat string) *Exchange {
 	parentSession := ""
 	if p := r.Walk(w.Parent); p != nil {
 		parentSession = p.Sessions[cfg.Provider]
@@ -66,7 +66,7 @@ func DeeperExchange(r *Review, w *Walk, cfg agent.Config, diffstat string) *Exch
 	if s, ok := r.StepOf(w); ok {
 		d.Step = &s
 	}
-	req := agent.Request{Dir: r.Repo, SystemPrompt: systemPrompt}
+	req := agent.Request{Dir: r.Repo, SystemPrompt: p.System()}
 	if d.Known {
 		req.ResumeID, req.Fork = parentSession, true
 	} else {
@@ -76,7 +76,7 @@ func DeeperExchange(r *Review, w *Walk, cfg agent.Config, diffstat string) *Exch
 			d.Path = append(d.Path, r.WalkTitle(p))
 		}
 	}
-	req.Prompt = deeperPrompt(d)
+	req.Prompt = deeperPrompt(p, d)
 	w.Content, w.Markdown, w.Err, w.More, w.Agent, w.Model, w.Sessions = nil, "", "", nil, "", "", nil
 	return &Exchange{Request: req, rev: r, cfg: cfg, walk: w}
 }
@@ -86,17 +86,17 @@ func DeeperExchange(r *Review, w *Walk, cfg agent.Config, diffstat string) *Exch
 // goes on in the walk's own session. A walk without a session for the
 // provider gets a new session that is told the change set and the earlier
 // turns. diffstat is empty when the app does not know it.
-func FollowupExchange(r *Review, w *Walk, cfg agent.Config, diffstat, question string) *Exchange {
+func FollowupExchange(r *Review, w *Walk, cfg agent.Config, p Prompts, diffstat, question string) *Exchange {
 	session := w.Sessions[cfg.Provider]
 	f := followupRequest{Question: question, Known: session != "", NewRev: r.Scope.NewRev()}
-	req := agent.Request{Dir: r.Repo, SystemPrompt: systemPrompt}
+	req := agent.Request{Dir: r.Repo, SystemPrompt: p.System()}
 	if f.Known {
 		req.ResumeID = session
 	} else {
 		f.Context = contextPrompt(r.Scope.Describe(), diffstat)
 		f.Earlier = w.Turns()
 	}
-	req.Prompt = followupPrompt(f)
+	req.Prompt = followupPrompt(p, f)
 	w.More = append(w.More, Turn{Question: question, Generated: time.Now()})
 	return &Exchange{Request: req, rev: r, cfg: cfg, walk: w}
 }
@@ -108,24 +108,24 @@ func FollowupExchange(r *Review, w *Walk, cfg agent.Config, diffstat, question s
 // apart. Later questions go on in the thread's own session. Without
 // either session, a new session is told the change set. diffstat is
 // empty when the app does not know it.
-func ThreadExchange(r *Review, t *Thread, cfg agent.Config, diffstat, question string) *Exchange {
+func ThreadExchange(r *Review, t *Thread, cfg agent.Config, p Prompts, diffstat, question string) *Exchange {
 	t.Messages = append(t.Messages, Message{Role: RoleUser, Text: question, Time: time.Now()})
 	t.Agent = cfg.Provider
 	session, overviewSession := t.Sessions[cfg.Provider], ""
 	if r.Overview != nil {
 		overviewSession = r.Overview.Sessions[cfg.Provider]
 	}
-	req := agent.Request{Dir: r.Repo, SystemPrompt: systemPrompt}
-	prompt := questionPrompt(t, question, session != "")
+	req := agent.Request{Dir: r.Repo, SystemPrompt: p.System()}
 	switch {
 	case session != "":
 		req.ResumeID = session
+		req.Prompt = question
 	case overviewSession != "":
 		req.ResumeID, req.Fork = overviewSession, true
+		req.Prompt = threadPrompt(p, t, question, "")
 	default:
-		prompt = contextPrompt(r.Scope.Describe(), diffstat) + prompt
+		req.Prompt = threadPrompt(p, t, question, contextPrompt(r.Scope.Describe(), diffstat))
 	}
-	req.Prompt = prompt
 	return &Exchange{Request: req, rev: r, cfg: cfg, thread: t, reply: len(t.Messages)}
 }
 

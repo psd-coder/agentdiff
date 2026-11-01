@@ -113,7 +113,7 @@ func TestParseOverviewNoFiles(t *testing.T) {
 func TestSections(t *testing.T) {
 	md := "Intro line\n\n## 1. High level\n- a\n\n```go\n## not a heading\n```\n## 2. Data\nNone.\n"
 	got := Sections(md)
-	want := []Section{
+	want := []MarkdownSection{
 		{Title: "", Body: "Intro line"},
 		{Title: "1. High level", Body: "- a\n\n```go\n## not a heading\n```"},
 		{Title: "2. Data", Body: "None."},
@@ -130,12 +130,12 @@ func TestSectionsEdges(t *testing.T) {
 	tests := []struct {
 		name string
 		md   string
-		want []Section
+		want []MarkdownSection
 	}{
-		{"keeps text without headings as one section", "Just text\nmore\n", []Section{{Body: "Just text\nmore"}}},
-		{"keeps a heading on the last line without a newline", "Intro\n## Last", []Section{{Body: "Intro"}, {Title: "Last"}}},
-		{"keeps the body after the last heading without a newline", "## A\nx\ny", []Section{{Title: "A", Body: "x\ny"}}},
-		{"trims CRLF around titles and bodies and keeps it inside", "Intro\r\n## A\r\nx\r\ny\r\n", []Section{{Body: "Intro"}, {Title: "A", Body: "x\r\ny"}}},
+		{"keeps text without headings as one section", "Just text\nmore\n", []MarkdownSection{{Body: "Just text\nmore"}}},
+		{"keeps a heading on the last line without a newline", "Intro\n## Last", []MarkdownSection{{Body: "Intro"}, {Title: "Last"}}},
+		{"keeps the body after the last heading without a newline", "## A\nx\ny", []MarkdownSection{{Title: "A", Body: "x\ny"}}},
+		{"trims CRLF around titles and bodies and keeps it inside", "Intro\r\n## A\r\nx\r\ny\r\n", []MarkdownSection{{Body: "Intro"}, {Title: "A", Body: "x\r\ny"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

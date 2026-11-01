@@ -168,23 +168,37 @@ func (a *app) answerView(c *ui.Context, turn review.Turn) {
 	}
 }
 
-// compactWalk shows a walkthrough in a narrow place: its steps without
-// the buttons that lead deeper.
+// compactWalk shows a walkthrough in a narrow place: its steps and its
+// sections without the buttons that lead deeper.
 func (a *app) compactWalk(c *ui.Context, w *review.Walkthrough) {
 	if w.Summary != "" {
 		ui.Text(c, w.Summary).Selectable()
 	}
 	for i, s := range w.Steps {
-		ui.Column(c.Key(fmt.Sprintf("cs-%d", i))).Gap(6).Children(func() {
-			ui.Text(c, fmt.Sprintf("%d. %s", i+1, s.Title)).Bold()
-			if s.Text != "" {
-				markdown.View(c, s.Text, &a.md)
-			}
-			for ri, r := range s.Refs {
-				a.refView(c.Key(fmt.Sprintf("ref-%d", ri)), r)
-			}
-		})
+		a.compactStep(c.Key(fmt.Sprintf("cs-%d", i)), fmt.Sprintf("%d. %s", i+1, s.Title), s)
 	}
+	for si, sec := range w.Sections {
+		if sec.Title != "" {
+			ui.Text(c.Key(fmt.Sprintf("cp-%d", si)), sec.Title).FontSize(15).Bold()
+		}
+		for i, it := range sec.Items {
+			a.compactStep(c.Key(fmt.Sprintf("cp-%d-%d", si, i)), it.Title, it)
+		}
+	}
+}
+
+func (a *app) compactStep(c *ui.Context, title string, s review.Step) {
+	ui.Column(c).Gap(6).Children(func() {
+		if title != "" {
+			ui.Text(c, title).Bold()
+		}
+		if s.Text != "" {
+			markdown.View(c, s.Text, &a.md)
+		}
+		for ri, r := range s.Refs {
+			a.refView(c.Key(fmt.Sprintf("ref-%d", ri)), r)
+		}
+	})
 }
 
 func (a *app) questionComposer(c *ui.Context, w *review.Walk, target *askTarget) {

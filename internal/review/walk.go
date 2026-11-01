@@ -37,19 +37,53 @@ type Step struct {
 	Refs  []Ref  `json:"refs,omitempty"`
 }
 
-type CheckItem struct {
-	Question string `json:"question"`
-	Answer   string `json:"answer"`
-	Refs     []Ref  `json:"refs,omitempty"`
+// Section is a part of a walkthrough that the prompt asks for besides the
+// steps, as a checklist or a list of risks. Its items are written as steps
+// are, and the reviewer cannot go deeper into them.
+type Section struct {
+	Title string `json:"title"`
+	Items []Step `json:"items"`
 }
 
 // Walkthrough explains changes as a short summary and a few steps to read
 // in order, each with the code that shows it best.
 type Walkthrough struct {
-	Summary   string      `json:"summary"`
-	Steps     []Step      `json:"steps"`
-	Checklist []CheckItem `json:"checklist,omitempty"`
-	Groups    []Group     `json:"groups,omitempty"`
+	Summary  string    `json:"summary"`
+	Steps    []Step    `json:"steps"`
+	Sections []Section `json:"sections,omitempty"`
+	Groups   []Group   `json:"groups,omitempty"`
+}
+
+// checklistTitle is the title of the section that holds the checklist of
+// a walkthrough written before sections.
+const checklistTitle = "Checklist"
+
+// UnmarshalJSON reads a walkthrough. The checklist of a walkthrough
+// written before sections becomes its first section, with the questions
+// as item titles.
+func (w *Walkthrough) UnmarshalJSON(b []byte) error {
+	type plain Walkthrough
+	var v struct {
+		plain
+		Checklist []struct {
+			Question string `json:"question"`
+			Answer   string `json:"answer"`
+			Refs     []Ref  `json:"refs"`
+		} `json:"checklist"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*w = Walkthrough(v.plain)
+	if len(v.Checklist) == 0 {
+		return nil
+	}
+	items := make([]Step, len(v.Checklist))
+	for i, c := range v.Checklist {
+		items[i] = Step{Title: c.Question, Text: c.Answer, Refs: c.Refs}
+	}
+	w.Sections = append([]Section{{Title: checklistTitle, Items: items}}, w.Sections...)
+	return nil
 }
 
 // Walk is a walkthrough one level deeper than its parent: into one of the
@@ -136,9 +170,11 @@ func (r *Review) EachRef(fn func(*Ref)) {
 				fn(&w.Steps[i].Refs[j])
 			}
 		}
-		for i := range w.Checklist {
-			for j := range w.Checklist[i].Refs {
-				fn(&w.Checklist[i].Refs[j])
+		for i := range w.Sections {
+			for j := range w.Sections[i].Items {
+				for k := range w.Sections[i].Items[j].Refs {
+					fn(&w.Sections[i].Items[j].Refs[k])
+				}
 			}
 		}
 	}
@@ -254,23 +290,34 @@ func parseWalkthrough(answer string) (*Walkthrough, bool) {
 		return nil, false
 	}
 	w.Summary = strings.TrimSpace(w.Summary)
-	steps := w.Steps[:0]
-	for _, s := range w.Steps {
+	w.Steps = cleanSteps(w.Steps)
+	var sections []Section
+	for _, s := range w.Sections {
+		s.Title, s.Items = strings.TrimSpace(s.Title), cleanSteps(s.Items)
+		if len(s.Items) > 0 {
+			sections = append(sections, s)
+		}
+	}
+	w.Sections = sections
+	if w.Summary == "" && len(w.Steps) == 0 {
+		return nil, false
+	}
+	return &w, true
+}
+
+// cleanSteps drops the steps without a title and a text, and cleans the
+// references of the others.
+func cleanSteps(steps []Step) []Step {
+	var out []Step
+	for _, s := range steps {
 		s.Title, s.Text = strings.TrimSpace(s.Title), strings.TrimSpace(s.Text)
 		if s.Title == "" && s.Text == "" {
 			continue
 		}
 		s.Refs = cleanRefs(s.Refs)
-		steps = append(steps, s)
+		out = append(out, s)
 	}
-	w.Steps = steps
-	for i := range w.Checklist {
-		w.Checklist[i].Refs = cleanRefs(w.Checklist[i].Refs)
-	}
-	if w.Summary == "" && len(w.Steps) == 0 {
-		return nil, false
-	}
-	return &w, true
+	return out
 }
 
 // maxRefStart is the highest start line a reference keeps. A larger one
