@@ -26,8 +26,8 @@ type Fingerprint struct {
 // the input of git patch-id; the files' chunks are numbered below it.
 const wholePatch = "ffffffffffffffffffffffffffffffffffffffff"
 
-func (s *Snapshot) Fingerprint(ctx context.Context) (Fingerprint, error) {
-	patch, err := s.patch(ctx)
+func (snap *Snapshot) Fingerprint(ctx context.Context) (Fingerprint, error) {
+	patch, err := snap.patch(ctx)
 	if err != nil {
 		return Fingerprint{}, err
 	}
@@ -39,7 +39,7 @@ func (s *Snapshot) Fingerprint(ctx context.Context) (Fingerprint, error) {
 		fmt.Fprintf(&in, "commit %040x\n", i)
 		in.Write(ch.text)
 	}
-	ids, err := s.repo.patchIDs(ctx, in.Bytes())
+	ids, err := snap.repo.patchIDs(ctx, in.Bytes())
 	if err != nil {
 		return Fingerprint{}, err
 	}
@@ -50,22 +50,22 @@ func (s *Snapshot) Fingerprint(ctx context.Context) (Fingerprint, error) {
 	for _, id := range ids {
 		if id[1] == wholePatch {
 			fp.Patch = id[0]
-		} else if i, err := strconv.ParseInt(id[1], 16, 64); err == nil && int(i) < len(chunks) {
-			fp.Files[chunks[i].path] = id[0]
+		} else if chunkIndex, err := strconv.ParseInt(id[1], 16, 64); err == nil && int(chunkIndex) < len(chunks) {
+			fp.Files[chunks[chunkIndex].path] = id[0]
 		}
 	}
 	return fp, nil
 }
 
 // patch is the diff of the snapshot, with the untracked files as added ones.
-func (s *Snapshot) patch(ctx context.Context) ([]byte, error) {
+func (snap *Snapshot) patch(ctx context.Context) ([]byte, error) {
 	var out bytes.Buffer
 	args := append([]string{"diff"}, diffFlags...)
-	args = append(append(args, "-p"), s.revs.args()...)
-	if err := s.repo.run(ctx, &out, append(args, "--")...); err != nil {
+	args = append(append(args, "-p"), snap.revs.args()...)
+	if err := snap.repo.run(ctx, &out, append(args, "--")...); err != nil {
 		return nil, err
 	}
-	if err := s.repo.untrackedPatches(ctx, s.untracked, &out); err != nil {
+	if err := snap.repo.untrackedPatches(ctx, snap.untracked, &out); err != nil {
 		return nil, err
 	}
 	return out.Bytes(), nil
@@ -74,10 +74,10 @@ func (s *Snapshot) patch(ctx context.Context) ([]byte, error) {
 // untrackedPatches writes the untracked files in paths as added ones. git
 // writes nothing and exits with 1 for a file deleted since paths was
 // listed, so that file is left out.
-func (r *Repo) untrackedPatches(ctx context.Context, paths []string, out io.Writer) error {
+func (repo *Repo) untrackedPatches(ctx context.Context, paths []string, out io.Writer) error {
 	for _, p := range paths {
 		args := append([]string{"diff"}, diffFlags...)
-		err := r.run(ctx, out, append(args, "--no-index", "--", "/dev/null", p)...)
+		err := repo.run(ctx, out, append(args, "--no-index", "--", "/dev/null", p)...)
 		// --no-index exits 1 when the files differ, which is always the case here.
 		if err != nil && exitCode(err) != 1 {
 			return err
@@ -134,8 +134,8 @@ func chunkPath(text []byte) string {
 	}
 	// A diff without lines, as of a binary file: "a/path b/path".
 	if strings.HasPrefix(header, `"`) {
-		if i := strings.LastIndex(header, ` "b/`); i >= 0 {
-			return strings.TrimPrefix(unquotePath(header[i+1:]), "b/")
+		if newPathStart := strings.LastIndex(header, ` "b/`); newPathStart >= 0 {
+			return strings.TrimPrefix(unquotePath(header[newPathStart+1:]), "b/")
 		}
 	}
 	if _, path, ok := strings.CutLast(header, " b/"); ok {
@@ -145,19 +145,19 @@ func chunkPath(text []byte) string {
 }
 
 // unquotePath reads a path git quoted because of unusual characters.
-func unquotePath(p string) string {
-	if strings.HasPrefix(p, `"`) {
-		if u, err := strconv.Unquote(p); err == nil {
-			return u
+func unquotePath(path string) string {
+	if strings.HasPrefix(path, `"`) {
+		if unquoted, err := strconv.Unquote(path); err == nil {
+			return unquoted
 		}
 	}
-	return p
+	return path
 }
 
 // CommitPatchIDs maps the patch IDs of the commits Commits lists to their
 // hashes. A merge commit counts as its changes against the first parent.
-func (r *Repo) CommitPatchIDs(ctx context.Context, base, head string, limit int) (map[string]string, error) {
-	if !r.HasHead(ctx) {
+func (repo *Repo) CommitPatchIDs(ctx context.Context, base, head string, limit int) (map[string]string, error) {
+	if !repo.HasHead(ctx) {
 		return map[string]string{}, nil
 	}
 	head = cmp.Or(head, "HEAD")
@@ -167,11 +167,11 @@ func (r *Repo) CommitPatchIDs(ctx context.Context, base, head string, limit int)
 	}
 	args := append([]string{"log", "-p", "--no-show-signature", "--diff-merges=first-parent", "--format=commit %H"}, diffFlags...)
 	args = append(args, "-n", strconv.Itoa(cmp.Or(limit, defaultCommitLimit)), rng, "--")
-	log, err := r.output(ctx, args...)
+	log, err := repo.output(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
-	ids, err := r.patchIDs(ctx, log)
+	ids, err := repo.patchIDs(ctx, log)
 	if err != nil {
 		return nil, err
 	}
@@ -186,9 +186,9 @@ func (r *Repo) CommitPatchIDs(ctx context.Context, base, head string, limit int)
 
 // patchIDs runs a patch through git patch-id: one pair of patch ID and
 // commit hash per patch.
-func (r *Repo) patchIDs(ctx context.Context, patch []byte) ([][2]string, error) {
+func (repo *Repo) patchIDs(ctx context.Context, patch []byte) ([][2]string, error) {
 	var out bytes.Buffer
-	if err := runIn(ctx, r.Root, bytes.NewReader(patch), &out, "patch-id", "--stable"); err != nil {
+	if err := runIn(ctx, repo.Root, bytes.NewReader(patch), &out, "patch-id", "--stable"); err != nil {
 		return nil, err
 	}
 	var ids [][2]string
@@ -204,12 +204,12 @@ func (r *Repo) patchIDs(ctx context.Context, patch []byte) ([][2]string, error) 
 // latest limit commits that changes all of them. A set that no commit
 // changes, and an empty set, are left out. A merge commit counts as its
 // changes against the first parent.
-func (r *Repo) CommitsWithFiles(ctx context.Context, sets map[string][]string, limit int) (map[string]string, error) {
+func (repo *Repo) CommitsWithFiles(ctx context.Context, sets map[string][]string, limit int) (map[string]string, error) {
 	found := map[string]string{}
-	if len(sets) == 0 || !r.HasHead(ctx) {
+	if len(sets) == 0 || !repo.HasHead(ctx) {
 		return found, nil
 	}
-	out, err := r.output(ctx, "log", "-z", "--name-only", "--no-show-signature", "--diff-merges=first-parent", "--format=%x01%H",
+	out, err := repo.output(ctx, "log", "-z", "--name-only", "--no-show-signature", "--diff-merges=first-parent", "--format=%x01%H",
 		"-n", strconv.Itoa(cmp.Or(limit, defaultCommitLimit)), "HEAD", "--")
 	if err != nil {
 		return nil, err

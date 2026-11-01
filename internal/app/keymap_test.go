@@ -40,11 +40,11 @@ func TestKeymapAssign(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			k := testKeymap(nil)
-			if got := k.assign(tc.id, tc.keys); got != tc.want {
+			keymap := testKeymap(nil)
+			if got := keymap.assign(tc.id, tc.keys); got != tc.want {
 				t.Errorf("assign = %+v, want %+v", got, tc.want)
 			}
-			if got := k.overrides(); !maps.Equal(got, tc.overrides) {
+			if got := keymap.overrides(); !maps.Equal(got, tc.overrides) {
 				t.Errorf("overrides = %v, want %v", got, tc.overrides)
 			}
 		})
@@ -52,17 +52,17 @@ func TestKeymapAssign(t *testing.T) {
 }
 
 func TestKeymapReset(t *testing.T) {
-	k := testKeymap(map[string]string{"refresh": "CmdOrCtrl+Shift+Y", "mark-viewed": "CmdOrCtrl+R", "palette": ""})
-	k.reset("refresh")
-	if got, want := k.overrides(), map[string]string{"palette": ""}; !maps.Equal(got, want) {
+	keymap := testKeymap(map[string]string{"refresh": "CmdOrCtrl+Shift+Y", "mark-viewed": "CmdOrCtrl+R", "palette": ""})
+	keymap.reset("refresh")
+	if got, want := keymap.overrides(), map[string]string{"palette": ""}; !maps.Equal(got, want) {
 		t.Errorf("reset of one took its default back: %v, want %v", got, want)
 	}
-	if k.of("refresh") != "CmdOrCtrl+R" || k.of("mark-viewed") != "" || k.changed("refresh") || !k.changed("palette") {
-		t.Errorf("refresh %q, mark-viewed %q", k.of("refresh"), k.of("mark-viewed"))
+	if keymap.of("refresh") != "CmdOrCtrl+R" || keymap.of("mark-viewed") != "" || keymap.changed("refresh") || !keymap.changed("palette") {
+		t.Errorf("refresh %q, mark-viewed %q", keymap.of("refresh"), keymap.of("mark-viewed"))
 	}
-	k.reset()
-	if got := k.overrides(); len(got) != 0 || k.of("palette") != "Shift+CmdOrCtrl+P" {
-		t.Errorf("reset of all left %v, palette %q", got, k.of("palette"))
+	keymap.reset()
+	if got := keymap.overrides(); len(got) != 0 || keymap.of("palette") != "Shift+CmdOrCtrl+P" {
+		t.Errorf("reset of all left %v, palette %q", got, keymap.of("palette"))
 	}
 }
 

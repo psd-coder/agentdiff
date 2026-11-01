@@ -124,7 +124,7 @@ func TestCommandLine(t *testing.T) {
 	}
 }
 
-func fixtureItems(t *testing.T, p Provider, name string) []LogItem {
+func fixtureItems(t *testing.T, provider Provider, name string) []LogItem {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
@@ -134,7 +134,7 @@ func fixtureItems(t *testing.T, p Provider, name string) []LogItem {
 	scanner.Buffer(nil, maxLineSize)
 	var items []LogItem
 	for scanner.Scan() {
-		items = append(items, Summarize(p, LogEntry{Kind: LogStdout, Text: scanner.Text()})...)
+		items = append(items, Summarize(provider, LogEntry{Kind: LogStdout, Text: scanner.Text()})...)
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
@@ -164,11 +164,11 @@ func TestSummarizeClaude(t *testing.T) {
 	for _, it := range items {
 		byTitle[it.Title] = it
 	}
-	if d := byTitle["Tool call"].Detail; !strings.HasPrefix(d, "Bash: git -C ") || !strings.HasSuffix(d, " log -1 --oneline") {
-		t.Errorf("tool call = %q", d)
+	if detail := byTitle["Tool call"].Detail; !strings.HasPrefix(detail, "Bash: git -C ") || !strings.HasSuffix(detail, " log -1 --oneline") {
+		t.Errorf("tool call = %q", detail)
 	}
-	if d := byTitle["Tool result"].Detail; !strings.Contains(d, "Scaffold MyGo native app") {
-		t.Errorf("tool result = %q", d)
+	if detail := byTitle["Tool result"].Detail; !strings.Contains(detail, "Scaffold MyGo native app") {
+		t.Errorf("tool result = %q", detail)
 	}
 	res := byTitle["Result: success"]
 	if want := (Usage{Input: 4, Output: 119, CacheRead: 34947, CacheWrite: 35116, Session: "6a699d1b-afa7-40a4-b527-0cf3cd8745ca", SessionCost: 0.0074325699999999995}); res.Usage == nil || *res.Usage != want {
@@ -177,8 +177,8 @@ func TestSummarizeClaude(t *testing.T) {
 	if want := "2 turns, 6.8 s\n70k tokens processed: 4 in, 34k cache read, 35k cache write, 119 out, $0.0074 at API prices for the whole session"; res.Detail != want {
 		t.Errorf("result = %q", res.Detail)
 	}
-	if d := byTitle["Session started"].Detail; !strings.HasPrefix(d, "model claude-haiku-5-5, permission mode ") {
-		t.Errorf("session = %q", d)
+	if detail := byTitle["Session started"].Detail; !strings.HasPrefix(detail, "model claude-haiku-5-5, permission mode ") {
+		t.Errorf("session = %q", detail)
 	}
 	var run Usage
 	for _, it := range items {
@@ -203,17 +203,17 @@ func TestClaudeSubagentContext(t *testing.T) {
 }
 
 func TestUsageShort(t *testing.T) {
-	u := Usage{Input: 1000, CacheRead: 20000}
-	if got := u.Short(); got != "21k tokens processed" {
+	usage := Usage{Input: 1000, CacheRead: 20000}
+	if got := usage.Short(); got != "21k tokens processed" {
 		t.Errorf("without context = %q", got)
 	}
-	u.Add(Usage{Context: 9000})
-	u.Add(Usage{Output: 500})
-	if got := u.Short(); got != "9.0k tokens" {
+	usage.Add(Usage{Context: 9000})
+	usage.Add(Usage{Output: 500})
+	if got := usage.Short(); got != "9.0k tokens" {
 		t.Errorf("with context = %q", got)
 	}
-	if want := "9.0k tokens in context, 21k tokens processed: 1.0k in, 20k cache read, 0 cache write, 500 out"; u.String() != want {
-		t.Errorf("string = %q", u.String())
+	if want := "9.0k tokens in context, 21k tokens processed: 1.0k in, 20k cache read, 0 cache write, 500 out"; usage.String() != want {
+		t.Errorf("string = %q", usage.String())
 	}
 }
 
@@ -236,10 +236,10 @@ func TestSummarizeCodex(t *testing.T) {
 
 func TestSummarizeEdgeCases(t *testing.T) {
 	tests := []struct {
-		name  string
-		p     Provider
-		entry LogEntry
-		want  []LogItem
+		name     string
+		provider Provider
+		entry    LogEntry
+		want     []LogItem
 	}{
 		{"exit ok", Claude, LogEntry{Kind: LogExit, Text: exitOK}, []LogItem{{Title: exitOK, exit: RunDone}}},
 		{"exit stopped", Claude, LogEntry{Kind: LogExit, Text: exitStopped}, []LogItem{{Title: exitStopped, Failed: true, exit: RunStopped}}},
@@ -269,7 +269,7 @@ func TestSummarizeEdgeCases(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := Summarize(tt.p, tt.entry); !reflect.DeepEqual(got, tt.want) {
+			if got := Summarize(tt.provider, tt.entry); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})

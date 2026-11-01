@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func parseFixture(t *testing.T, p lineParser, name string) []Event {
+func parseFixture(t *testing.T, parser lineParser, name string) []Event {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
@@ -20,7 +20,7 @@ func parseFixture(t *testing.T, p lineParser, name string) []Event {
 	scanner.Buffer(nil, maxLineSize)
 	var events []Event
 	for scanner.Scan() {
-		events = append(events, p.parse(scanner.Bytes())...)
+		events = append(events, parser.parse(scanner.Bytes())...)
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
@@ -28,10 +28,10 @@ func parseFixture(t *testing.T, p lineParser, name string) []Event {
 	return events
 }
 
-func parseLines(p lineParser, lines ...string) []Event {
+func parseLines(parser lineParser, lines ...string) []Event {
 	var events []Event
 	for _, l := range lines {
-		events = append(events, p.parse([]byte(l))...)
+		events = append(events, parser.parse([]byte(l))...)
 	}
 	return events
 }
@@ -45,13 +45,13 @@ func kinds(events []Event) []EventKind {
 }
 
 func joinText(events []Event, kind EventKind) string {
-	var b strings.Builder
+	var builder strings.Builder
 	for _, ev := range events {
 		if ev.Kind == kind {
-			b.WriteString(ev.Text)
+			builder.WriteString(ev.Text)
 		}
 	}
-	return b.String()
+	return builder.String()
 }
 
 func activities(events []Event) []string {
@@ -292,9 +292,9 @@ func TestCodexParserEdgeCases(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &codexParser{}
-			assertEvents(t, parseLines(p, tt.lines...), tt.want)
-			if got := errString(p.streamError()); got != tt.streamErr {
+			parser := &codexParser{}
+			assertEvents(t, parseLines(parser, tt.lines...), tt.want)
+			if got := errString(parser.streamError()); got != tt.streamErr {
 				t.Errorf("streamError = %q, want %q", got, tt.streamErr)
 			}
 		})
@@ -348,12 +348,12 @@ func assertEvents(t *testing.T, got, want []Event) {
 		t.Fatalf("got %d events %+v, want %d %+v", len(got), got, len(want), want)
 	}
 	for i := range want {
-		g, w := got[i], want[i]
-		if g.Kind != w.Kind || g.Text != w.Text || g.SessionID != w.SessionID {
-			t.Errorf("event %d = %+v, want %+v", i, g, w)
+		gotEvent, wantEvent := got[i], want[i]
+		if gotEvent.Kind != wantEvent.Kind || gotEvent.Text != wantEvent.Text || gotEvent.SessionID != wantEvent.SessionID {
+			t.Errorf("event %d = %+v, want %+v", i, gotEvent, wantEvent)
 		}
-		if (g.Kind == EventError) != (g.Err != nil) {
-			t.Errorf("event %d: kind %v with err %v", i, g.Kind, g.Err)
+		if (gotEvent.Kind == EventError) != (gotEvent.Err != nil) {
+			t.Errorf("event %d: kind %v with err %v", i, gotEvent.Kind, gotEvent.Err)
 		}
 	}
 }

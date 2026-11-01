@@ -9,8 +9,8 @@ import (
 )
 
 // fakeCommits returns n commits, the SHA of each its index from start.
-func fakeCommits(start, n int) []gitx.Commit {
-	rows := make([]gitx.Commit, n)
+func fakeCommits(start, count int) []gitx.Commit {
+	rows := make([]gitx.Commit, count)
 	for i := range rows {
 		rows[i].SHA = fmt.Sprint(start + i)
 	}
@@ -20,18 +20,18 @@ func fakeCommits(start, n int) []gitx.Commit {
 // landedList is a list with the first 50 of 130 commits, which the view
 // built once after it landed.
 func landedList() *commitList {
-	l := &commitList{}
-	gen, _ := l.read("k")
-	l.listed(gen, gitx.CommitLog{}, fakeCommits(0, 50), 130, nil)
-	l.built(-1)
-	return l
+	list := &commitList{}
+	gen, _ := list.read("k")
+	list.listed(gen, gitx.CommitLog{}, fakeCommits(0, 50), 130, nil)
+	list.built(-1)
+	return list
 }
 
 func TestCommitList(t *testing.T) {
 	errGit := errors.New("git failed")
 	tests := []struct {
 		name string
-		run  func(t *testing.T, l *commitList)
+		run  func(subtest *testing.T, list *commitList)
 	}{
 		{"skips one build after a new list", func(t *testing.T, l *commitList) {
 			gen, _ := l.read("k")

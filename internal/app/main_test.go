@@ -37,11 +37,11 @@ func git(t *testing.T, dir string, args ...string) {
 
 func write(t *testing.T, dir, name, text string) {
 	t.Helper()
-	p := filepath.Join(dir, name)
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -62,13 +62,13 @@ func fixtureRepo(t *testing.T) string {
 
 func newTestApp(t *testing.T) *app {
 	t.Helper()
-	a := newApp(store.Store{Dir: t.TempDir()})
-	t.Cleanup(a.streams.Wait)
-	a.openRepo(fixtureRepo(t))
-	if a.repo == nil {
-		t.Fatalf("open: %s", a.repoErr)
+	app := newApp(store.Store{Dir: t.TempDir()})
+	t.Cleanup(app.streams.Wait)
+	app.openRepo(fixtureRepo(t))
+	if app.repo == nil {
+		t.Fatalf("open: %s", app.repoErr)
 	}
-	return a
+	return app
 }
 
 func snapshot(t *testing.T, tt *ui.Tester, name string) {
@@ -86,11 +86,11 @@ func snapshot(t *testing.T, tt *ui.Tester, name string) {
 }
 
 func TestOpensRepoWithChanges(t *testing.T) {
-	a := newTestApp(t)
-	if len(a.files) != 2 {
-		t.Fatalf("files = %+v", a.files)
+	app := newTestApp(t)
+	if len(app.files) != 2 {
+		t.Fatalf("files = %+v", app.files)
 	}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	for _, want := range []string{"Overview", "Uncommitted", "Initial commit", "cache.go", "handler.go", "Explain changes with Claude Code"} {
 		if !strings.Contains(strings.Join(tt.Texts(), "\n"), want) {
 			t.Errorf("view lacks %q; texts %q", want, tt.Texts())
@@ -100,11 +100,11 @@ func TestOpensRepoWithChanges(t *testing.T) {
 }
 
 func TestOverviewAndGroups(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	md := "## 1. High level\n- Keys are lower-cased in `cache/cache.go:6`.\n\n## 2. Data changes\nNone.\n\n```json\n{\"groups\":[{\"title\":\"Cache keys\",\"summary\":\"Lower-case keys.\",\"files\":[\"cache/cache.go\"]},{\"title\":\"API\",\"summary\":\"New handler.\",\"files\":[\"api/handler.go\"]}]}\n```"
-	body, groups := review.ParseOverview(md, a.fileNames())
-	a.rev.Overview = &review.Overview{Markdown: body, Groups: groups, Agent: agent.Claude, Generated: time.Now(), Sessions: review.Sessions{agent.Claude: "s"}}
-	tt := ui.NewTester(a.view, 1300, 900)
+	body, groups := review.ParseOverview(md, app.fileNames())
+	app.rev.Overview = &review.Overview{Markdown: body, Groups: groups, Agent: agent.Claude, Generated: time.Now(), Sessions: review.Sessions{agent.Claude: "s"}}
+	tt := ui.NewTester(app.view, 1300, 900)
 	tt.Frame()
 	for _, want := range []string{"1. High level", "2. Data changes", "Cache keys", "Review order", "Lower-case keys."} {
 		if !tt.HasText(want) {
@@ -115,48 +115,48 @@ func TestOverviewAndGroups(t *testing.T) {
 	if err := tt.Click("Review group"); err != nil {
 		t.Fatal(err)
 	}
-	if a.nav.page != (page{kindGroup, "Cache keys"}) {
-		t.Errorf("page = %q", a.nav.page.String())
+	if app.nav.page != (page{kindGroup, "Cache keys"}) {
+		t.Errorf("page = %q", app.nav.page.String())
 	}
 	tt.Advance(time.Second)
 	snapshot(t, tt, "group")
-	if l := a.diffs["cache/cache.go"].state.Layout; l != editor.DiffSplit {
-		t.Errorf("group diff layout = %v, want split", l)
+	if layout := app.diffs["cache/cache.go"].state.Layout; layout != editor.DiffSplit {
+		t.Errorf("group diff layout = %v, want split", layout)
 	}
 	if err := tt.Click("Unified"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if l := a.diffs["cache/cache.go"].state.Layout; l != editor.DiffUnified || !a.cfg.Unified {
-		t.Errorf("after Unified: layout %v, config %v", l, a.cfg.Unified)
+	if layout := app.diffs["cache/cache.go"].state.Layout; layout != editor.DiffUnified || !app.cfg.Unified {
+		t.Errorf("after Unified: layout %v, config %v", layout, app.cfg.Unified)
 	}
 }
 
 func TestCommentOnFileAndExport(t *testing.T) {
-	a := newTestApp(t)
-	a.nav.page = page{kindFile, "cache/cache.go"}
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	app.nav.page = page{kindFile, "cache/cache.go"}
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("Comment on file"); err != nil {
 		t.Fatal(err)
 	}
-	if a.threadID() == "" {
+	if app.threadID() == "" {
 		t.Fatal("no thread opened")
 	}
 	tt.Type("Keep keys case-sensitive.")
 	if err := tt.Click("Comment"); err != nil {
 		t.Fatal(err)
 	}
-	th := a.rev.Thread(a.threadID())
+	th := app.rev.Thread(app.threadID())
 	if th == nil || len(th.Messages) != 1 || th.Messages[0].Text != "Keep keys case-sensitive." {
 		t.Fatalf("thread = %+v", th)
 	}
 	snapshot(t, tt, "file-thread")
-	got := a.feedback()
+	got := app.feedback()
 	if !strings.Contains(got, "## cache/cache.go (file-level)\nKeep keys case-sensitive.") {
 		t.Errorf("feedback =\n%s", got)
 	}
-	a.nav.page = page{kind: kindFeedback}
+	app.nav.page = page{kind: kindFeedback}
 	tt.Frame()
 	if err := tt.Click("Copy feedback"); err != nil {
 		t.Fatal(err)
@@ -165,60 +165,60 @@ func TestCommentOnFileAndExport(t *testing.T) {
 		t.Errorf("clipboard = %q", tt.Clipboard())
 	}
 	snapshot(t, tt, "feedback")
-	reloaded := a.store.LoadReview(a.repo.Root, a.scope)
+	reloaded := app.store.LoadReview(app.repo.Root, app.scope)
 	if len(reloaded.Threads) != 1 {
 		t.Errorf("saved threads = %d", len(reloaded.Threads))
 	}
 }
 
 func TestLineThreadAnnotation(t *testing.T) {
-	a := newTestApp(t)
-	a.nav.page = page{kindFile, "cache/cache.go"}
-	a.lineThread("cache/cache.go", lineRange(5, 5))
-	th := a.rev.Thread(a.threadID())
+	app := newTestApp(t)
+	app.nav.page = page{kindFile, "cache/cache.go"}
+	app.lineThread("cache/cache.go", lineRange(5, 5))
+	th := app.rev.Thread(app.threadID())
 	if th.Anchor.Quote != "\treturn strings.ToLower(key)" || th.Anchor.Label() != "cache/cache.go:6 (+)" {
 		t.Errorf("anchor = %+v", th.Anchor)
 	}
-	a.comment(th, "Why lower-case?")
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.comment(th, "Why lower-case?")
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText("Why lower-case?") {
 		t.Error("annotation card missing")
 	}
 	snapshot(t, tt, "file-line-thread")
-	a.closeThread()
+	app.closeThread()
 	tt.Frame()
-	if len(a.rev.Threads) != 1 {
+	if len(app.rev.Threads) != 1 {
 		t.Error("closing a thread with messages dropped it")
 	}
 }
 
 func TestEmptyThreadDroppedOnClose(t *testing.T) {
-	a := newTestApp(t)
-	a.newThread(review.Anchor{Kind: review.AnchorGeneral})
-	a.closeThread()
-	if len(a.rev.Threads) != 0 {
-		t.Errorf("threads = %d, want 0", len(a.rev.Threads))
+	app := newTestApp(t)
+	app.newThread(review.Anchor{Kind: review.AnchorGeneral})
+	app.closeThread()
+	if len(app.rev.Threads) != 0 {
+		t.Errorf("threads = %d, want 0", len(app.rev.Threads))
 	}
 }
 
 func TestScopeSwitchToCommit(t *testing.T) {
-	a := newTestApp(t)
-	if len(a.commits.rows) != 1 {
-		t.Fatalf("commits = %+v", a.commits.rows)
+	app := newTestApp(t)
+	if len(app.commits.rows) != 1 {
+		t.Fatalf("commits = %+v", app.commits.rows)
 	}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	if err := tt.Click("Initial commit"); err != nil {
 		t.Fatal(err)
 	}
-	if a.scope.Commit != a.commits.rows[0].SHA || len(a.files) != 2 {
-		t.Errorf("scope = %+v, files = %+v", a.scope, a.files)
+	if app.scope.Commit != app.commits.rows[0].SHA || len(app.files) != 2 {
+		t.Errorf("scope = %+v, files = %+v", app.scope, app.files)
 	}
 }
 
 func TestSettings(t *testing.T) {
-	a := newTestApp(t)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
 	if err := tt.Click("Settings"); err != nil {
 		t.Fatal(err)
 	}
@@ -228,14 +228,14 @@ func TestSettings(t *testing.T) {
 	if tt.HasText("This review") {
 		t.Errorf("per-review tab: %q", tt.Texts())
 	}
-	a.settings.agent.provider = 1
-	a.settings.agent.model = "gpt-5"
-	a.settings.ahead = false
+	app.settings.agent.provider = 1
+	app.settings.agent.model = "gpt-5"
+	app.settings.ahead = false
 	tt.Frame()
-	if got := a.store.LoadConfig(); got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.DeeperAhead {
+	if got := app.store.LoadConfig(); got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.DeeperAhead {
 		t.Errorf("not saved as changed: %+v", got)
 	}
-	if got := newAgentForm(a.store.LoadConfig().Agent).provider; got != 1 {
+	if got := newAgentForm(app.store.LoadConfig().Agent).provider; got != 1 {
 		t.Errorf("settings opened again on provider %d, want Codex", got)
 	}
 
@@ -248,7 +248,7 @@ func TestSettings(t *testing.T) {
 	if tabs, _ := tt.Find("Shortcuts"); tabs.Y != title.Y {
 		t.Errorf("the top moved with the tab: %v, then %v", title, tabs)
 	}
-	a.keysFilter = "refresh"
+	app.keysFilter = "refresh"
 	tt.Frame()
 	done, _ := tt.Find("Done")
 	if reset, _ := tt.Find("Reset all shortcuts"); done.Y-reset.Y > 80 {
@@ -263,14 +263,14 @@ func TestSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if got := a.store.LoadConfig().Theme; got != "dark" {
+	if got := app.store.LoadConfig().Theme; got != "dark" {
 		t.Errorf("theme = %q, want dark", got)
 	}
 	if err := tt.Click("System"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if got := a.store.LoadConfig().Theme; got != "" {
+	if got := app.store.LoadConfig().Theme; got != "" {
 		t.Errorf("theme = %q, want the system one", got)
 	}
 
@@ -278,7 +278,7 @@ func TestSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.settings != nil {
+	if app.settings != nil {
 		t.Error("Done left the settings open")
 	}
 }
@@ -298,21 +298,21 @@ func lineRange(start, end int) editor.DiffLineRange {
 // TestReviewFollowsCommit writes an overview of uncommitted changes and
 // commits them: the review then belongs to the commit.
 func TestReviewFollowsCommit(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
-	newFakeAgent(t, a).answer("s1", answer)
-	a.cfg.DeeperAhead = false
-	a.queue = make(chan func(), 64)
-	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
+	newFakeAgent(t, app).answer("s1", answer)
+	app.cfg.DeeperAhead = false
+	app.queue = make(chan func(), 64)
+	app.generateOverview()
+	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
 
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "Agent work")
 	sha := revSHA(t, dir, "HEAD")
-	a.refresh()
-	tt := ui.NewTester(a.view, 1300, 800)
-	waitText(t, a, tt, "now commit "+shortSHA(sha))
+	app.refresh()
+	tt := ui.NewTester(app.view, 1300, 800)
+	waitText(t, app, tt, "now commit "+shortSHA(sha))
 
 	if err := tt.Click("s"); err != nil {
 		t.Fatal(err)
@@ -321,7 +321,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	if err := tt.Click("Open commit"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, a, tt, "Moved here from earlier uncommitted changes, which had the same changes.")
+	waitText(t, app, tt, "Moved here from earlier uncommitted changes, which had the same changes.")
 	if !tt.HasText(shortSHA(sha)+" Agent work") || tt.HasText("This overview was written for") {
 		t.Errorf("the commit does not show the review as current: %q", tt.Texts())
 	}
@@ -329,7 +329,7 @@ func TestReviewFollowsCommit(t *testing.T) {
 	if err := tt.Click("Uncommitted changes"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, a, tt, "There is nothing to review in uncommitted changes.")
+	waitText(t, app, tt, "There is nothing to review in uncommitted changes.")
 	if tt.HasText("Earlier reviews") {
 		t.Errorf("the uncommitted changes still list the review: %q", tt.Texts())
 	}
@@ -338,22 +338,22 @@ func TestReviewFollowsCommit(t *testing.T) {
 // TestReviewToBiggerCommit commits the reviewed changes together with
 // another file: the review is offered to that commit.
 func TestReviewToBiggerCommit(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
-	newFakeAgent(t, a).answer("s1", answer)
-	a.cfg.DeeperAhead = false
-	a.queue = make(chan func(), 64)
-	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
+	newFakeAgent(t, app).answer("s1", answer)
+	app.cfg.DeeperAhead = false
+	app.queue = make(chan func(), 64)
+	app.generateOverview()
+	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
 
 	write(t, dir, "extra.go", "package extra\n")
 	git(t, dir, "add", "-A")
 	git(t, dir, "commit", "-qm", "Agent work and more")
 	sha := revSHA(t, dir, "HEAD")
-	a.refresh()
-	tt := ui.NewTester(a.view, 1300, 800)
-	waitText(t, a, tt, "probably in commit "+shortSHA(sha))
+	app.refresh()
+	tt := ui.NewTester(app.view, 1300, 800)
+	waitText(t, app, tt, "probably in commit "+shortSHA(sha))
 
 	if err := tt.Click("s"); err != nil {
 		t.Fatal(err)
@@ -362,7 +362,7 @@ func TestReviewToBiggerCommit(t *testing.T) {
 	if err := tt.Click("Move review to the commit"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, a, tt, "This overview was written for 2 files. Since then, 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.")
+	waitText(t, app, tt, "This overview was written for 2 files. Since then, 1 new file is not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.")
 	if !tt.HasText(shortSHA(sha) + " Agent work and more") {
 		t.Errorf("the commit is not open: %q", tt.Texts())
 	}
@@ -373,34 +373,34 @@ func TestReviewToBiggerCommit(t *testing.T) {
 // the list of earlier reviews, and the Restore button brings it back
 // with a banner that counts how its files changed.
 func TestArchiveUncommitted(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	answer := "```json\n" + `{"summary": "Lower-case keys.", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
-	fake := newFakeAgent(t, a)
+	fake := newFakeAgent(t, app)
 	fake.answer("s1", answer)
-	a.cfg.DeeperAhead = false
-	a.queue = make(chan func(), 64)
-	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.cfg.DeeperAhead = false
+	app.queue = make(chan func(), 64)
+	app.generateOverview()
+	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
+	tt := ui.NewTester(app.view, 1300, 800)
 	reload := func(what string) {
 		t.Helper()
-		a.refresh()
-		waitLoad(t, a, what)
-		drain(a)
+		app.refresh()
+		waitLoad(t, app, what)
+		drain(app)
 		tt.Frame()
 	}
 
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
 	fake.hold()
-	a.generateOverview()
+	app.generateOverview()
 	reload("the busy reload")
 	if tt.HasText("Earlier reviews") {
 		t.Fatal("archived a review an agent writes into")
 	}
-	a.runner.stop(a.rev, store.TargetOverview)
-	pump(t, a, "the stopped overview", func() bool { return !a.logsOf(a.rev)[0].running })
+	app.runner.stop(app.rev, store.TargetOverview)
+	pump(t, app, "the stopped overview", func() bool { return !app.logsOf(app.rev)[0].running })
 	reload("the other changes")
 	if !tt.HasText("Earlier reviews") || !tt.HasText("Lower-case keys.") || !tt.HasText("Get a walkthrough of these changes") {
 		t.Fatalf("texts %q", tt.Texts())
@@ -427,23 +427,23 @@ func TestArchiveUncommitted(t *testing.T) {
 }
 
 func TestArchiveAndAdoptShowsWhereTheReviewCameFrom(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
-	fake := newFakeAgent(t, a)
-	a.cfg.DeeperAhead = false
-	a.queue = make(chan func(), 64)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	dir := app.repo.Root
+	fake := newFakeAgent(t, app)
+	app.cfg.DeeperAhead = false
+	app.queue = make(chan func(), 64)
+	tt := ui.NewTester(app.view, 1300, 800)
 	overview := func(summary string) {
 		t.Helper()
 		fake.answer("s1", "```json\n"+`{"summary": "`+summary+`", "steps": [{"title": "A", "text": "a"}], "groups": []}`+"\n```")
-		a.generateOverview()
-		pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
+		app.generateOverview()
+		pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
 	}
 	reload := func(what string) {
 		t.Helper()
-		a.refresh()
-		waitLoad(t, a, what)
-		drain(a)
+		app.refresh()
+		waitLoad(t, app, what)
+		drain(app)
 		tt.Frame()
 	}
 
@@ -462,7 +462,7 @@ func TestArchiveAndAdoptShowsWhereTheReviewCameFrom(t *testing.T) {
 		t.Fatalf("texts %q", tt.Texts())
 	}
 
-	a.startOver()
+	app.startOver()
 	tt.Frame()
 	if tt.HasText("Moved here from earlier uncommitted changes, which had the same changes.") {
 		t.Errorf("the notice stayed after start over: %q", tt.Texts())
@@ -470,20 +470,20 @@ func TestArchiveAndAdoptShowsWhereTheReviewCameFrom(t *testing.T) {
 }
 
 func TestStaleOverviewAndStartOver(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Markdown: "## A\nx", Groups: []review.Group{{Title: "Old", Files: []string{"gone.go"}}}, Agent: agent.Claude}
-	a.comment(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "old note")
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Markdown: "## A\nx", Groups: []review.Group{{Title: "Old", Files: []string{"gone.go"}}}, Agent: agent.Claude}
+	app.comment(app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "old note")
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText("This overview was written for 1 file. Since then, 1 is no longer in the changes and 2 new files are not in it. Its code snippets can show the wrong lines. Regenerate the overview, or start over.") {
 		t.Errorf("stale warning missing: %q", tt.Texts())
 	}
-	a.startOver()
+	app.startOver()
 	tt.Frame()
-	if a.rev.Overview != nil || len(a.rev.Threads) != 0 {
-		t.Errorf("review after start over = %+v", a.rev)
+	if app.rev.Overview != nil || len(app.rev.Threads) != 0 {
+		t.Errorf("review after start over = %+v", app.rev)
 	}
-	if got := a.store.LoadReview(a.repo.Root, a.scope); len(got.Threads) != 0 {
+	if got := app.store.LoadReview(app.repo.Root, app.scope); len(got.Threads) != 0 {
 		t.Error("saved review survived start over")
 	}
 }
@@ -491,21 +491,21 @@ func TestStaleOverviewAndStartOver(t *testing.T) {
 // TestFailedSaveShowsNotice saves while the store cannot be written: the
 // window says so until a later save works.
 func TestFailedSaveShowsNotice(t *testing.T) {
-	a := newTestApp(t)
-	good := a.store
+	app := newTestApp(t)
+	good := app.store
 	notADir := filepath.Join(t.TempDir(), "file")
 	write(t, filepath.Dir(notADir), "file", "")
-	a.store = store.Store{Dir: notADir}
-	a.setViewed([]string{"cache/cache.go"}, true)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.store = store.Store{Dir: notADir}
+	app.setViewed([]string{"cache/cache.go"}, true)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText("Could not save your changes. AgentDiff tries again on the next change.") || !tt.HasText("not a directory") {
 		t.Fatalf("save error not shown: %q", tt.Texts())
 	}
 	snapshot(t, tt, "save-error")
 
-	a.store = good
-	a.setViewed([]string{"cache/cache.go"}, false)
+	app.store = good
+	app.setViewed([]string{"cache/cache.go"}, false)
 	tt.Frame()
 	if tt.HasText("Could not save your changes") {
 		t.Errorf("save error shown after a save that worked: %q", tt.Texts())
@@ -515,15 +515,15 @@ func TestFailedSaveShowsNotice(t *testing.T) {
 // TestBadBaseShowsCommitsError compares with a base that does not exist:
 // the sidebar shows why there are no commits, until the base is valid.
 func TestBadBaseShowsCommitsError(t *testing.T) {
-	a := newTestApp(t)
-	a.compare("main", "nope")
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	app.compare("main", "nope")
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText(`Could not list the commits: gitx: unknown revision "nope"`) || tt.HasText("No commits") {
 		t.Fatalf("commits error not shown: %q", tt.Texts())
 	}
 
-	a.compare("main", "main")
+	app.compare("main", "main")
 	tt.Frame()
 	if tt.HasText("Could not list the commits") || !tt.HasText("Initial commit") {
 		t.Errorf("after a valid base: %q", tt.Texts())
@@ -536,9 +536,9 @@ func TestStartOverKeepsReviewWhenDeleteFails(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root deletes files in a read-only directory")
 	}
-	a := newTestApp(t)
-	a.comment(a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "keep me")
-	dirs, err := filepath.Glob(filepath.Join(a.store.Dir, "reviews", "*"))
+	app := newTestApp(t)
+	app.comment(app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "keep me")
+	dirs, err := filepath.Glob(filepath.Join(app.store.Dir, "reviews", "*"))
 	if err != nil || len(dirs) != 1 {
 		t.Fatalf("review dirs %q: %v", dirs, err)
 	}
@@ -551,11 +551,11 @@ func TestStartOverKeepsReviewWhenDeleteFails(t *testing.T) {
 		}
 	})
 
-	a.startOver()
-	if len(a.rev.Threads) != 1 {
-		t.Errorf("threads after a failed start over = %d", len(a.rev.Threads))
+	app.startOver()
+	if len(app.rev.Threads) != 1 {
+		t.Errorf("threads after a failed start over = %d", len(app.rev.Threads))
 	}
-	if got := a.store.LoadReview(a.repo.Root, a.scope); len(got.Threads) != 1 {
+	if got := app.store.LoadReview(app.repo.Root, app.scope); len(got.Threads) != 1 {
 		t.Errorf("saved threads after a failed start over = %d", len(got.Threads))
 	}
 }
@@ -563,20 +563,20 @@ func TestStartOverKeepsReviewWhenDeleteFails(t *testing.T) {
 // TestStartOverDuringRuns starts over while a thread and a question run.
 // Their late answers do not bring the deleted review back.
 func TestStartOverDuringRuns(t *testing.T) {
-	a := newTestApp(t)
-	root, scope := a.repo.Root, a.scope
-	a.queue = make(chan func(), 64)
-	fake := newFakeAgent(t, a)
+	app := newTestApp(t)
+	root, scope := app.repo.Root, app.scope
+	app.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, app)
 	fake.answer("t1", "Because.")
-	a.ask(a.rev, a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
-	thread := a.logs[a.rev][0]
+	app.ask(app.rev, app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
+	thread := app.logs[app.rev][0]
 	fake.hold()
-	a.askQuestion("", -1, "What?")
-	runs := slices.Clone(a.logs[a.rev])
+	app.askQuestion("", -1, "What?")
+	runs := slices.Clone(app.logs[app.rev])
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		entries, _ := a.store.ReadRun(root, scope, thread.info.ID)
-		if n := len(entries); n > 0 && entries[n-1].Kind == agent.LogExit {
+		entries, _ := app.store.ReadRun(root, scope, thread.info.ID)
+		if count := len(entries); count > 0 && entries[count-1].Kind == agent.LogExit {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -585,14 +585,14 @@ func TestStartOverDuringRuns(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	a.startOver()
-	pump(t, a, "the end of both runs", func() bool {
+	app.startOver()
+	pump(t, app, "the end of both runs", func() bool {
 		return !slices.ContainsFunc(runs, func(r *logRun) bool { return r.running })
 	})
-	if got := a.store.LoadReview(root, scope); len(got.Threads) != 0 || len(got.Walks) != 0 {
+	if got := app.store.LoadReview(root, scope); len(got.Threads) != 0 || len(got.Walks) != 0 {
 		t.Errorf("deleted review came back: %d threads, %d walks", len(got.Threads), len(got.Walks))
 	}
-	if _, err := os.Stat(filepath.Dir(a.store.RunPath(root, scope, thread.info.ID))); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Dir(app.store.RunPath(root, scope, thread.info.ID))); !os.IsNotExist(err) {
 		t.Errorf("run logs of the deleted review came back: %v", err)
 	}
 }
@@ -601,20 +601,20 @@ func TestStartOverDuringRuns(t *testing.T) {
 // answers it. The thread cannot ask again until the answer ends, and Stop
 // still stops the answer.
 func TestThreadAsksOnceWhileAnswering(t *testing.T) {
-	a := newTestApp(t)
-	a.queue = make(chan func(), 64)
-	fake := newFakeAgent(t, a)
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, app)
 	fake.answer("t1", "Because.")
 	fake.hold()
-	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-	a.openThread(th.ID)
-	tt := ui.NewTester(a.view, 1300, 800)
+	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	app.openThread(th.ID)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	tt.Type("Why?")
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	tt.Frame()
-	if n := len(a.logs[a.rev]); n != 1 {
-		t.Fatalf("runs after the first question = %d", n)
+	if count := len(app.logs[app.rev]); count != 1 {
+		t.Fatalf("runs after the first question = %d", count)
 	}
 	if !tt.HasText("Thinking…") {
 		t.Error("the thread does not show the answer being written")
@@ -638,24 +638,24 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if n := len(fake.received()); n != 1 {
-		t.Fatalf("requests after asking again = %d", n)
+	if count := len(fake.received()); count != 1 {
+		t.Fatalf("requests after asking again = %d", count)
 	}
-	if d := a.drafts[th.ID]; !strings.Contains(d, "And the tests?") {
-		t.Errorf("draft after asking again = %q", d)
+	if draft := app.drafts[th.ID]; !strings.Contains(draft, "And the tests?") {
+		t.Errorf("draft after asking again = %q", draft)
 	}
-	if !a.runner.reviewBusy(a.rev) {
+	if !app.runner.reviewBusy(app.rev) {
 		t.Error("the review is not busy while the thread runs")
 	}
 
-	if !a.applies(a.cmd("stop-thread"), th.ID) {
+	if !app.applies(app.cmd("stop-thread"), th.ID) {
 		t.Error("stop-thread does not apply after the comment")
 	}
 	if err := tt.Click("Stop"); err != nil {
 		t.Fatal(err)
 	}
-	pump(t, a, "the stopped answer", func() bool { return !a.busy(th.ID) })
-	if a.applies(a.cmd("stop-thread"), th.ID) {
+	pump(t, app, "the stopped answer", func() bool { return !app.busy(th.ID) })
+	if app.applies(app.cmd("stop-thread"), th.ID) {
 		t.Error("stop-thread applies after the answer ended")
 	}
 	want := []review.Message{
@@ -663,7 +663,7 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 		{Role: review.RoleAgent, Err: "Stopped"},
 		{Role: review.RoleUser, Text: "Keep it short."},
 	}
-	saved := a.store.LoadReview(a.repo.Root, a.scope).Thread(th.ID)
+	saved := app.store.LoadReview(app.repo.Root, app.scope).Thread(th.ID)
 	for name, got := range map[string]*review.Thread{"shown": th, "saved": saved} {
 		if got == nil || len(got.Messages) != len(want) {
 			t.Fatalf("%s messages = %+v", name, got)
@@ -679,29 +679,29 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 // TestDeleteWalkStopsItsRuns deletes a walk: the runs of the walk and the
 // walks under it stop, and the runs of other walks go on.
 func TestDeleteWalkStopsItsRuns(t *testing.T) {
-	a := newTestApp(t)
-	a.queue = make(chan func(), 64)
-	fake := newFakeAgent(t, a)
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, app)
 	fake.answer("w1", "Because.")
 	fake.hold()
-	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	waitLoad(t, a, "the commit")
-	otherRev := a.rev
+	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	waitLoad(t, app, "the commit")
+	otherRev := app.rev
 	other := otherRev.AddWalk("", -1, "Other review?")
-	a.runWalk(otherRev, other)
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	waitLoad(t, a, "the uncommitted changes")
-	parent := a.rev.AddWalk("", -1, "Parent?")
-	child := a.rev.AddWalk(parent.ID, -1, "Child?")
-	sibling := a.rev.AddWalk("", -1, "Sibling?")
+	app.runWalk(otherRev, other)
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	waitLoad(t, app, "the uncommitted changes")
+	parent := app.rev.AddWalk("", -1, "Parent?")
+	child := app.rev.AddWalk(parent.ID, -1, "Child?")
+	sibling := app.rev.AddWalk("", -1, "Sibling?")
 	for _, w := range []*review.Walk{parent, child, sibling} {
-		a.runWalk(a.rev, w)
+		app.runWalk(app.rev, w)
 	}
-	a.deleteWalk(parent)
-	pump(t, a, "the stopped runs", func() bool { return !a.busy(parent.ID) && !a.busy(child.ID) })
-	otherBusy := a.runner.run(otherRev, other.ID) != nil
-	if parent.Err != "Stopped" || child.Err != "Stopped" || !a.busy(sibling.ID) || !otherBusy {
-		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, a.busy(sibling.ID), otherBusy)
+	app.deleteWalk(parent)
+	pump(t, app, "the stopped runs", func() bool { return !app.busy(parent.ID) && !app.busy(child.ID) })
+	otherBusy := app.runner.run(otherRev, other.ID) != nil
+	if parent.Err != "Stopped" || child.Err != "Stopped" || !app.busy(sibling.ID) || !otherBusy {
+		t.Errorf("parent %q, child %q, sibling busy %v, walk of another review busy %v", parent.Err, child.Err, app.busy(sibling.ID), otherBusy)
 	}
 }
 
@@ -709,14 +709,14 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 // on screen. The question goes to that review's repository and scope, and
 // the answer goes into its thread.
 func TestThreadOfReviewOffScreen(t *testing.T) {
-	a := newTestApp(t)
-	a.queue = make(chan func(), 64)
-	fake := newFakeAgent(t, a)
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, app)
 	fake.answer("t1", "Because.")
 	other := review.New(t.TempDir(), gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
 	th := other.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-	a.ask(other, th, "Why?")
-	pump(t, a, "the answer", func() bool { return a.runner.run(other, th.ID) == nil })
+	app.ask(other, th, "Why?")
+	pump(t, app, "the answer", func() bool { return app.runner.run(other, th.ID) == nil })
 	req := fake.received()[0]
 	if req.Dir != other.Repo {
 		t.Errorf("dir %q, want %q", req.Dir, other.Repo)
@@ -724,7 +724,7 @@ func TestThreadOfReviewOffScreen(t *testing.T) {
 	if !strings.Contains(req.Prompt, "commit abc123") || strings.Contains(req.Prompt, "uncommitted") || !strings.Contains(req.Prompt, "Diffstat:\n```\n\n```") {
 		t.Errorf("prompt = %q", req.Prompt)
 	}
-	if n := len(th.Messages); n != 2 || th.Messages[1].Text != "Because." {
+	if count := len(th.Messages); count != 2 || th.Messages[1].Text != "Because." {
 		t.Errorf("messages = %+v", th.Messages)
 	}
 }
@@ -732,7 +732,7 @@ func TestThreadOfReviewOffScreen(t *testing.T) {
 // TestAgentLog runs a fake Claude that replays a recorded session, then
 // reads the run's log in a new app, as after a restart.
 func TestAgentLog(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	fixture, err := filepath.Abs("../agent/testdata/claude_tool.jsonl")
 	if err != nil {
 		t.Fatal(err)
@@ -742,13 +742,13 @@ func TestAgentLog(t *testing.T) {
 	if err := os.Chmod(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: bin}
-	a.generateOverview()
-	waitForExit(t, a.store, a.repo.Root, a.scope)
+	app.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: bin}
+	app.generateOverview()
+	waitForExit(t, app.store, app.repo.Root, app.scope)
 
-	b := newApp(a.store)
-	b.openRepo(a.repo.Root)
-	tt := ui.NewTester(b.view, 1400, 900)
+	reopened := newApp(app.store)
+	reopened.openRepo(app.repo.Root)
+	tt := ui.NewTester(reopened.view, 1400, 900)
 	if err := tt.Click("Agent log"); err != nil {
 		t.Fatal(err)
 	}
@@ -773,13 +773,13 @@ func TestAgentLog(t *testing.T) {
 	snapshot(t, tt, "log")
 }
 
-func waitForExit(t *testing.T, s store.Store, repo string, scope gitx.Scope) {
+func waitForExit(t *testing.T, storage store.Store, repo string, scope gitx.Scope) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if runs := s.Runs(repo, scope); len(runs) == 1 {
-			entries, _ := s.ReadRun(repo, scope, runs[0].ID)
-			if n := len(entries); n > 0 && entries[n-1].Kind == agent.LogExit {
+		if runs := storage.Runs(repo, scope); len(runs) == 1 {
+			entries, _ := storage.ReadRun(repo, scope, runs[0].ID)
+			if count := len(entries); count > 0 && entries[count-1].Kind == agent.LogExit {
 				return
 			}
 		}
@@ -789,25 +789,25 @@ func waitForExit(t *testing.T, s store.Store, repo string, scope gitx.Scope) {
 }
 
 func TestScopeSwitchKeepsReview(t *testing.T) {
-	a := newTestApp(t)
-	rev := a.rev
-	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	if a.rev != rev {
+	app := newTestApp(t)
+	rev := app.rev
+	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if app.rev != rev {
 		t.Error("switching back loaded a second copy of the review")
 	}
 }
 
 func TestGroupsFollowChanges(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}], "groups": [{"title": "Cache keys", "files": ["cache/cache.go"]}]}` + "\n```"
-	newFakeAgent(t, a).answer("s1", answer)
-	a.cfg.DeeperAhead = false
-	a.queue = make(chan func(), 64)
+	newFakeAgent(t, app).answer("s1", answer)
+	app.cfg.DeeperAhead = false
+	app.queue = make(chan func(), 64)
 	want := func(step string, titles ...string) {
 		t.Helper()
 		var got []string
-		for _, g := range a.groups() {
+		for _, g := range app.groups() {
 			got = append(got, g.Title)
 		}
 		if !slices.Equal(got, titles) {
@@ -816,46 +816,46 @@ func TestGroupsFollowChanges(t *testing.T) {
 	}
 	loaded := func(what string) {
 		t.Helper()
-		waitLoad(t, a, what)
-		drain(a)
+		waitLoad(t, app, what)
+		drain(app)
 	}
 	want("first load", "api", "cache")
 
-	write(t, a.repo.Root, "docs/new.md", "# New\n")
-	a.refresh()
+	write(t, app.repo.Root, "docs/new.md", "# New\n")
+	app.refresh()
 	loaded("the reload")
 	want("reload", "api", "cache", "docs")
 
-	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{{Title: "Docs first", Files: []string{"docs/new.md"}}}}
+	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{{Title: "Docs first", Files: []string{"docs/new.md"}}}}
 	want("overview written", "Docs first", "Other changes")
 
-	a.regenerate("")
-	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
+	app.regenerate("")
+	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
 	want("regenerate", "Cache keys", "Other changes")
 
-	a.startOver()
+	app.startOver()
 	want("start over", "api", "cache", "docs")
 
-	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
 	loaded("the commit")
 	want("commit scope", "Repository root", "cache")
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	loaded("the uncommitted changes")
 	want("uncommitted scope", "api", "cache", "docs")
 }
 
 func TestCompareBranches(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	git(t, dir, "stash", "-u", "-q")
 	git(t, dir, "checkout", "-q", "-b", "agent")
 	write(t, dir, "feature.go", "package feature\n")
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-qm", "Add feature")
 	git(t, dir, "checkout", "-q", "main")
-	a.openRepo(dir)
+	app.openRepo(dir)
 
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	if err := tt.Click("Branch"); err != nil {
 		t.Fatal(err)
 	}
@@ -864,14 +864,14 @@ func TestCompareBranches(t *testing.T) {
 	if err := tt.Click("agent"); err != nil {
 		t.Fatal(err)
 	}
-	if a.scope.Head != "agent" || a.scope.Base != "main" {
-		t.Fatalf("scope = %+v", a.scope)
+	if app.scope.Head != "agent" || app.scope.Base != "main" {
+		t.Fatalf("scope = %+v", app.scope)
 	}
-	if len(a.files) != 1 || a.files[0].Path != "feature.go" {
-		t.Errorf("files = %+v", a.files)
+	if len(app.files) != 1 || app.files[0].Path != "feature.go" {
+		t.Errorf("files = %+v", app.files)
 	}
-	if len(a.commits.rows) != 1 || a.commits.rows[0].Subject != "Add feature" {
-		t.Errorf("commits = %+v", a.commits.rows)
+	if len(app.commits.rows) != 1 || app.commits.rows[0].Subject != "Add feature" {
+		t.Errorf("commits = %+v", app.commits.rows)
 	}
 	tt.Frame()
 	if !tt.HasText("Commits on agent") || !tt.HasText("All changes") || tt.HasText("Uncommitted changes") {
@@ -883,89 +883,89 @@ func TestCompareBranches(t *testing.T) {
 	if err := tt.Click("Compare with another base, or review a custom range"); err != nil {
 		t.Fatal(err)
 	}
-	a.compareForm.branch, a.compareForm.base = "main", "origin/main"
+	app.compareForm.branch, app.compareForm.base = "main", "origin/main"
 	tt.Frame()
 	if err := tt.Click("Show changes"); err != nil {
 		t.Fatal(err)
 	}
-	if a.scope.Branch != "main" || a.scope.Base != "origin/main" {
-		t.Fatalf("scope = %+v", a.scope)
+	if app.scope.Branch != "main" || app.scope.Base != "origin/main" {
+		t.Fatalf("scope = %+v", app.scope)
 	}
 	tt.Frame()
 	if !tt.HasText("vs origin/main") || !tt.HasText("Uncommitted changes") {
 		t.Errorf("texts = %q", tt.Texts())
 	}
 
-	a.pickBranch("main")
-	if a.scope.Kind != gitx.ScopeBranch || a.scope.Base != "origin/main" {
-		t.Errorf("picked base is forgotten: scope = %+v", a.scope)
+	app.pickBranch("main")
+	if app.scope.Kind != gitx.ScopeBranch || app.scope.Base != "origin/main" {
+		t.Errorf("picked base is forgotten: scope = %+v", app.scope)
 	}
-	a.cmpr.base, a.cmpr.baseSet = "main", false
-	a.pickBranch("main")
-	if a.scope.Kind != gitx.ScopeUncommitted {
-		t.Errorf("main against itself: scope = %+v", a.scope)
+	app.cmpr.base, app.cmpr.baseSet = "main", false
+	app.pickBranch("main")
+	if app.scope.Kind != gitx.ScopeUncommitted {
+		t.Errorf("main against itself: scope = %+v", app.scope)
 	}
-	a.cmpr.base = "agent"
-	a.pickBranch("agent")
-	if a.scope.Kind != gitx.ScopeCommit || len(a.commits.rows) == 0 || a.scope.Commit != a.commits.rows[0].SHA {
-		t.Errorf("other branch against itself: scope = %+v", a.scope)
+	app.cmpr.base = "agent"
+	app.pickBranch("agent")
+	if app.scope.Kind != gitx.ScopeCommit || len(app.commits.rows) == 0 || app.scope.Commit != app.commits.rows[0].SHA {
+		t.Errorf("other branch against itself: scope = %+v", app.scope)
 	}
 }
 
 func TestCustomRange(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-qm", "Second")
-	a.openRepo(dir)
-	a.openCompare()
-	a.compareForm.mode, a.compareForm.from, a.compareForm.to = compareRange, "HEAD~1", "HEAD"
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.openRepo(dir)
+	app.openCompare()
+	app.compareForm.mode, app.compareForm.from, app.compareForm.to = compareRange, "HEAD~1", "HEAD"
+	tt := ui.NewTester(app.view, 1300, 800)
 	if err := tt.Click("Show changes"); err != nil {
 		t.Fatal(err)
 	}
-	if a.scope.Kind != gitx.ScopeRange || len(a.files) != 2 {
-		t.Fatalf("scope = %+v, files = %+v", a.scope, a.files)
+	if app.scope.Kind != gitx.ScopeRange || len(app.files) != 2 {
+		t.Fatalf("scope = %+v, files = %+v", app.scope, app.files)
 	}
-	if len(a.commits.rows) != 1 || a.commits.rows[0].Subject != "Second" {
-		t.Errorf("commits = %+v", a.commits.rows)
+	if len(app.commits.rows) != 1 || app.commits.rows[0].Subject != "Second" {
+		t.Errorf("commits = %+v", app.commits.rows)
 	}
 	tt.Frame()
 	if !tt.HasText("Commits in HEAD~1..HEAD") || tt.HasText("Uncommitted changes") {
 		t.Errorf("texts = %q", tt.Texts())
 	}
-	a.pickBranch("main")
-	if a.cmpr.rng != nil || a.scope.Kind != gitx.ScopeUncommitted {
-		t.Errorf("picking a branch kept the range: scope = %+v", a.scope)
+	app.pickBranch("main")
+	if app.cmpr.rng != nil || app.scope.Kind != gitx.ScopeUncommitted {
+		t.Errorf("picking a branch kept the range: scope = %+v", app.scope)
 	}
 }
 
 func TestRemoveProject(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	other := fixtureRepo(t)
-	a.cfg.AddRecent(other)
-	current := a.repo.Root
-	a.openRepo(current)
-	a.projectsOpen = true
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.cfg.AddRecent(other)
+	current := app.repo.Root
+	app.openRepo(current)
+	app.projectsOpen = true
+	tt := ui.NewTester(app.view, 1300, 800)
 	snapshot(t, tt, "projects")
-	r, ok := tt.Find(filepath.Base(other))
+	row, ok := tt.Find(filepath.Base(other))
 	if !ok {
 		t.Fatalf("no row for %s: %q", other, tt.Texts())
 	}
-	tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	tt.Move(row.X+row.W/2, row.Y+row.H/2)
 	tt.Frame()
 	if err := tt.Click("Remove from the list"); err != nil {
 		t.Fatal(err)
 	}
-	if slices.Contains(a.cfg.Recent, other) || a.repo == nil {
-		t.Fatalf("recent = %v, repo = %v", a.cfg.Recent, a.repo)
+	if slices.Contains(app.cfg.Recent, other) || app.repo == nil {
+		t.Fatalf("recent = %v, repo = %v", app.cfg.Recent, app.repo)
 	}
-	a.confirmRemoveProject(current)
-	if len(a.cfg.Recent) != 0 || a.repo != nil {
-		t.Fatalf("recent = %v, repo = %v", a.cfg.Recent, a.repo)
+	app.confirmRemoveProject(current)
+	if len(app.cfg.Recent) != 0 || app.repo != nil {
+		t.Fatalf("recent = %v, repo = %v", app.cfg.Recent, app.repo)
 	}
-	if !slices.Equal(a.store.LoadConfig().Recent, a.cfg.Recent) {
+	if !slices.Equal(app.store.LoadConfig().Recent, app.cfg.Recent) {
 		t.Error("the list is not saved")
 	}
 	tt.Frame()
@@ -994,7 +994,7 @@ func TestRunCost(t *testing.T) {
 }
 
 func TestLoadedRunStatusAndCost(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	at := time.Date(2026, 10, 27, 1, 0, 0, 0, time.UTC)
 	result := func(session string, cost float64) string {
 		return mustJSON(map[string]any{"type": "result", "subtype": "success", "session_id": session, "total_cost_usd": cost, "usage": map[string]int{"output_tokens": 10}})
@@ -1002,16 +1002,16 @@ func TestLoadedRunStatusAndCost(t *testing.T) {
 	saveRun := func(sec int, entries ...agent.LogEntry) string {
 		started := at.Add(time.Duration(sec) * time.Second)
 		info := store.RunInfo{ID: store.NewRunID(started), Title: fmt.Sprint("Run ", sec), Agent: agent.Claude, Started: started}
-		w, err := a.store.CreateRun(a.rev.Repo, a.rev.Scope, info)
+		writer, err := app.store.CreateRun(app.rev.Repo, app.rev.Scope, info)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, e := range entries {
-			if err := w.Write(e); err != nil {
+			if err := writer.Write(e); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := w.Close(); err != nil {
+		if err := writer.Close(); err != nil {
 			t.Fatal(err)
 		}
 		return info.ID
@@ -1023,22 +1023,22 @@ func TestLoadedRunStatusAndCost(t *testing.T) {
 	stoppedID := saveRun(20, entry(agent.LogCommand, "claude -p"), entry(agent.LogExit, "Stopped"))
 
 	byID := map[string]*logRun{}
-	for _, r := range a.logsOf(a.rev) {
+	for _, r := range app.logsOf(app.rev) {
 		byID[r.info.ID] = r
 	}
 	parent, child, stopped := byID[parentID], byID[childID], byID[stoppedID]
-	a.loadRun(a.rev, child)
+	app.loadRun(app.rev, child)
 	if child.info.Usage == nil || child.info.Usage.CostUSD != 0 {
 		t.Fatalf("cost before the resumed run is read: %+v", child.info.Usage)
 	}
-	a.loadRun(a.rev, parent)
-	if u := child.info.Usage; math.Abs(u.CostUSD-0.1) > 1e-9 || !strings.Contains(u.String(), "$0.1000 at API prices") {
-		t.Errorf("child usage = %+v, %q", u, u.String())
+	app.loadRun(app.rev, parent)
+	if usage := child.info.Usage; math.Abs(usage.CostUSD-0.1) > 1e-9 || !strings.Contains(usage.String(), "$0.1000 at API prices") {
+		t.Errorf("child usage = %+v, %q", usage, usage.String())
 	}
-	if u := parent.info.Usage; u.CostUSD != 0.5 {
-		t.Errorf("parent cost = %v", u.CostUSD)
+	if usage := parent.info.Usage; usage.CostUSD != 0.5 {
+		t.Errorf("parent cost = %v", usage.CostUSD)
 	}
-	a.loadRun(a.rev, stopped)
+	app.loadRun(app.rev, stopped)
 	for r, want := range map[*logRun]string{parent: "", child: "", stopped: "stopped"} {
 		if got := r.status(); got != want {
 			t.Errorf("%s: status %q, want %q", r.info.Title, got, want)
@@ -1047,60 +1047,60 @@ func TestLoadedRunStatusAndCost(t *testing.T) {
 }
 
 func TestReviewFollowsBranch(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	git(t, dir, "stash", "-u", "-q")
 	git(t, dir, "checkout", "-q", "-b", "agent")
 	write(t, dir, "feature.go", "package feature\n")
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-qm", "Add feature")
-	a.openRepo(dir)
-	a.cmpr.base = "main"
-	s, ok := a.cmpr.branchScope()
+	app.openRepo(dir)
+	app.cmpr.base = "main"
+	branchScope, ok := app.cmpr.branchScope()
 	if !ok {
 		t.Fatal("no branch scope")
 	}
-	a.setScope(s)
-	rev := a.rev
+	app.setScope(branchScope)
+	rev := app.rev
 
 	git(t, dir, "checkout", "-q", "main")
-	a.refresh()
-	if a.cmpr.branch != "main" || a.scope.Head != "agent" || a.rev != rev {
-		t.Fatalf("after checkout of main: branch %q, scope %+v, same review %v", a.cmpr.branch, a.scope, a.rev == rev)
+	app.refresh()
+	if app.cmpr.branch != "main" || app.scope.Head != "agent" || app.rev != rev {
+		t.Fatalf("after checkout of main: branch %q, scope %+v, same review %v", app.cmpr.branch, app.scope, app.rev == rev)
 	}
-	if len(a.files) != 1 || a.files[0].Path != "feature.go" {
-		t.Errorf("files = %+v", a.files)
+	if len(app.files) != 1 || app.files[0].Path != "feature.go" {
+		t.Errorf("files = %+v", app.files)
 	}
 
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	a.compare("agent", "main")
-	if a.rev != rev {
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	app.compare("agent", "main")
+	if app.rev != rev {
 		t.Error("Compare opened another review of the same branch")
 	}
 
 	git(t, dir, "checkout", "-q", "agent")
-	a.refresh()
-	if a.scope.Branch != "agent" || a.scope.Head != "" || a.rev != rev || a.rev.Scope != a.scope {
-		t.Fatalf("after checkout of agent: scope %+v, same review %v", a.scope, a.rev == rev)
+	app.refresh()
+	if app.scope.Branch != "agent" || app.scope.Head != "" || app.rev != rev || app.rev.Scope != app.scope {
+		t.Fatalf("after checkout of agent: scope %+v, same review %v", app.scope, app.rev == rev)
 	}
 }
 
 func TestRefreshListsNewCommits(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
-	before := len(a.commits.rows)
+	app := newTestApp(t)
+	dir := app.repo.Root
+	before := len(app.commits.rows)
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-qm", "Commit the work")
-	a.refresh()
-	if len(a.commits.rows) != before+1 || a.commits.rows[0].Subject != "Commit the work" {
-		t.Fatalf("commits after refresh = %+v", a.commits.rows)
+	app.refresh()
+	if len(app.commits.rows) != before+1 || app.commits.rows[0].Subject != "Commit the work" {
+		t.Fatalf("commits after refresh = %+v", app.commits.rows)
 	}
 }
 
 // waitText pumps the app until the window shows a text containing text.
-func waitText(t *testing.T, a *app, tt *ui.Tester, text string) {
+func waitText(t *testing.T, app *app, tt *ui.Tester, text string) {
 	t.Helper()
-	pump(t, a, fmt.Sprintf("the text %q", text), func() bool {
+	pump(t, app, fmt.Sprintf("the text %q", text), func() bool {
 		tt.Frame()
 		return tt.HasText(text)
 	})
@@ -1119,17 +1119,17 @@ func revSHA(t *testing.T, dir, rev string) string {
 // pump runs the app's queued updates on the test goroutine until ok.
 // waitLoad runs the queued updates until the latest load of a scope
 // landed.
-func waitLoad(t *testing.T, a *app, what string) {
+func waitLoad(t *testing.T, app *app, what string) {
 	t.Helper()
-	pump(t, a, what, a.loader.idle)
+	pump(t, app, what, app.loader.idle)
 }
 
-func pump(t *testing.T, a *app, what string, ok func() bool) {
+func pump(t *testing.T, app *app, what string, ok func() bool) {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
 	for !ok() {
 		select {
-		case fn := <-a.queue:
+		case fn := <-app.queue:
 			fn()
 		case <-deadline:
 			t.Fatalf("timed out waiting for %s", what)
@@ -1138,8 +1138,8 @@ func pump(t *testing.T, a *app, what string, ok func() bool) {
 }
 
 func TestWalkthrough(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "Cache keys are lower-cased now.",
 		Steps: []review.Step{
 			{Title: "Lower-case keys", Text: "`Get` lower-cases its key.", Refs: []review.Ref{
@@ -1152,10 +1152,10 @@ func TestWalkthrough(t *testing.T) {
 		Sections: []review.Section{{Title: "Checklist", Items: []review.Step{{Title: "What data changes?", Text: "None."}}}},
 	}}
 	deeper := "```json\n" + `{"summary": "Inside Get.", "steps": [{"title": "ToLower call", "text": "Uses strings.", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
-	fake := newFakeAgent(t, a)
+	fake := newFakeAgent(t, app)
 	fake.answer("child", deeper)
 
-	tt := ui.NewTester(a.view, 1300, 1000)
+	tt := ui.NewTester(app.view, 1300, 1000)
 	tt.Advance(time.Second)
 	for _, want := range []string{"Cache keys are lower-cased now.", "1. Lower-case keys", "cache/cache.go:5-7 (+)", "\treturn strings.ToLower(key)", "# Demo", "The file has 7 lines", "Checklist", "What data changes?"} {
 		if !tt.HasText(strings.ReplaceAll(want, "\t", "    ")) {
@@ -1164,17 +1164,17 @@ func TestWalkthrough(t *testing.T) {
 	}
 	snapshot(t, tt, "walkthrough")
 
-	a.queue = make(chan func(), 64)
+	app.queue = make(chan func(), 64)
 	if err := tt.Click("Go deeper"); err != nil {
 		t.Fatal(err)
 	}
-	w := a.rev.Walks[0]
-	if w.Parent != "" || w.Step != 0 || a.nav.page != (page{kindWalk, w.ID}) {
-		t.Fatalf("walk = %+v, page %q", w, a.nav.page.String())
+	walk := app.rev.Walks[0]
+	if walk.Parent != "" || walk.Step != 0 || app.nav.page != (page{kindWalk, walk.ID}) {
+		t.Fatalf("walk = %+v, page %q", walk, app.nav.page.String())
 	}
-	pump(t, a, "the deeper walkthrough", func() bool { return a.runner.run(a.rev, w.ID) == nil })
-	if w.Err != "" || w.Sessions[agent.Claude] != "child" || w.Content == nil || w.Content.Steps[0].Title != "ToLower call" {
-		t.Fatalf("walk = %+v", w)
+	pump(t, app, "the deeper walkthrough", func() bool { return app.runner.run(app.rev, walk.ID) == nil })
+	if walk.Err != "" || walk.Sessions[agent.Claude] != "child" || walk.Content == nil || walk.Content.Steps[0].Title != "ToLower call" {
+		t.Fatalf("walk = %+v", walk)
 	}
 	if req := fake.last(); !strings.Contains(req.Prompt, "### Lower-case keys") || req.ResumeID != "root" || !req.Fork {
 		t.Errorf("request = %+v", req)
@@ -1190,45 +1190,45 @@ func TestWalkthrough(t *testing.T) {
 	if err := tt.Click("cache/cache.go:6 (+)"); err != nil {
 		t.Fatal(err)
 	}
-	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
-		t.Errorf("page = %q", a.nav.page.String())
+	if app.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("page = %q", app.nav.page.String())
 	}
-	if r, ok := a.diffs["cache/cache.go"].state.SelectedLines(); !ok || r.Start != 5 || r.End != 5 {
-		t.Errorf("selection = %+v, %v", r, ok)
+	if selection, ok := app.diffs["cache/cache.go"].state.SelectedLines(); !ok || selection.Start != 5 || selection.End != 5 {
+		t.Errorf("selection = %+v, %v", selection, ok)
 	}
 }
 
 func TestDeeperAhead(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}, {"title": "B", "text": "b"}, {"title": "C", "text": "c"}, {"title": "D", "text": "d"}], "groups": []}` + "\n```"
-	newFakeAgent(t, a).answer("s1", answer)
-	a.cfg.Agent = agent.Config{Provider: agent.Claude, Effort: "high", AutoEffort: "low"}
-	a.queue = make(chan func(), 256)
-	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
-	if len(a.rev.Walks) != 4 || a.runner.run(a.rev, a.rev.Walks[2].ID) == nil || !a.runner.queued(a.rev, a.rev.Walks[3].ID) {
-		t.Fatalf("%d walks, the third runs %v, the fourth waits %v", len(a.rev.Walks), a.runner.run(a.rev, a.rev.Walks[2].ID) != nil, a.runner.queued(a.rev, a.rev.Walks[3].ID))
+	newFakeAgent(t, app).answer("s1", answer)
+	app.cfg.Agent = agent.Config{Provider: agent.Claude, Effort: "high", AutoEffort: "low"}
+	app.queue = make(chan func(), 256)
+	app.generateOverview()
+	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
+	if len(app.rev.Walks) != 4 || app.runner.run(app.rev, app.rev.Walks[2].ID) == nil || !app.runner.queued(app.rev, app.rev.Walks[3].ID) {
+		t.Fatalf("%d walks, the third runs %v, the fourth waits %v", len(app.rev.Walks), app.runner.run(app.rev, app.rev.Walks[2].ID) != nil, app.runner.queued(app.rev, app.rev.Walks[3].ID))
 	}
-	for i, w := range a.rev.Walks {
+	for i, w := range app.rev.Walks {
 		if w.Step != i || w.Question != "" {
 			t.Errorf("walk %d = %+v", i, w)
 		}
 	}
-	pump(t, a, "the deeper walkthroughs", func() bool {
-		for _, r := range a.logsOf(a.rev) {
+	pump(t, app, "the deeper walkthroughs", func() bool {
+		for _, r := range app.logsOf(app.rev) {
 			if r.running {
 				return false
 			}
 		}
-		return !a.runner.reviewBusy(a.rev)
+		return !app.runner.reviewBusy(app.rev)
 	})
-	for _, w := range a.rev.Walks {
+	for _, w := range app.rev.Walks {
 		if w.Content == nil || w.Sessions[agent.Claude] != "s1" {
 			t.Errorf("walk = %+v", w)
 		}
 	}
 
-	runs := a.store.Runs(a.repo.Root, a.scope)
+	runs := app.store.Runs(app.repo.Root, app.scope)
 	if len(runs) != 5 {
 		t.Fatalf("%d runs", len(runs))
 	}
@@ -1236,19 +1236,19 @@ func TestDeeperAhead(t *testing.T) {
 	// so a deeper run, which resumes s1, adds nothing to the cost.
 	want := agent.Usage{Input: 10, Output: 1000, CacheRead: 20000, CacheWrite: 5000, Context: 24000, Session: "s1", SessionCost: 0.25}
 	for _, r := range runs {
-		w := want
+		expected := want
 		if r.Target == store.TargetOverview {
-			w.CostUSD = 0.25
+			expected.CostUSD = 0.25
 		}
-		if r.Usage == nil || *r.Usage != w {
+		if r.Usage == nil || *r.Usage != expected {
 			t.Errorf("usage of %s = %+v", r.Title, r.Usage)
 		}
 		if r.Effort != "low" {
 			t.Errorf("%s ran at %q effort, want the effort for automatic runs", r.Title, r.Effort)
 		}
 	}
-	tt := ui.NewTester(a.view, 1400, 900)
-	a.showLog("")
+	tt := ui.NewTester(app.view, 1400, 900)
+	app.showLog("")
 	tt.Frame()
 	// The deeper runs fork the overview's session and add nothing to it.
 	if !tt.HasText("24k tokens of context") {
@@ -1259,10 +1259,10 @@ func TestDeeperAhead(t *testing.T) {
 	}
 	snapshot(t, tt, "deeper-ahead")
 
-	a.askQuestion("", -1, "Why?")
-	pump(t, a, "the question", func() bool { return !a.runner.reviewBusy(a.rev) })
-	if r := a.logsOf(a.rev)[0]; r.info.Effort != "high" {
-		t.Errorf("a question ran at %q effort, want the main one", r.info.Effort)
+	app.askQuestion("", -1, "Why?")
+	pump(t, app, "the question", func() bool { return !app.runner.reviewBusy(app.rev) })
+	if run := app.logsOf(app.rev)[0]; run.info.Effort != "high" {
+		t.Errorf("a question ran at %q effort, want the main one", run.info.Effort)
 	}
 }
 
@@ -1281,12 +1281,12 @@ func TestWalkRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
 		{name: "a stopped answer", err: review.Stopped, mark: "stopped"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := newTestApp(t)
-			a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+			app := newTestApp(t)
+			app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
 				Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
 			}}
-			a.rev.Walks = append(a.rev.Walks, &review.Walk{ID: "q", Step: 0, Question: "Why?", Err: tc.err, More: tc.more})
-			tt := ui.NewTester(a.view, 1300, 800)
+			app.rev.Walks = append(app.rev.Walks, &review.Walk{ID: "q", Step: 0, Question: "Why?", Err: tc.err, More: tc.more})
+			tt := ui.NewTester(app.view, 1300, 800)
 			tt.Frame()
 			if !tt.HasText("Why?") {
 				t.Fatalf("texts %q", tt.Texts())
@@ -1314,11 +1314,11 @@ func TestThreadRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
 		{name: "a stopped answer", err: review.Stopped, mark: "stopped"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := newTestApp(t)
-			th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+			app := newTestApp(t)
+			th := app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
 			th.Messages = []review.Message{{Role: review.RoleUser, Text: "Why?"}, {Role: review.RoleAgent, Err: tc.err}}
-			a.nav.goTo(page{kind: kindThreads})
-			tt := ui.NewTester(a.view, 1300, 800)
+			app.nav.goTo(page{kind: kindThreads})
+			tt := ui.NewTester(app.view, 1300, 800)
 			tt.Frame()
 			if !tt.HasText("Why?") {
 				t.Fatalf("texts %q", tt.Texts())
@@ -1337,47 +1337,47 @@ func TestThreadRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
 // the answer comes, the thread and its scope stay unseen until the user
 // opens the thread.
 func TestUnseenAnswerMarksItsRows(t *testing.T) {
-	a := newTestApp(t)
-	a.queue = make(chan func(), 64)
-	fake := newFakeAgent(t, a)
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	fake := newFakeAgent(t, app)
 	fake.answer("t1", "Because.")
-	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-	a.ask(a.rev, th, "Why?")
-	pump(t, a, "the answer", func() bool { return !a.busy(th.ID) })
-	if got := a.state(th.ID); got != (targetState{status: targetAnswered, unseen: true}) {
+	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	app.ask(app.rev, th, "Why?")
+	pump(t, app, "the answer", func() bool { return !app.busy(th.ID) })
+	if got := app.state(th.ID); got != (targetState{status: targetAnswered, unseen: true}) {
 		t.Fatalf("state after the answer = %+v", got)
 	}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	snapshot(t, tt, "unseen-thread")
-	if !a.targets.unseenIn(a.rev) {
+	if !app.targets.unseenIn(app.rev) {
 		t.Error("the scope of the thread is not unseen")
 	}
-	a.openThread(th.ID)
+	app.openThread(th.ID)
 	tt.Frame()
-	if a.state(th.ID).unseen || a.targets.unseenIn(a.rev) {
+	if app.state(th.ID).unseen || app.targets.unseenIn(app.rev) {
 		t.Error("the open thread stays unseen")
 	}
 }
 
 func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
-	a := newTestApp(t)
-	parent := a.rev.AddWalk("", 0, "")
-	child := a.rev.AddWalk(parent.ID, 0, "")
-	a.nav.goTo(page{kindFile, "cache/cache.go"})
-	a.nav.goTo(page{kindWalk, parent.ID})
-	a.nav.goTo(page{kindWalk, child.ID})
-	a.deleteWalk(child)
-	if a.nav.page != (page{kindWalk, parent.ID}) || slices.Contains(a.nav.history, page{kindWalk, child.ID}) {
-		t.Fatalf("page %+v, history %+v", a.nav.page, a.nav.history)
+	app := newTestApp(t)
+	parent := app.rev.AddWalk("", 0, "")
+	child := app.rev.AddWalk(parent.ID, 0, "")
+	app.nav.goTo(page{kindFile, "cache/cache.go"})
+	app.nav.goTo(page{kindWalk, parent.ID})
+	app.nav.goTo(page{kindWalk, child.ID})
+	app.deleteWalk(child)
+	if app.nav.page != (page{kindWalk, parent.ID}) || slices.Contains(app.nav.history, page{kindWalk, child.ID}) {
+		t.Fatalf("page %+v, history %+v", app.nav.page, app.nav.history)
 	}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("‹ Back to cache.go"); err != nil {
 		t.Fatalf("%v; texts %q", err, tt.Texts())
 	}
-	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
-		t.Errorf("back opened %+v", a.nav.page)
+	if app.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("back opened %+v", app.nav.page)
 	}
 }
 
@@ -1385,18 +1385,18 @@ func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
 // it is in the history: both leave the history, and the back bar names
 // the page Back opens.
 func TestDeleteWalkForgetsItsPagesInHistory(t *testing.T) {
-	a := newTestApp(t)
-	parent := a.rev.AddWalk("", 0, "")
-	child := a.rev.AddWalk(parent.ID, 0, "")
-	a.nav.goTo(page{kindFile, "cache/cache.go"})
-	a.nav.goTo(page{kindWalk, parent.ID})
-	a.nav.goTo(page{kindWalk, child.ID})
-	a.nav.goTo(page{kindWalk, parent.ID})
-	a.deleteWalk(parent)
-	if a.nav.page != overview || !slices.Equal(a.nav.history, []page{overview, {kindFile, "cache/cache.go"}}) {
-		t.Fatalf("page %+v, history %+v", a.nav.page, a.nav.history)
+	app := newTestApp(t)
+	parent := app.rev.AddWalk("", 0, "")
+	child := app.rev.AddWalk(parent.ID, 0, "")
+	app.nav.goTo(page{kindFile, "cache/cache.go"})
+	app.nav.goTo(page{kindWalk, parent.ID})
+	app.nav.goTo(page{kindWalk, child.ID})
+	app.nav.goTo(page{kindWalk, parent.ID})
+	app.deleteWalk(parent)
+	if app.nav.page != overview || !slices.Equal(app.nav.history, []page{overview, {kindFile, "cache/cache.go"}}) {
+		t.Fatalf("page %+v, history %+v", app.nav.page, app.nav.history)
 	}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText("‹ Back to cache.go") {
 		t.Errorf("back bar: %q", tt.Texts())
@@ -1404,60 +1404,60 @@ func TestDeleteWalkForgetsItsPagesInHistory(t *testing.T) {
 }
 
 func TestBackFromSnippet(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	var steps []review.Step
 	for i := range 8 {
 		steps = append(steps, review.Step{Title: fmt.Sprintf("Step %d", i), Text: "Text.\n\nMore text.", Refs: []review.Ref{{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7}}})
 	}
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: steps}}
-	tt := ui.NewTester(a.view, 1300, 600)
+	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: steps}}
+	tt := ui.NewTester(app.view, 1300, 600)
 	tt.Frame()
-	a.scrollOf("overview").Y = 400
+	app.scrollOf("overview").Y = 400
 	tt.Frame()
-	a.openRef(steps[3].Refs[0])
-	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
-		t.Fatalf("page = %q", a.nav.page.String())
+	app.openRef(steps[3].Refs[0])
+	if app.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Fatalf("page = %q", app.nav.page.String())
 	}
 	tt.Frame()
 	if err := tt.Click("‹ Back to Overview"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.nav.page != overview {
-		t.Errorf("page = %q", a.nav.page.String())
+	if app.nav.page != overview {
+		t.Errorf("page = %q", app.nav.page.String())
 	}
-	if y := a.scrollOf("overview").Y; y != 400 {
-		t.Errorf("overview scrolled to %v, want 400", y)
+	if offset := app.scrollOf("overview").Y; offset != 400 {
+		t.Errorf("overview scrolled to %v, want 400", offset)
 	}
 }
 
 func TestQuestionPanel(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
 	}}
 	reply := "```json\n" + `{"summary": "Callers pass mixed case.", "steps": [{"title": "Caller", "text": "x", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
-	fake := newFakeAgent(t, a)
+	fake := newFakeAgent(t, app)
 	fake.answer("q1", reply)
-	tt := ui.NewTester(a.view, 1400, 900)
+	tt := ui.NewTester(app.view, 1400, 900)
 	tt.Frame()
 
 	if err := tt.Click("Ask about this step"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !tt.HasText("About: Lower-case keys") || a.nav.page != overview {
-		t.Fatalf("panel not open; page %q", a.nav.page.String())
+	if !tt.HasText("About: Lower-case keys") || app.nav.page != overview {
+		t.Fatalf("panel not open; page %q", app.nav.page.String())
 	}
-	a.queue = make(chan func(), 64)
+	app.queue = make(chan func(), 64)
 	tt.Type("Why lower-case?")
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyEnter)
-	w := a.rev.Walk(a.questionID())
-	if w == nil || w.Question != "Why lower-case?" || w.Step != 0 || a.nav.page != overview {
-		t.Fatalf("question = %+v, page %q", w, a.nav.page.String())
+	walk := app.rev.Walk(app.questionID())
+	if walk == nil || walk.Question != "Why lower-case?" || walk.Step != 0 || app.nav.page != overview {
+		t.Fatalf("question = %+v, page %q", walk, app.nav.page.String())
 	}
-	pump(t, a, "the answer", func() bool { return !a.busy(w.ID) })
+	pump(t, app, "the answer", func() bool { return !app.busy(walk.ID) })
 	tt.Frame()
 	for _, want := range []string{"Why lower-case?", "Callers pass mixed case.", "1. Caller", "cache/cache.go:6 (+)"} {
 		if !tt.HasText(want) {
@@ -1465,10 +1465,10 @@ func TestQuestionPanel(t *testing.T) {
 		}
 	}
 
-	a.askMore(a.rev, w, "And the tests?")
-	pump(t, a, "the follow-up", func() bool { return !a.busy(w.ID) })
-	if len(w.More) != 1 || w.More[0].Content == nil || w.Sessions[agent.Claude] != "q1" {
-		t.Fatalf("follow-up = %+v", w.More)
+	app.askMore(app.rev, walk, "And the tests?")
+	pump(t, app, "the follow-up", func() bool { return !app.busy(walk.ID) })
+	if len(walk.More) != 1 || walk.More[0].Content == nil || walk.Sessions[agent.Claude] != "q1" {
+		t.Fatalf("follow-up = %+v", walk.More)
 	}
 	if req := fake.last(); !strings.Contains(req.Prompt, "follow-up question: And the tests?") || strings.Contains(req.Prompt, "The change set under review") || req.ResumeID != "q1" || req.Fork {
 		t.Errorf("follow-up request = %+v", req)
@@ -1476,8 +1476,8 @@ func TestQuestionPanel(t *testing.T) {
 	tt.Frame()
 	snapshot(t, tt, "question")
 
-	a.closeQuestion()
-	a.nav.goTo(page{kind: kindThreads})
+	app.closeQuestion()
+	app.nav.goTo(page{kind: kindThreads})
 	tt.Frame()
 	if !tt.HasText("1 follow-ups") && !tt.HasText("Jan") {
 		t.Logf("texts %q", tt.Texts())
@@ -1485,8 +1485,8 @@ func TestQuestionPanel(t *testing.T) {
 	if err := tt.Click("Why lower-case?"); err != nil {
 		t.Fatal(err)
 	}
-	if a.questionID() != w.ID {
-		t.Errorf("question = %q", a.questionID())
+	if app.questionID() != walk.ID {
+		t.Errorf("question = %q", app.questionID())
 	}
 }
 
@@ -1495,7 +1495,7 @@ func TestQuestionPanel(t *testing.T) {
 func TestLeavingReviewClosesAskPanel(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		leave func(a *app)
+		leave func(app *app)
 	}{
 		{"scope switch", func(a *app) {
 			a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
@@ -1507,16 +1507,16 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := newTestApp(t)
-			fake := newFakeAgent(t, a)
+			app := newTestApp(t)
+			fake := newFakeAgent(t, app)
 			fake.answer("q1", "Because.")
-			a.queue = make(chan func(), 64)
-			left := a.rev
+			app.queue = make(chan func(), 64)
+			left := app.rev
 			left.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
 				Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
 			}}
-			a.saveReview()
-			tt := ui.NewTester(a.view, 1400, 900)
+			app.saveReview()
+			tt := ui.NewTester(app.view, 1400, 900)
 			tt.Frame()
 			if err := tt.Click("Ask about this step"); err != nil {
 				t.Fatal(err)
@@ -1525,15 +1525,15 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 			tt.Type("Why lower-case?")
 			tt.Frame()
 
-			tc.leave(a)
+			tc.leave(app)
 			tt.Frame()
 			tt.Key(ui.Cmd, ui.KeyEnter)
 			tt.Frame()
-			if a.questionOpen() || tt.HasText("About: Lower-case keys") {
+			if app.questionOpen() || tt.HasText("About: Lower-case keys") {
 				t.Error("the Ask panel stayed open")
 			}
-			if len(left.Walks) != 0 || len(a.rev.Walks) != 0 || len(fake.received()) != 0 {
-				t.Errorf("questions: %d in the left review, %d in the new one, %d sent", len(left.Walks), len(a.rev.Walks), len(fake.received()))
+			if len(left.Walks) != 0 || len(app.rev.Walks) != 0 || len(fake.received()) != 0 {
+				t.Errorf("questions: %d in the left review, %d in the new one, %d sent", len(left.Walks), len(app.rev.Walks), len(fake.received()))
 			}
 		})
 	}
@@ -1542,27 +1542,27 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 // archiveOnReload reloads the uncommitted changes after it marks the
 // overview as written for a file that is no longer changed, so the
 // review goes to the archive.
-func archiveOnReload(t *testing.T, a *app) {
+func archiveOnReload(t *testing.T, app *app) {
 	t.Helper()
-	a.rev.Overview.Files = map[string]string{"gone.go": "x"}
-	a.reload()
-	pump(t, a, "the archive", func() bool { return len(a.reviews.Earlier()) == 1 })
+	app.rev.Overview.Files = map[string]string{"gone.go": "x"}
+	app.reload()
+	pump(t, app, "the archive", func() bool { return len(app.reviews.Earlier()) == 1 })
 }
 
 // TestArchiveDropsSavedNote archives a review whose feedback was saved:
 // the feedback page of the new review shows no "Saved to" note.
 func TestArchiveDropsSavedNote(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Markdown: "x"}
-	a.saveReview()
-	a.savedPath = "/tmp/feedback.md"
-	a.nav.page = page{kind: kindFeedback}
-	tt := ui.NewTester(a.view, 1400, 900)
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Markdown: "x"}
+	app.saveReview()
+	app.savedPath = "/tmp/feedback.md"
+	app.nav.page = page{kind: kindFeedback}
+	tt := ui.NewTester(app.view, 1400, 900)
 	tt.Frame()
 	if !tt.HasText("Saved to /tmp/feedback.md") {
 		t.Fatal("the note does not show before archiving")
 	}
-	archiveOnReload(t, a)
+	archiveOnReload(t, app)
 	tt.Frame()
 	if tt.HasText("Saved to") {
 		t.Error("the feedback page kept the Saved to note of the archived review")
@@ -1573,24 +1573,24 @@ func TestArchiveDropsSavedNote(t *testing.T) {
 // saved with resolved threads: the feedback page of the new review leaves
 // them out and shows no "Saved to" note.
 func TestStartOverResetsExport(t *testing.T) {
-	a := newTestApp(t)
-	a.exportDone, a.savedPath = true, "/tmp/feedback.md"
-	a.nav.page = page{kind: kindFeedback}
-	a.startOver()
-	if a.exportDone || a.savedPath != "" || a.nav.page != overview {
-		t.Errorf("after Start Over: resolved %v, saved %q, page %q", a.exportDone, a.savedPath, a.nav.page.String())
+	app := newTestApp(t)
+	app.exportDone, app.savedPath = true, "/tmp/feedback.md"
+	app.nav.page = page{kind: kindFeedback}
+	app.startOver()
+	if app.exportDone || app.savedPath != "" || app.nav.page != overview {
+		t.Errorf("after Start Over: resolved %v, saved %q, page %q", app.exportDone, app.savedPath, app.nav.page.String())
 	}
 }
 
 // TestScopeSwitchKeepsGroupsFolded closes a group of files and switches
 // scope and back: the group stays closed.
 func TestScopeSwitchKeepsGroupsFolded(t *testing.T) {
-	a := newTestApp(t)
-	id := a.groupID(0)
-	*a.groupOpen(id) = false
-	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	if *a.groupOpen(id) {
+	app := newTestApp(t)
+	id := app.groupID(0)
+	*app.groupOpen(id) = false
+	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if *app.groupOpen(id) {
 		t.Errorf("group %q opened again after a scope switch", id)
 	}
 }
@@ -1598,20 +1598,20 @@ func TestScopeSwitchKeepsGroupsFolded(t *testing.T) {
 // TestSidePanelShowsOne opens the Ask panel, a question and a thread in
 // turn: each one closes the one before.
 func TestSidePanelShowsOne(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "s", Steps: []review.Step{{Title: "One", Text: "t"}},
 	}}
-	q := a.rev.AddWalk("", 0, "Why?")
-	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
-	a.askAbout("", 0)
-	a.openThread(th.ID)
-	if a.questionOpen() || a.threadID() != th.ID {
-		t.Errorf("after the thread: question open %v, thread %q", a.questionOpen(), a.threadID())
+	question := app.rev.AddWalk("", 0, "Why?")
+	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
+	app.askAbout("", 0)
+	app.openThread(th.ID)
+	if app.questionOpen() || app.threadID() != th.ID {
+		t.Errorf("after the thread: question open %v, thread %q", app.questionOpen(), app.threadID())
 	}
-	a.openQuestion(q.ID)
-	if !a.questionOpen() || a.threadID() != "" {
-		t.Errorf("after the question: question open %v, thread %q", a.questionOpen(), a.threadID())
+	app.openQuestion(question.ID)
+	if !app.questionOpen() || app.threadID() != "" {
+		t.Errorf("after the question: question open %v, thread %q", app.questionOpen(), app.threadID())
 	}
 }
 
@@ -1619,27 +1619,27 @@ func TestSidePanelShowsOne(t *testing.T) {
 // nothing, and switches scope and back: the thread is gone from the
 // review, its file and its saved copy.
 func TestLeavingReviewDropsEmptyThread(t *testing.T) {
-	a := newTestApp(t)
-	first := a.rev
-	a.nav.page = page{kindFile, "cache/cache.go"}
-	a.lineThread("cache/cache.go", lineRange(5, 5))
-	a.saveReview()
-	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	if a.rev != first {
+	app := newTestApp(t)
+	first := app.rev
+	app.nav.page = page{kindFile, "cache/cache.go"}
+	app.lineThread("cache/cache.go", lineRange(5, 5))
+	app.saveReview()
+	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if app.rev != first {
 		t.Fatal("switching back loaded a second copy of the review")
 	}
 	if len(first.Threads) != 0 || first.ThreadCounts()["cache/cache.go"] != 0 || !first.Empty() {
 		t.Errorf("threads = %d, counts %v", len(first.Threads), first.ThreadCounts())
 	}
-	if saved := a.store.LoadReview(a.repo.Root, a.scope); len(saved.Threads) != 0 {
+	if saved := app.store.LoadReview(app.repo.Root, app.scope); len(saved.Threads) != 0 {
 		t.Errorf("saved threads = %d", len(saved.Threads))
 	}
 
-	a.lineThread("cache/cache.go", lineRange(5, 5))
-	a.comment(a.rev.Thread(a.threadID()), "Why lower-case?")
-	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	app.lineThread("cache/cache.go", lineRange(5, 5))
+	app.comment(app.rev.Thread(app.threadID()), "Why lower-case?")
+	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	if len(first.Threads) != 1 {
 		t.Errorf("leaving the review dropped a thread with a comment: %d threads", len(first.Threads))
 	}
@@ -1649,24 +1649,24 @@ func TestLeavingReviewDropsEmptyThread(t *testing.T) {
 // panel asks about, or of the question the panel shows: the panel closes.
 // Deleting another walk keeps it.
 func TestDeleteWalkClosesItsAskPanel(t *testing.T) {
-	a := newTestApp(t)
-	parent := a.rev.AddWalk("", 0, "")
-	child := a.rev.AddWalk(parent.ID, 1, "")
-	other := a.rev.AddWalk("", 1, "")
-	a.askAbout(other.ID, 0)
-	a.deleteWalk(a.rev.AddWalk("", 2, ""))
-	if !a.questionOpen() {
+	app := newTestApp(t)
+	parent := app.rev.AddWalk("", 0, "")
+	child := app.rev.AddWalk(parent.ID, 1, "")
+	other := app.rev.AddWalk("", 1, "")
+	app.askAbout(other.ID, 0)
+	app.deleteWalk(app.rev.AddWalk("", 2, ""))
+	if !app.questionOpen() {
 		t.Fatal("deleting another walk closed the Ask panel")
 	}
-	a.askAbout(child.ID, 0)
-	a.deleteWalk(parent)
-	if a.questionOpen() {
+	app.askAbout(child.ID, 0)
+	app.deleteWalk(parent)
+	if app.questionOpen() {
 		t.Error("the Ask panel of a deleted walk stayed open")
 	}
-	parent = a.rev.AddWalk("", 0, "")
-	a.openQuestion(a.rev.AddWalk(parent.ID, 0, "Why?").ID)
-	a.deleteWalk(parent)
-	if a.questionID() != "" {
+	parent = app.rev.AddWalk("", 0, "")
+	app.openQuestion(app.rev.AddWalk(parent.ID, 0, "Why?").ID)
+	app.deleteWalk(parent)
+	if app.questionID() != "" {
 		t.Error("the panel of a deleted question stayed open")
 	}
 }
@@ -1675,29 +1675,29 @@ func TestDeleteWalkClosesItsAskPanel(t *testing.T) {
 // Ask panel asks about a step of a deeper walk under it: that deeper walk
 // goes, and the panel closes.
 func TestRegenerateClosesAskPanelOfItsStepWalk(t *testing.T) {
-	a := newTestApp(t)
-	newFakeAgent(t, a).answer("w1", "Because.")
-	a.queue = make(chan func(), 64)
-	parent := a.rev.AddWalk("", 0, "")
-	deeper := a.rev.AddWalk(parent.ID, 0, "")
-	a.askAbout(deeper.ID, 0)
-	a.regenerate(parent.ID)
-	pump(t, a, "the regenerated walk", func() bool { return !a.busy(parent.ID) })
-	if a.rev.Walk(deeper.ID) != nil || a.questionOpen() {
-		t.Errorf("deeper walk kept %v, panel open %v", a.rev.Walk(deeper.ID) != nil, a.questionOpen())
+	app := newTestApp(t)
+	newFakeAgent(t, app).answer("w1", "Because.")
+	app.queue = make(chan func(), 64)
+	parent := app.rev.AddWalk("", 0, "")
+	deeper := app.rev.AddWalk(parent.ID, 0, "")
+	app.askAbout(deeper.ID, 0)
+	app.regenerate(parent.ID)
+	pump(t, app, "the regenerated walk", func() bool { return !app.busy(parent.ID) })
+	if app.rev.Walk(deeper.ID) != nil || app.questionOpen() {
+		t.Errorf("deeper walk kept %v, panel open %v", app.rev.Walk(deeper.ID) != nil, app.questionOpen())
 	}
 }
 
 // TestQuestionDraftsPerTarget types in the Ask panel of two steps and in
 // the reply box of two questions: each text comes back with its target.
 func TestQuestionDraftsPerTarget(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "s", Steps: []review.Step{{Title: "One", Text: "t"}, {Title: "Two", Text: "t"}},
 	}}
-	q1 := a.rev.AddWalk("", 0, "First?")
-	q2 := a.rev.AddWalk("", 1, "Second?")
-	tt := ui.NewTester(a.view, 1400, 900)
+	q1 := app.rev.AddWalk("", 0, "First?")
+	q2 := app.rev.AddWalk("", 1, "Second?")
+	tt := ui.NewTester(app.view, 1400, 900)
 	// shown is the text of the focused box, read through the clipboard.
 	shown := func(open func()) string {
 		t.Helper()
@@ -1713,10 +1713,10 @@ func TestQuestionDraftsPerTarget(t *testing.T) {
 		open func()
 		text string
 	}{
-		{func() { a.askAbout("", 0) }, "draft of step one"},
-		{func() { a.askAbout("", 1) }, "draft of step two"},
-		{func() { a.openQuestion(q1.ID) }, "reply to the first"},
-		{func() { a.openQuestion(q2.ID) }, "reply to the second"},
+		{func() { app.askAbout("", 0) }, "draft of step one"},
+		{func() { app.askAbout("", 1) }, "draft of step two"},
+		{func() { app.openQuestion(q1.ID) }, "reply to the first"},
+		{func() { app.openQuestion(q2.ID) }, "reply to the second"},
 	}
 	for _, tc := range targets {
 		if got := shown(tc.open); got != "" {
@@ -1733,36 +1733,36 @@ func TestQuestionDraftsPerTarget(t *testing.T) {
 }
 
 func TestKeyboardNavigation(t *testing.T) {
-	a := newTestApp(t)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 
-	a.stepFile(1)
-	first := a.nav.page
-	a.stepFile(1)
-	second := a.nav.page
-	a.stepFile(1)
-	if first != (page{kindFile, "api/handler.go"}) || second != (page{kindFile, "cache/cache.go"}) || a.nav.page != second {
-		t.Errorf("files: %v, %v, then %v", first, second, a.nav.page)
+	app.stepFile(1)
+	first := app.nav.page
+	app.stepFile(1)
+	second := app.nav.page
+	app.stepFile(1)
+	if first != (page{kindFile, "api/handler.go"}) || second != (page{kindFile, "cache/cache.go"}) || app.nav.page != second {
+		t.Errorf("files: %v, %v, then %v", first, second, app.nav.page)
 	}
-	a.nav.goTo(page{kind: kindFeedback})
+	app.nav.goTo(page{kind: kindFeedback})
 
-	a.newThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
-	a.rev.Thread(a.threadID()).Messages = []review.Message{{Role: review.RoleUser, Text: "x"}}
-	a.toggleLog()
+	app.newThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
+	app.rev.Thread(app.threadID()).Messages = []review.Message{{Role: review.RoleUser, Text: "x"}}
+	app.toggleLog()
 	tt.Frame()
 	tt.Key(0, ui.KeyEscape)
-	if a.threadID() != "" || !a.logOpen {
-		t.Errorf("Escape: thread %q, log %v", a.threadID(), a.logOpen)
+	if app.threadID() != "" || !app.logOpen {
+		t.Errorf("Escape: thread %q, log %v", app.threadID(), app.logOpen)
 	}
 	tt.Frame()
 	tt.Key(0, ui.KeyEscape)
-	if a.logOpen {
+	if app.logOpen {
 		t.Error("Escape left the log open")
 	}
 	tt.Key(0, ui.KeyBack)
-	if a.nav.page != second {
-		t.Errorf("mouse back = %q", a.nav.page.String())
+	if app.nav.page != second {
+		t.Errorf("mouse back = %q", app.nav.page.String())
 	}
 
 	seen := map[string]string{}
@@ -1778,22 +1778,22 @@ func TestKeyboardNavigation(t *testing.T) {
 			walk(it.Submenu)
 		}
 	}
-	walk(a.menu().Items())
+	walk(app.menu().Items())
 	if seen["CmdOrCtrl+["] != "Back" || seen["CmdOrCtrl+P"] != "Switch Project…" || seen["CmdOrCtrl+B"] != "Switch Branch…" {
 		t.Errorf("shortcuts = %v", seen)
 	}
 }
 
 func TestPickersFromKeyboard(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	for _, b := range []string{"agent", "agent-two", "docs"} {
 		git(t, dir, "branch", b)
 	}
 	other := fixtureRepo(t)
-	a.cfg.AddRecent(other)
-	a.openRepo(dir)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.cfg.AddRecent(other)
+	app.openRepo(dir)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 
 	if err := tt.Click("Branch"); err != nil {
@@ -1806,8 +1806,8 @@ func TestPickersFromKeyboard(t *testing.T) {
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.branchesOpen || a.cmpr.head != "agent-two" {
-		t.Fatalf("open %v, head %q", a.branchesOpen, a.cmpr.head)
+	if app.branchesOpen || app.cmpr.head != "agent-two" {
+		t.Fatalf("open %v, head %q", app.branchesOpen, app.cmpr.head)
 	}
 	if !tt.Focused("Branch") {
 		t.Error("the focus did not go back to the branch button")
@@ -1815,12 +1815,12 @@ func TestPickersFromKeyboard(t *testing.T) {
 
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if !a.branchesOpen || a.branchNav.hi != slices.Index(a.cmpr.branches, "agent-two") {
-		t.Fatalf("Down on the button: open %v, highlight %d", a.branchesOpen, a.branchNav.hi)
+	if !app.branchesOpen || app.branchNav.hi != slices.Index(app.cmpr.branches, "agent-two") {
+		t.Fatalf("Down on the button: open %v, highlight %d", app.branchesOpen, app.branchNav.hi)
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if a.branchesOpen {
+	if app.branchesOpen {
 		t.Fatal("Escape left the list open")
 	}
 
@@ -1832,39 +1832,39 @@ func TestPickersFromKeyboard(t *testing.T) {
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.projectsOpen || !strings.HasSuffix(a.repo.Root, other) {
-		t.Fatalf("open %v, repo %q, want %q", a.projectsOpen, a.repo.Root, other)
+	if app.projectsOpen || !strings.HasSuffix(app.repo.Root, other) {
+		t.Fatalf("open %v, repo %q, want %q", app.projectsOpen, app.repo.Root, other)
 	}
 }
 
 // TestPickListScrollKeepsHighlight scrolls the branch list from the
 // keyboard while the pointer rests on a row.
 func TestPickListScrollKeepsHighlight(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	for i := range 30 {
-		git(t, a.repo.Root, "branch", fmt.Sprintf("b%02d", i))
+		git(t, app.repo.Root, "branch", fmt.Sprintf("b%02d", i))
 	}
-	a.openRepo(a.repo.Root)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.openRepo(app.repo.Root)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("Branch"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	r, ok := tt.Find("b25")
-	if !ok || r.H == 0 {
-		t.Fatalf("no row b25: %v", r)
+	row, ok := tt.Find("b25")
+	if !ok || row.H == 0 {
+		t.Fatalf("no row b25: %v", row)
 	}
-	tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	tt.Move(row.X+row.W/2, row.Y+row.H/2)
 	tt.Frame()
-	if got := a.cmpr.branches[a.branchNav.hi]; got != "b25" {
+	if got := app.cmpr.branches[app.branchNav.hi]; got != "b25" {
 		t.Fatalf("the pointer left the highlight on %q", got)
 	}
 	for range 20 {
 		tt.Key(0, ui.KeyUp)
 		tt.Frame()
 	}
-	if got := a.cmpr.branches[a.branchNav.hi]; got != "b05" {
+	if got := app.cmpr.branches[app.branchNav.hi]; got != "b05" {
 		t.Errorf("highlight on %q, want b05", got)
 	}
 }
@@ -1899,13 +1899,13 @@ func TestSpentContext(t *testing.T) {
 }
 
 func TestFlatFiles(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
-	if !shows(tt, "Cache keys") || a.fileOrder()[0] != "cache/cache.go" {
+	if !shows(tt, "Cache keys") || app.fileOrder()[0] != "cache/cache.go" {
 		t.Fatalf("grouped: %q", tt.Texts())
 	}
 	if err := tt.Click("Flat"); err != nil {
@@ -1913,12 +1913,12 @@ func TestFlatFiles(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "flat-files")
-	if shows(tt, "Cache keys") || !tt.HasText("api") || !a.store.LoadConfig().FlatFiles {
+	if shows(tt, "Cache keys") || !tt.HasText("api") || !app.store.LoadConfig().FlatFiles {
 		t.Errorf("flat: %q", tt.Texts())
 	}
-	a.stepFile(1)
-	if a.nav.page != (page{kindFile, "api/handler.go"}) {
-		t.Errorf("first file in flat order: %q", a.nav.page.String())
+	app.stepFile(1)
+	if app.nav.page != (page{kindFile, "api/handler.go"}) {
+		t.Errorf("first file in flat order: %q", app.nav.page.String())
 	}
 }
 
@@ -1926,22 +1926,22 @@ func TestFlatFiles(t *testing.T) {
 // long folder on a second line below it, and picks the file when its first
 // letters are typed.
 func TestFlatFileRows(t *testing.T) {
-	a := newTestApp(t)
+	app := newTestApp(t)
 	const (
 		dir  = "astrobook/src/stories/07-data-display"
 		name = "TwoColumnsSample.tsx"
 	)
-	write(t, a.repo.Root, dir+"/"+name, "export const TwoColumnsSample = 1\n")
-	write(t, a.repo.Root, "README.md", "# Demo\n\nMore.\n")
-	a.openRepo(a.repo.Root)
-	a.cfg.FlatFiles = true
-	a.sidebarW = 220
-	a.cmd("mark-viewed").run(nil, "api/handler.go")
-	a.nav.goTo(page{kindFile, "cache/cache.go"})
-	tt := ui.NewTester(a.view, 1300, 800)
+	write(t, app.repo.Root, dir+"/"+name, "export const TwoColumnsSample = 1\n")
+	write(t, app.repo.Root, "README.md", "# Demo\n\nMore.\n")
+	app.openRepo(app.repo.Root)
+	app.cfg.FlatFiles = true
+	app.sidebarW = 220
+	app.cmd("mark-viewed").run(nil, "api/handler.go")
+	app.nav.goTo(page{kindFile, "cache/cache.go"})
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
-	if r, ok := tt.Find("README.md"); ok {
-		tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	if row, ok := tt.Find("README.md"); ok {
+		tt.Move(row.X+row.W/2, row.Y+row.H/2)
 		tt.Frame()
 	}
 	snapshot(t, tt, "flat-files-narrow")
@@ -1970,28 +1970,28 @@ func TestFlatFileRows(t *testing.T) {
 	tt.Key(0, ui.KeyW)
 	tt.Frame()
 	snapshot(t, tt, "flat-files-narrow-typed")
-	if a.nav.page != (page{kindFile, dir + "/" + name}) {
-		t.Errorf("typing the name chose %q", a.nav.page.String())
+	if app.nav.page != (page{kindFile, dir + "/" + name}) {
+		t.Errorf("typing the name chose %q", app.nav.page.String())
 	}
 }
 
 // textWidth is the width of s alone, in the default font.
-func textWidth(s string) float32 {
-	tt := ui.NewTester(func(c *ui.Context) { ui.Row(c).Children(func() { ui.Text(c, s) }) }, 800, 100)
+func textWidth(text string) float32 {
+	tt := ui.NewTester(func(c *ui.Context) { ui.Row(c).Children(func() { ui.Text(c, text) }) }, 800, 100)
 	tt.Frame()
-	r, _ := tt.Find(s)
-	return r.W
+	bounds, _ := tt.Find(text)
+	return bounds.W
 }
 
 // shows tells whether the last frame shows exactly the text s.
-func shows(tt *ui.Tester, s string) bool { return slices.Contains(tt.Texts(), s) }
+func shows(tt *ui.Tester, text string) bool { return slices.Contains(tt.Texts(), text) }
 
 // TestSelectLineRange selects lines by their numbers: a click, then a
 // Shift+click.
 func TestSelectLineRange(t *testing.T) {
-	a := newTestApp(t)
-	a.nav.page = page{kindFile, "api/handler.go"}
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	app.nav.page = page{kindFile, "api/handler.go"}
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if !tt.HasText("Click a line number, then Shift+click another to select a range") {
 		t.Errorf("no hint: %q", tt.Texts())
@@ -2002,17 +2002,17 @@ func TestSelectLineRange(t *testing.T) {
 		tt.Frame()
 		tt.ClickAtWith(ui.Shift, 822, 143)
 		tt.Frame()
-		if r, ok := a.diffs["api/handler.go"].state.SelectedLines(); !ok || r.Start != 0 || r.End != 2 {
-			t.Fatalf("selected %+v, %v", r, ok)
+		if selection, ok := app.diffs["api/handler.go"].state.SelectedLines(); !ok || selection.Start != 0 || selection.End != 2 {
+			t.Fatalf("selected %+v, %v", selection, ok)
 		}
 	}
 	check := func(how string) {
 		t.Helper()
-		th := a.rev.Thread(a.threadID())
+		th := app.rev.Thread(app.threadID())
 		if th == nil || th.Anchor.Start != 1 || th.Anchor.End != 3 {
 			t.Errorf("thread from %s = %+v", how, th)
 		}
-		if _, ok := a.diffs["api/handler.go"].state.SelectedLines(); ok {
+		if _, ok := app.diffs["api/handler.go"].state.SelectedLines(); ok {
 			t.Errorf("selection kept after %s", how)
 		}
 	}
@@ -2025,7 +2025,7 @@ func TestSelectLineRange(t *testing.T) {
 	tt.Frame()
 	check("+")
 
-	a.panel = nil
+	app.panel = nil
 	tt.Frame()
 	sel()
 	if err := tt.Click("Comment on lines 1–3"); err != nil {
@@ -2037,35 +2037,35 @@ func TestSelectLineRange(t *testing.T) {
 // TestViewedFiles marks a whole group viewed, then hides the viewed
 // files from the sidebar.
 func TestViewedFiles(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
-	a.nav.page = page{kindGroup, "Cache keys"}
-	tt := ui.NewTester(a.view, 1300, 800)
+	app.nav.page = page{kindGroup, "Cache keys"}
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("Mark all as viewed"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.rev.Viewed["cache/cache.go"] || !tt.HasText("Mark all as not viewed") {
-		t.Fatalf("viewed = %v", a.rev.Viewed)
+	if !app.rev.Viewed["cache/cache.go"] || !tt.HasText("Mark all as not viewed") {
+		t.Fatalf("viewed = %v", app.rev.Viewed)
 	}
 	if err := tt.Click("Hide viewed files"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
 	snapshot(t, tt, "hide-viewed")
-	if shows(tt, "Cache keys") || !shows(tt, "API") || !a.store.LoadConfig().HideViewed {
+	if shows(tt, "Cache keys") || !shows(tt, "API") || !app.store.LoadConfig().HideViewed {
 		t.Errorf("hidden: %q", tt.Texts())
 	}
-	a.stepFile(1)
-	if a.nav.page != (page{kindFile, "api/handler.go"}) {
-		t.Errorf("next file skips the hidden one: %q", a.nav.page.String())
+	app.stepFile(1)
+	if app.nav.page != (page{kindFile, "api/handler.go"}) {
+		t.Errorf("next file skips the hidden one: %q", app.nav.page.String())
 	}
 
 	// On a group page, a file marked viewed leaves the sidebar.
-	a.nav.goTo(page{kindGroup, "API"})
+	app.nav.goTo(page{kindGroup, "API"})
 	tt.Frame()
 	if err := tt.Click("Viewed"); err != nil {
 		t.Fatal(err)
@@ -2074,26 +2074,26 @@ func TestViewedFiles(t *testing.T) {
 	if shows(tt, "handler.go") || shows(tt, "API") {
 		t.Errorf("group page: %q", tt.Texts())
 	}
-	a.rev.Viewed["api/handler.go"] = false
+	app.rev.Viewed["api/handler.go"] = false
 
 	// The open file leaves the sidebar too when it is marked viewed.
-	a.nav.goTo(page{kindFile, "api/handler.go"})
+	app.nav.goTo(page{kindFile, "api/handler.go"})
 	tt.Frame()
 	if err := tt.Click("Viewed"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.rev.Viewed["api/handler.go"] || shows(tt, "API") || !tt.HasText("All files are viewed.") {
+	if !app.rev.Viewed["api/handler.go"] || shows(tt, "API") || !tt.HasText("All files are viewed.") {
 		t.Errorf("open file: %q", tt.Texts())
 	}
 
 	// Previous file steps from the hidden open file.
-	a.rev.Viewed["cache/cache.go"] = false
-	a.stepFile(-1)
-	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
-		t.Errorf("previous file: %q", a.nav.page.String())
+	app.rev.Viewed["cache/cache.go"] = false
+	app.stepFile(-1)
+	if app.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("previous file: %q", app.nav.page.String())
 	}
-	a.rev.Viewed["cache/cache.go"] = true
+	app.rev.Viewed["cache/cache.go"] = true
 	tt.Frame()
 
 	if err := tt.Click("Hide viewed files"); err != nil {
@@ -2108,11 +2108,11 @@ func TestViewedFiles(t *testing.T) {
 // TestGroupItem opens a group from its title in the sidebar and shows
 // and hides its files with the chevron.
 func TestGroupItem(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	snapshot(t, tt, "group-items")
 	if tt.HasText("All files in group") || !shows(tt, "cache.go") {
@@ -2122,15 +2122,15 @@ func TestGroupItem(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.nav.page != (page{kindGroup, "Cache keys"}) {
-		t.Fatalf("page = %q", a.nav.page.String())
+	if app.nav.page != (page{kindGroup, "Cache keys"}) {
+		t.Fatalf("page = %q", app.nav.page.String())
 	}
 	if err := tt.Click("Hide files"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.nav.page != (page{kindGroup, "Cache keys"}) || shows(tt, "cache.go") || !shows(tt, "handler.go") {
-		t.Errorf("hidden: %q, %q", a.nav.page.String(), tt.Texts())
+	if app.nav.page != (page{kindGroup, "Cache keys"}) || shows(tt, "cache.go") || !shows(tt, "handler.go") {
+		t.Errorf("hidden: %q, %q", app.nav.page.String(), tt.Texts())
 	}
 	tt.Key(0, ui.KeyRight)
 	tt.Frame()
@@ -2147,10 +2147,10 @@ func TestGroupItem(t *testing.T) {
 // TestPickerShortcuts opens the project and branch lists from the menu
 // bar's shortcuts, with the keyboard focus in them.
 func TestPickerShortcuts(t *testing.T) {
-	a := newTestApp(t)
-	git(t, a.repo.Root, "branch", "docs")
-	a.openRepo(a.repo.Root)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	git(t, app.repo.Root, "branch", "docs")
+	app.openRepo(app.repo.Root)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	click := func(label string) {
 		var walk func(items []*mygo.MenuItem)
@@ -2162,29 +2162,29 @@ func TestPickerShortcuts(t *testing.T) {
 				walk(it.Submenu)
 			}
 		}
-		walk(a.menu().Items())
+		walk(app.menu().Items())
 		tt.Frame()
 	}
 
 	click("Switch Branch…")
-	if !a.branchesOpen {
+	if !app.branchesOpen {
 		t.Fatal("branch list closed")
 	}
 	tt.Type("docs")
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.branchesOpen || a.cmpr.head != "docs" {
-		t.Errorf("open = %v, branch = %q", a.branchesOpen, a.cmpr.head)
+	if app.branchesOpen || app.cmpr.head != "docs" {
+		t.Errorf("open = %v, branch = %q", app.branchesOpen, app.cmpr.head)
 	}
 
 	click("Switch Project…")
-	if !a.projectsOpen {
+	if !app.projectsOpen {
 		t.Fatal("project list closed")
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if a.projectsOpen {
+	if app.projectsOpen {
 		t.Error("Escape left the project list open")
 	}
 }
@@ -2192,8 +2192,8 @@ func TestPickerShortcuts(t *testing.T) {
 // TestFocusAndShortcuts moves the focus to the sidebars from the menu
 // bar and lists the shortcuts in a dialog.
 func TestFocusAndShortcuts(t *testing.T) {
-	a := newTestApp(t)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	click := func(label string) {
 		var walk func(items []*mygo.MenuItem)
@@ -2205,26 +2205,26 @@ func TestFocusAndShortcuts(t *testing.T) {
 				walk(it.Submenu)
 			}
 		}
-		walk(a.menu().Items())
+		walk(app.menu().Items())
 		tt.Frame()
 		tt.Frame()
 	}
 
 	// Focus Files opens the first file, in the list of files only.
 	click("Focus Files")
-	if !tt.Focused("Files") || a.nav.page != (page{kindFile, "api/handler.go"}) {
-		t.Errorf("files sidebar: focused %v, page %q", tt.Focused("Files"), a.nav.page.String())
+	if !tt.Focused("Files") || app.nav.page != (page{kindFile, "api/handler.go"}) {
+		t.Errorf("files sidebar: focused %v, page %q", tt.Focused("Files"), app.nav.page.String())
 	}
 	tt.Key(0, ui.KeyUp)
 	tt.Frame()
-	if a.nav.page != (page{kindGroup, "api"}) {
-		t.Errorf("Up in the files sidebar: %q", a.nav.page.String())
+	if app.nav.page != (page{kindGroup, "api"}) {
+		t.Errorf("Up in the files sidebar: %q", app.nav.page.String())
 	}
 	// It keeps the file open.
-	a.nav.goTo(page{kindFile, "cache/cache.go"})
+	app.nav.goTo(page{kindFile, "cache/cache.go"})
 	click("Focus Files")
-	if a.nav.page != (page{kindFile, "cache/cache.go"}) {
-		t.Errorf("open file: %q", a.nav.page.String())
+	if app.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("open file: %q", app.nav.page.String())
 	}
 	click("Focus Changes")
 	if !tt.Focused("Changes") {
@@ -2243,7 +2243,7 @@ func TestFocusAndShortcuts(t *testing.T) {
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if a.shortcutsOpen {
+	if app.shortcutsOpen {
 		t.Error("Escape left the dialog open")
 	}
 }
@@ -2251,9 +2251,9 @@ func TestFocusAndShortcuts(t *testing.T) {
 // TestCommandPalette runs commands from the palette: only the ones that
 // apply on the page show, and the ones used last come first.
 func TestCommandPalette(t *testing.T) {
-	a := newTestApp(t)
-	a.nav.page = page{kindFile, "api/handler.go"}
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	app.nav.page = page{kindFile, "api/handler.go"}
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	open := func() {
 		t.Helper()
@@ -2266,16 +2266,16 @@ func TestCommandPalette(t *testing.T) {
 				walk(it.Submenu)
 			}
 		}
-		walk(a.menu().Items())
+		walk(app.menu().Items())
 		tt.Frame()
 		tt.Frame()
-		if !a.paletteOpen {
+		if !app.paletteOpen {
 			t.Fatal("palette closed")
 		}
 	}
 	titles := func() []string {
 		var out []string
-		for _, cm := range a.paletteCommands() {
+		for _, cm := range app.paletteCommands() {
 			out = append(out, cm.title)
 		}
 		return out
@@ -2291,10 +2291,10 @@ func TestCommandPalette(t *testing.T) {
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.paletteOpen || !a.rev.Viewed["api/handler.go"] {
-		t.Fatalf("open = %v, viewed = %v", a.paletteOpen, a.rev.Viewed)
+	if app.paletteOpen || !app.rev.Viewed["api/handler.go"] {
+		t.Fatalf("open = %v, viewed = %v", app.paletteOpen, app.rev.Viewed)
 	}
-	if got := a.store.LoadConfig().RecentCommands; len(got) == 0 || got[0] != "mark-viewed" {
+	if got := app.store.LoadConfig().RecentCommands; len(got) == 0 || got[0] != "mark-viewed" {
 		t.Errorf("recent = %q", got)
 	}
 
@@ -2306,8 +2306,8 @@ func TestCommandPalette(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.paletteOpen || !a.logOpen {
-		t.Fatalf("open = %v, log = %v", a.paletteOpen, a.logOpen)
+	if app.paletteOpen || !app.logOpen {
+		t.Fatalf("open = %v, log = %v", app.paletteOpen, app.logOpen)
 	}
 	open()
 	if got := titles(); got[0] != "Agent Log" {
@@ -2322,8 +2322,8 @@ func TestCommandPalette(t *testing.T) {
 		t.Error("Focus Files from the palette left the files sidebar without the focus")
 	}
 	// The menu bar's commands do not count as used from the palette.
-	before := a.store.LoadConfig().RecentCommands
-	for _, it := range a.menu().Items() {
+	before := app.store.LoadConfig().RecentCommands
+	for _, it := range app.menu().Items() {
 		for _, sub := range it.Submenu {
 			if sub.Label == "Next File" {
 				sub.Click(sub, nil)
@@ -2331,18 +2331,18 @@ func TestCommandPalette(t *testing.T) {
 		}
 	}
 	tt.Frame()
-	if got := a.store.LoadConfig().RecentCommands; !slices.Equal(got, before) {
+	if got := app.store.LoadConfig().RecentCommands; !slices.Equal(got, before) {
 		t.Errorf("menu changed recent: %q, was %q", got, before)
 	}
 	open()
 	// Escape closes the palette, and only it.
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if a.paletteOpen || !a.logOpen {
-		t.Errorf("Escape: open = %v, log = %v", a.paletteOpen, a.logOpen)
+	if app.paletteOpen || !app.logOpen {
+		t.Errorf("Escape: open = %v, log = %v", app.paletteOpen, app.logOpen)
 	}
 
-	a.nav.goTo(overview)
+	app.nav.goTo(overview)
 	tt.Frame()
 	open()
 	if got := titles(); slices.Contains(got, "Mark File as Viewed") || slices.Contains(got, "Comment on File") {
@@ -2351,57 +2351,57 @@ func TestCommandPalette(t *testing.T) {
 }
 
 func TestCloseRepoForgetsTheLoad(t *testing.T) {
-	a := newTestApp(t)
-	if len(a.files) == 0 || len(a.diffs) == 0 {
-		t.Fatalf("the first load read no files: %+v", a.perLoad)
+	app := newTestApp(t)
+	if len(app.files) == 0 || len(app.diffs) == 0 {
+		t.Fatalf("the first load read no files: %+v", app.perLoad)
 	}
-	a.queue = make(chan func(), 64)
-	a.refresh()
-	if !a.loader.switching() {
+	app.queue = make(chan func(), 64)
+	app.refresh()
+	if !app.loader.switching() {
 		t.Fatal("no load runs")
 	}
 
-	a.closeRepo()
-	drain(a)
-	if !a.loader.idle() {
+	app.closeRepo()
+	drain(app)
+	if !app.loader.idle() {
 		t.Error("the load still runs")
 	}
-	if a.snap != nil || len(a.files) != 0 || len(a.diffs) != 0 {
-		t.Errorf("the closed project keeps %d files and %d diffs", len(a.files), len(a.diffs))
+	if app.snap != nil || len(app.files) != 0 || len(app.diffs) != 0 {
+		t.Errorf("the closed project keeps %d files and %d diffs", len(app.files), len(app.diffs))
 	}
 }
 
 // TestWelcomeList opens a recent project from the welcome screen with the
 // keyboard.
 func TestWelcomeList(t *testing.T) {
-	a := newTestApp(t)
-	a.cfg.AddRecent(fixtureRepo(t))
-	a.closeRepo()
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	app.cfg.AddRecent(fixtureRepo(t))
+	app.closeRepo()
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	tt.Frame()
 	snapshot(t, tt, "welcome")
 	if !tt.Focused("Projects") {
 		t.Fatal("the list has no focus")
 	}
-	want := a.cfg.Recent[1]
+	want := app.cfg.Recent[1]
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.repo == nil || a.repo.Root != want {
-		t.Fatalf("opened %v, want %s", a.repo, want)
+	if app.repo == nil || app.repo.Root != want {
+		t.Fatalf("opened %v, want %s", app.repo, want)
 	}
 }
 
 // TestShortcutSettings records shortcuts in the settings dialog: the menu
 // bar and the saved config take them, and the commands run by them.
 func TestShortcutSettings(t *testing.T) {
-	a := newTestApp(t)
-	a.nav.page = page{kindFile, "api/handler.go"}
-	tt := ui.NewTester(a.view, 1300, 800)
-	a.openSettings()
-	a.settings.tab = shortcutsTab
+	app := newTestApp(t)
+	app.nav.page = page{kindFile, "api/handler.go"}
+	tt := ui.NewTester(app.view, 1300, 800)
+	app.openSettings()
+	app.settings.tab = shortcutsTab
 	tt.Frame()
 	menuKeys := func(id string) string {
 		var keys string
@@ -2414,19 +2414,19 @@ func TestShortcutSettings(t *testing.T) {
 				walk(it.Submenu)
 			}
 		}
-		walk(a.menu().Items())
+		walk(app.menu().Items())
 		return keys
 	}
 	startRecording := func(filter, current string) {
 		t.Helper()
-		a.keysFilter = filter
+		app.keysFilter = filter
 		tt.Frame()
 		if err := tt.Click(current); err != nil {
 			t.Fatalf("%s: %v in %q", filter, err, tt.Texts())
 		}
 		tt.Frame()
 		tt.Frame()
-		if a.recording == "" {
+		if app.recording == "" {
 			t.Fatalf("%s: not recording", filter)
 		}
 	}
@@ -2435,24 +2435,24 @@ func TestShortcutSettings(t *testing.T) {
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyY)
 	tt.Frame()
 	snapshot(t, tt, "shortcut-settings")
-	if menuKeys("refresh") != "Shift+CmdOrCtrl+Y" || a.store.LoadConfig().Keys["refresh"] != "Shift+CmdOrCtrl+Y" {
-		t.Errorf("refresh: menu %q, config %v", menuKeys("refresh"), a.store.LoadConfig().Keys)
+	if menuKeys("refresh") != "Shift+CmdOrCtrl+Y" || app.store.LoadConfig().Keys["refresh"] != "Shift+CmdOrCtrl+Y" {
+		t.Errorf("refresh: menu %q, config %v", menuKeys("refresh"), app.store.LoadConfig().Keys)
 	}
 
 	startRecording("mark file as viewed", "None")
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyY)
 	tt.Frame()
 	if !tt.HasText("⇧⌘Y moved from Refresh to Mark File as Viewed.") {
-		t.Errorf("move note: %q", a.keysNote)
+		t.Errorf("move note: %q", app.keysNote)
 	}
 
 	startRecording("refresh", "None")
 	tt.Key(ui.Cmd, ui.KeyC)
 	tt.Frame()
 	if !tt.HasText("⌘C is taken by Copy, which you cannot change.") {
-		t.Errorf("taken note: %q", a.keysNote)
+		t.Errorf("taken note: %q", app.keysNote)
 	}
-	if got := a.keymap().assign("refresh", "CmdOrCtrl+Enter"); got.kind != assignTaken {
+	if got := app.keymap().assign("refresh", "CmdOrCtrl+Enter"); got.kind != assignTaken {
 		t.Errorf("a fixed key: %+v", got)
 	}
 
@@ -2469,8 +2469,8 @@ func TestShortcutSettings(t *testing.T) {
 	// Escape cancels the recording and keeps the dialog.
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if a.recording != "" || a.settings == nil || !a.settings.open {
-		t.Errorf("Escape: recording %q, settings %v", a.recording, a.settings)
+	if app.recording != "" || app.settings == nil || !app.settings.open {
+		t.Errorf("Escape: recording %q, settings %v", app.recording, app.settings)
 	}
 
 	// The focus moving away cancels the recording.
@@ -2480,35 +2480,35 @@ func TestShortcutSettings(t *testing.T) {
 	}
 	tt.Frame()
 	tt.Frame()
-	if a.recording != "" {
-		t.Errorf("focus away: recording %q", a.recording)
+	if app.recording != "" {
+		t.Errorf("focus away: recording %q", app.recording)
 	}
 
 	// A menu bar shortcut pressed while recording is the recorded one, and
 	// the next frame puts it in the menu bar.
-	a.startRecording("focus-files")
-	for _, it := range a.menu().Items() {
+	app.startRecording("focus-files")
+	for _, it := range app.menu().Items() {
 		for _, sub := range it.Submenu {
 			if sub.ID == "switch-branch" {
 				sub.Click(sub, nil)
 			}
 		}
 	}
-	if a.keymap().of("focus-files") != "CmdOrCtrl+B" || a.keymap().of("switch-branch") != "" || a.pending != "" || !a.menuDirty {
-		t.Errorf("menu key: %v, pending %q, dirty %v", a.cfg.Keys, a.pending, a.menuDirty)
+	if app.keymap().of("focus-files") != "CmdOrCtrl+B" || app.keymap().of("switch-branch") != "" || app.pending != "" || !app.menuDirty {
+		t.Errorf("menu key: %v, pending %q, dirty %v", app.cfg.Keys, app.pending, app.menuDirty)
 	}
 
 	// A command outside the menu bar runs by its keys where it applies.
-	a.settings.open = false
+	app.settings.open = false
 	tt.Frame()
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyY)
 	tt.Frame()
-	if !a.rev.Viewed["api/handler.go"] {
+	if !app.rev.Viewed["api/handler.go"] {
 		t.Error("the shortcut did not mark the file viewed")
 	}
 	// Also while the focus is in a text field.
-	a.setViewed([]string{"api/handler.go"}, false)
-	a.keymap().assign("mark-viewed", "CmdOrCtrl+Shift+U")
+	app.setViewed([]string{"api/handler.go"}, false)
+	app.keymap().assign("mark-viewed", "CmdOrCtrl+Shift+U")
 	if err := tt.Click("Comment on file"); err != nil {
 		t.Fatal(err)
 	}
@@ -2518,76 +2518,76 @@ func TestShortcutSettings(t *testing.T) {
 	tt.Frame()
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyU)
 	tt.Frame()
-	if !a.rev.Viewed["api/handler.go"] || a.drafts[a.threadID()] != "hello" {
-		t.Errorf("in a field: viewed %v, draft %q", a.rev.Viewed, a.drafts[a.threadID()])
+	if !app.rev.Viewed["api/handler.go"] || app.drafts[app.threadID()] != "hello" {
+		t.Errorf("in a field: viewed %v, draft %q", app.rev.Viewed, app.drafts[app.threadID()])
 	}
 }
 
 // TestScopeShowsAtOnce keeps the shown changes while the next ones load,
 // then shows them with the files of the code snippets already read.
 func TestScopeShowsAtOnce(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
 		{Title: "A", Text: "a", Refs: []review.Ref{{File: "api/handler.go", Start: 1, End: 2}}},
 	}}}
-	a.queue = make(chan func(), 64)
-	a.reload()
-	if !a.loader.switching() || len(a.files) == 0 {
-		t.Fatalf("switching %v, files %d", a.loader.switching(), len(a.files))
+	app.queue = make(chan func(), 64)
+	app.reload()
+	if !app.loader.switching() || len(app.files) == 0 {
+		t.Fatalf("switching %v, files %d", app.loader.switching(), len(app.files))
 	}
-	(<-a.queue)()
-	if !a.loader.idle() || len(a.files) == 0 {
-		t.Fatalf("idle %v, files %d", a.loader.idle(), len(a.files))
+	(<-app.queue)()
+	if !app.loader.idle() || len(app.files) == 0 {
+		t.Fatalf("idle %v, files %d", app.loader.idle(), len(app.files))
 	}
-	if d := a.diffs["api/handler.go"]; d == nil || d.state == nil {
+	if diff := app.diffs["api/handler.go"]; diff == nil || diff.state == nil {
 		t.Error("the file of the snippet is not read with the changes")
 	}
-	if d := a.diffs["cache/cache.go"]; d == nil || !d.loading {
+	if diff := app.diffs["cache/cache.go"]; diff == nil || !diff.loading {
 		t.Error("the other file is read before the changes show")
 	}
 
 	// A new scope shows once its changes are read.
-	old := a.scope
-	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
-	a.setScope(commit)
-	if a.scope != old || a.chosen != commit || !a.loader.switching() {
-		t.Fatalf("scope %+v, chosen %+v, switching %v", a.scope, a.chosen, a.loader.switching())
+	old := app.scope
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: app.commits.rows[0].SHA}
+	app.setScope(commit)
+	if app.scope != old || app.chosen != commit || !app.loader.switching() {
+		t.Fatalf("scope %+v, chosen %+v, switching %v", app.scope, app.chosen, app.loader.switching())
 	}
-	waitLoad(t, a, "the commit")
-	if a.scope != commit || a.nav.page != overview {
-		t.Errorf("scope %+v, page %q", a.scope, a.nav.page.String())
+	waitLoad(t, app, "the commit")
+	if app.scope != commit || app.nav.page != overview {
+		t.Errorf("scope %+v, page %q", app.scope, app.nav.page.String())
 	}
 }
 
 // TestScopeLoadsInOrder opens a commit while a project is still read,
 // and refreshes while the commit is.
 func TestScopeLoadsInOrder(t *testing.T) {
-	a := newTestApp(t)
-	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
-	a.queue = make(chan func(), 64)
-	a.openRepo(a.repo.Root)
-	a.setScope(commit)
-	waitLoad(t, a, "the commit")
-	if a.scope != commit || a.rev.Scope != commit {
-		t.Fatalf("scope %+v, review of %+v", a.scope, a.rev.Scope)
+	app := newTestApp(t)
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: app.commits.rows[0].SHA}
+	app.queue = make(chan func(), 64)
+	app.openRepo(app.repo.Root)
+	app.setScope(commit)
+	waitLoad(t, app, "the commit")
+	if app.scope != commit || app.rev.Scope != commit {
+		t.Fatalf("scope %+v, review of %+v", app.scope, app.rev.Scope)
 	}
 
 	uncommitted := gitx.Scope{Kind: gitx.ScopeUncommitted}
-	a.setScope(uncommitted)
-	a.refresh()
-	waitLoad(t, a, "the uncommitted changes")
-	if a.scope != uncommitted || a.chosen != uncommitted {
-		t.Errorf("scope %+v, chosen %+v", a.scope, a.chosen)
+	app.setScope(uncommitted)
+	app.refresh()
+	waitLoad(t, app, "the uncommitted changes")
+	if app.scope != uncommitted || app.chosen != uncommitted {
+		t.Errorf("scope %+v, chosen %+v", app.scope, app.chosen)
 	}
 }
 
 // TestSettingsRoom leaves as much room under a tall settings dialog as
 // above it.
 func TestSettingsRoom(t *testing.T) {
-	a := newTestApp(t)
-	tt := ui.NewTester(a.view, 1300, 800)
-	a.openSettings()
-	a.settings.tab = shortcutsTab
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
+	app.openSettings()
+	app.settings.tab = shortcutsTab
 	tt.Frame()
 	snapshot(t, tt, "settings-room")
 	// 15% of the window above the dialog, and Done about 26 points
@@ -2601,11 +2601,11 @@ func TestSettingsRoom(t *testing.T) {
 // TestOverlaysCloseEachOther opens a dialog or a list over another from
 // the menu bar: the one under it closes.
 func TestOverlaysCloseEachOther(t *testing.T) {
-	a := newTestApp(t)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	menu := func(id string) {
-		for _, it := range a.menu().Items() {
+		for _, it := range app.menu().Items() {
 			for _, sub := range it.Submenu {
 				if sub.ID == id {
 					sub.Click(sub, nil)
@@ -2618,26 +2618,26 @@ func TestOverlaysCloseEachOther(t *testing.T) {
 
 	menu("palette")
 	menu("settings")
-	if a.paletteOpen || a.settings == nil {
-		t.Fatalf("palette %v, settings %v", a.paletteOpen, a.settings)
+	if app.paletteOpen || app.settings == nil {
+		t.Fatalf("palette %v, settings %v", app.paletteOpen, app.settings)
 	}
 	menu("switch-project")
-	if a.settings != nil || !a.projectsOpen {
-		t.Fatalf("settings %v, projects %v", a.settings, a.projectsOpen)
+	if app.settings != nil || !app.projectsOpen {
+		t.Fatalf("settings %v, projects %v", app.settings, app.projectsOpen)
 	}
 	menu("switch-branch")
-	if a.projectsOpen || !a.branchesOpen {
-		t.Fatalf("projects %v, branches %v", a.projectsOpen, a.branchesOpen)
+	if app.projectsOpen || !app.branchesOpen {
+		t.Fatalf("projects %v, branches %v", app.projectsOpen, app.branchesOpen)
 	}
 	// Its own shortcut still closes a list.
 	menu("switch-branch")
-	if a.branchesOpen {
+	if app.branchesOpen {
 		t.Error("the branch list stayed open")
 	}
 	// Every other command closes the palette too.
 	menu("palette")
 	menu("refresh")
-	if a.paletteOpen {
+	if app.paletteOpen {
 		t.Error("Refresh left the palette open")
 	}
 }
@@ -2645,14 +2645,14 @@ func TestOverlaysCloseEachOther(t *testing.T) {
 // TestOverlayFocus opens lists and dialogs over the palette: each takes
 // the keyboard focus. Cmd+1 puts it on the page.
 func TestOverlayFocus(t *testing.T) {
-	a := newTestApp(t)
-	git(t, a.repo.Root, "branch", "docs")
-	a.openRepo(a.repo.Root)
-	a.cfg.AddRecent(fixtureRepo(t))
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	git(t, app.repo.Root, "branch", "docs")
+	app.openRepo(app.repo.Root)
+	app.cfg.AddRecent(fixtureRepo(t))
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	menu := func(id string) {
-		for _, it := range a.menu().Items() {
+		for _, it := range app.menu().Items() {
 			for _, sub := range it.Submenu {
 				if sub.ID == id {
 					sub.Click(sub, nil)
@@ -2665,19 +2665,19 @@ func TestOverlayFocus(t *testing.T) {
 
 	menu("palette")
 	menu("switch-project")
-	hi := a.projectNav.hi
+	hi := app.projectNav.hi
 	tt.Key(0, ui.KeyUp)
 	tt.Frame()
-	if !tt.Focused("Projects") || a.projectNav.hi == hi {
-		t.Errorf("project list: focused %v, highlight %d then %d", tt.Focused("Projects"), hi, a.projectNav.hi)
+	if !tt.Focused("Projects") || app.projectNav.hi == hi {
+		t.Errorf("project list: focused %v, highlight %d then %d", tt.Focused("Projects"), hi, app.projectNav.hi)
 	}
 
 	menu("palette")
 	menu("switch-branch")
 	tt.Type("docs")
 	tt.Frame()
-	if a.branchQuery != "docs" {
-		t.Errorf("branch filter %q", a.branchQuery)
+	if app.branchQuery != "docs" {
+		t.Errorf("branch filter %q", app.branchQuery)
 	}
 
 	menu("settings")
@@ -2691,33 +2691,33 @@ func TestOverlayFocus(t *testing.T) {
 	// From the list of files, Cmd+1 moves the focus to the page.
 	menu("focus-files")
 	menu("go-overview")
-	if tt.Focused("Files") || a.nav.page != overview {
-		t.Fatalf("files focused %v, page %q", tt.Focused("Files"), a.nav.page.String())
+	if tt.Focused("Files") || app.nav.page != overview {
+		t.Fatalf("files focused %v, page %q", tt.Focused("Files"), app.nav.page.String())
 	}
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if a.nav.page != overview {
-		t.Errorf("Down moved the sidebar to %q", a.nav.page.String())
+	if app.nav.page != overview {
+		t.Errorf("Down moved the sidebar to %q", app.nav.page.String())
 	}
 }
 
 // TestReviewGroupOnHover shows a group card's Review group button while
 // the pointer is over the card.
 func TestReviewGroupOnHover(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	tt.Move(1, 790)
 	tt.Frame()
 	snapshot(t, tt, "groups-hidden")
-	r, ok := tt.Find("Review group")
+	button, ok := tt.Find("Review group")
 	if !ok {
 		t.Fatalf("no button: %q", tt.Texts())
 	}
-	tt.Move(r.X-300, r.Y+r.H/2)
+	tt.Move(button.X-300, button.Y+button.H/2)
 	tt.Frame()
 	tt.Frame()
 	snapshot(t, tt, "groups-hover")
@@ -2725,65 +2725,65 @@ func TestReviewGroupOnHover(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.nav.page != (page{kindGroup, "Cache keys"}) {
-		t.Errorf("page %q", a.nav.page.String())
+	if app.nav.page != (page{kindGroup, "Cache keys"}) {
+		t.Errorf("page %q", app.nav.page.String())
 	}
 }
 
 // TestFocusPage moves the keyboard focus from the list of files to the
 // page: the overview's scroll, or a file's diff.
 func TestFocusPage(t *testing.T) {
-	a := newTestApp(t)
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	run := func(id string) {
-		a.queueCommand(id)
+		app.queueCommand(id)
 		tt.Frame()
 		tt.Frame()
 		tt.Frame()
 	}
-	a.nav.goTo(overview)
+	app.nav.goTo(overview)
 	run("focus-files")
-	want := a.nav.page
+	want := app.nav.page
 	run("focus-page")
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if tt.Focused("Files") || a.nav.page != want {
-		t.Errorf("overview: files focused %v, page %q", tt.Focused("Files"), a.nav.page.String())
+	if tt.Focused("Files") || app.nav.page != want {
+		t.Errorf("overview: files focused %v, page %q", tt.Focused("Files"), app.nav.page.String())
 	}
 
-	a.nav.goTo(page{kindFile, "api/handler.go"})
+	app.nav.goTo(page{kindFile, "api/handler.go"})
 	run("focus-files")
 	run("focus-page")
-	if tt.Focused("Files") || !tt.Focused("New text") || a.refocus != "" {
-		t.Errorf("file page: files focused %v, diff focused %v, refocus %q", tt.Focused("Files"), tt.Focused("New text"), a.refocus)
+	if tt.Focused("Files") || !tt.Focused("New text") || app.refocus != "" {
+		t.Errorf("file page: files focused %v, diff focused %v, refocus %q", tt.Focused("Files"), tt.Focused("New text"), app.refocus)
 	}
 }
 
 // TestAllFiles opens the diffs of every file on one page, under the titles
 // of their groups, and marks them all viewed.
 func TestAllFiles(t *testing.T) {
-	a := newTestApp(t)
-	a.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
-	tt := ui.NewTester(a.view, 1300, 800)
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
 	if err := tt.Click("All files diff"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Advance(time.Second)
-	if a.nav.page != (page{kind: kindAll}) {
-		t.Fatalf("page %q", a.nav.page.String())
+	if app.nav.page != (page{kind: kindAll}) {
+		t.Fatalf("page %q", app.nav.page.String())
 	}
 	snapshot(t, tt, "all-files")
 	var ys []float32
 	for _, want := range []string{"1. Cache keys", "cache/cache.go", "2. API", "api/handler.go"} {
-		r, ok := tt.Find(want)
+		label, ok := tt.Find(want)
 		if !ok {
 			t.Fatalf("page lacks %q; texts %q", want, tt.Texts())
 		}
-		ys = append(ys, r.Y)
+		ys = append(ys, label.Y)
 	}
 	if !slices.IsSorted(ys) {
 		t.Errorf("not in review order: %v", ys)
@@ -2792,11 +2792,11 @@ func TestAllFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.rev.Viewed["cache/cache.go"] || !a.rev.Viewed["api/handler.go"] {
-		t.Errorf("viewed %v", a.rev.Viewed)
+	if !app.rev.Viewed["cache/cache.go"] || !app.rev.Viewed["api/handler.go"] {
+		t.Errorf("viewed %v", app.rev.Viewed)
 	}
 
-	a.cfg.FlatFiles = true
+	app.cfg.FlatFiles = true
 	tt.Frame()
 	if tt.HasText("1. Cache keys") || !tt.HasText("api/handler.go") || !tt.HasText("cache/cache.go") {
 		t.Errorf("flat page texts %q", tt.Texts())
@@ -2806,9 +2806,9 @@ func TestAllFiles(t *testing.T) {
 // TestFoldFileCards folds a card when its file is marked viewed, unfolds
 // it when the mark goes, and folds it on a click.
 func TestFoldFileCards(t *testing.T) {
-	a := newTestApp(t)
-	a.nav.goTo(page{kind: kindAll})
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newTestApp(t)
+	app.nav.goTo(page{kind: kindAll})
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Advance(time.Second)
 	diffs := func() int { return strings.Count(strings.Join(tt.Texts(), "\n"), "Old text") }
 	if diffs() != 2 {
@@ -2822,13 +2822,13 @@ func TestFoldFileCards(t *testing.T) {
 		tt.Frame()
 	}
 	click("Viewed")
-	if !a.rev.Viewed[a.fileNames()[0]] || diffs() != 1 {
+	if !app.rev.Viewed[app.fileNames()[0]] || diffs() != 1 {
 		t.Fatalf("viewed card not folded; texts %q", tt.Texts())
 	}
 	snapshot(t, tt, "folded-card")
-	a.cmd("mark-not-viewed").run(nil, a.fileNames()[0])
+	app.cmd("mark-not-viewed").run(nil, app.fileNames()[0])
 	tt.Frame()
-	if a.rev.Viewed[a.fileNames()[0]] || diffs() != 2 {
+	if app.rev.Viewed[app.fileNames()[0]] || diffs() != 2 {
 		t.Fatalf("not viewed card folded; texts %q", tt.Texts())
 	}
 	click("Fold")
@@ -2846,18 +2846,18 @@ func TestFoldFileCards(t *testing.T) {
 func TestBigFileStartsFolded(t *testing.T) {
 	dir := fixtureRepo(t)
 	lines := func(n int) string {
-		var b strings.Builder
+		var builder strings.Builder
 		for i := range n {
-			fmt.Fprintf(&b, "line %d\n", i)
+			fmt.Fprintf(&builder, "line %d\n", i)
 		}
-		return b.String()
+		return builder.String()
 	}
 	write(t, dir, "big.txt", lines(1001))
 	write(t, dir, "edge.txt", lines(1000))
-	a := newApp(store.Store{Dir: t.TempDir()})
-	a.openRepo(dir)
-	a.nav.goTo(page{kind: kindAll})
-	tt := ui.NewTester(a.view, 1300, 800)
+	app := newApp(store.Store{Dir: t.TempDir()})
+	app.openRepo(dir)
+	app.nav.goTo(page{kind: kindAll})
+	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Advance(time.Second)
 	// Each card has a fold button: Unfold on a folded card, Fold on one open.
 	folds := func() []string {
@@ -2884,7 +2884,7 @@ func TestBigFileStartsFolded(t *testing.T) {
 // longFilePage opens the page of all files, with the deleted long.txt
 // first and the modified more.txt after it. header finds the header of
 // long.txt, as its badge shows there alone.
-func longFilePage(t *testing.T) (a *app, tt *ui.Tester, header func() ui.Rect) {
+func longFilePage(t *testing.T) (app *app, tt *ui.Tester, header func() ui.Rect) {
 	dir := fixtureRepo(t)
 	var long strings.Builder
 	for i := range 300 {
@@ -2898,20 +2898,20 @@ func longFilePage(t *testing.T) (a *app, tt *ui.Tester, header func() ui.Rect) {
 		t.Fatal(err)
 	}
 	write(t, dir, "more.txt", long.String()+long.String())
-	a = newApp(store.Store{Dir: t.TempDir()})
-	a.openRepo(dir)
-	a.nav.goTo(page{kind: kindAll})
-	tt = ui.NewTester(a.view, 1300, 800)
+	app = newApp(store.Store{Dir: t.TempDir()})
+	app.openRepo(dir)
+	app.nav.goTo(page{kind: kindAll})
+	tt = ui.NewTester(app.view, 1300, 800)
 	tt.Advance(time.Second)
 	header = func() ui.Rect {
 		t.Helper()
-		r, ok := tt.Find("deleted")
+		badge, ok := tt.Find("deleted")
 		if !ok {
 			t.Fatalf("texts %q", tt.Texts())
 		}
-		return r
+		return badge
 	}
-	return a, tt, header
+	return app, tt, header
 }
 
 // TestStickyFileHeader scrolls the page of all files into a long diff:
@@ -2923,8 +2923,8 @@ func TestStickyFileHeader(t *testing.T) {
 		tt.Wheel(650, 400, 0, dy)
 		tt.Advance(time.Second)
 		// A label scrolled out of the page reports the part of it that shows.
-		if r := header(); r.Y >= start.Y || r.H != start.H {
-			t.Errorf("header of long.txt at %v after scrolling by %v, at %v before", r, dy, start)
+		if scrolled := header(); scrolled.Y >= start.Y || scrolled.H != start.H {
+			t.Errorf("header of long.txt at %v after scrolling by %v, at %v before", scrolled, dy, start)
 		}
 	}
 	snapshot(t, tt, "sticky-header")
@@ -2941,16 +2941,16 @@ func TestPushPinnedHeader(t *testing.T) {
 	for range 100 {
 		tt.Wheel(650, 400, 0, 20)
 		tt.Advance(100 * time.Millisecond)
-		r, ok := tt.Find("deleted")
+		first, ok := tt.Find("deleted")
 		next, nok := tt.Find("modified")
-		if !ok || !nok || r.H != full.H || next.H != full.H {
+		if !ok || !nok || first.H != full.H || next.H != full.H {
 			continue
 		}
 		// A header is about 46 high, with a gap of 24 after its card.
-		if d := next.Y - r.Y; d < 46+24 {
-			t.Fatalf("header of more.txt %v below the header of long.txt, at %v", d, r)
+		if gap := next.Y - first.Y; gap < 46+24 {
+			t.Fatalf("header of more.txt %v below the header of long.txt, at %v", gap, first)
 		}
-		if next.Y < r.Y+200 {
+		if next.Y < first.Y+200 {
 			pushed = true
 		}
 	}
@@ -2962,15 +2962,15 @@ func TestPushPinnedHeader(t *testing.T) {
 // TestFoldPinnedCard folds a card while its header is pinned: the folded
 // card stays at the top of the page, with the next card under it.
 func TestFoldPinnedCard(t *testing.T) {
-	a, tt, header := longFilePage(t)
+	app, tt, header := longFilePage(t)
 	tt.Wheel(650, 400, 0, 1000)
 	tt.Advance(time.Second)
 	pinned := header()
-	a.cmd("mark-viewed").run(nil, "long.txt")
+	app.cmd("mark-viewed").run(nil, "long.txt")
 	tt.Frame()
 	tt.Advance(time.Second)
-	if r := header(); r != pinned {
-		t.Errorf("header of long.txt at %v after folding, at %v before", r, pinned)
+	if folded := header(); folded != pinned {
+		t.Errorf("header of long.txt at %v after folding, at %v before", folded, pinned)
 	}
 	next, ok := tt.Find("modified")
 	if !ok || next.Y < pinned.Y || next.Y > pinned.Y+120 {
@@ -2982,35 +2982,35 @@ func TestFoldPinnedCard(t *testing.T) {
 // next to the review of the changes that replaced it. The page shows the
 // code the snippets had while the review was current.
 func TestEarlierReviewPage(t *testing.T) {
-	a := newTestApp(t)
-	dir := a.repo.Root
+	app := newTestApp(t)
+	dir := app.repo.Root
 	answer := "```json\n" + `{"summary": "Lower-case keys.", "steps": [{"title": "Keys", "text": "a", "refs": [{"file": "cache/cache.go", "side": "new", "start": 5, "end": 7, "why": "the call"}]}], "groups": []}` + "\n```"
-	fake := newFakeAgent(t, a)
+	fake := newFakeAgent(t, app)
 	fake.answer("s1", answer)
-	a.cfg.DeeperAhead = false
-	a.queue = make(chan func(), 64)
-	a.generateOverview()
-	pump(t, a, "the overview", func() bool { return !a.busy(store.TargetOverview) })
+	app.cfg.DeeperAhead = false
+	app.queue = make(chan func(), 64)
+	app.generateOverview()
+	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
 	git(t, dir, "stash", "-u", "-q")
 	write(t, dir, "output.json", "{}\n")
-	a.refresh()
-	waitLoad(t, a, "the other changes")
+	app.refresh()
+	waitLoad(t, app, "the other changes")
 	fake.answer("s2", "```json\n"+`{"summary": "Other change.", "steps": [{"title": "B", "text": "b"}], "groups": []}`+"\n```")
-	a.generateOverview()
-	pump(t, a, "the second overview", func() bool { return !a.busy(store.TargetOverview) })
-	tt := ui.NewTester(a.view, 1300, 900)
+	app.generateOverview()
+	pump(t, app, "the second overview", func() bool { return !app.busy(store.TargetOverview) })
+	tt := ui.NewTester(app.view, 1300, 900)
 	tt.Frame()
 	if !tt.HasText("Other change.") || !tt.HasText("Earlier reviews") {
-		t.Fatalf("archived %v; texts %q", a.reviews.Earlier(), tt.Texts())
+		t.Fatalf("archived %v; texts %q", app.reviews.Earlier(), tt.Texts())
 	}
 
-	if r, ok := tt.Find("Lower-case keys."); ok {
-		tt.Move(r.X, r.Y+r.H/2)
+	if label, ok := tt.Find("Lower-case keys."); ok {
+		tt.Move(label.X, label.Y+label.H/2)
 		tt.Frame()
 		snapshot(t, tt, "earlier-hover")
 	}
-	if r, ok := tt.Find("Delete"); ok {
-		tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	if button, ok := tt.Find("Delete"); ok {
+		tt.Move(button.X+button.W/2, button.Y+button.H/2)
 		tt.Frame()
 		snapshot(t, tt, "earlier-hover-delete")
 	}
@@ -3038,8 +3038,8 @@ func TestEarlierReviewPage(t *testing.T) {
 // TestEarlierReviewInFull shows an archived review with its deeper
 // walkthroughs, its questions with their follow-ups, and its comments.
 func TestEarlierReviewInFull(t *testing.T) {
-	a := newTestApp(t)
-	rev := review.New(a.repo.Root, gitx.Scope{Kind: gitx.ScopeArchived, From: "p1"})
+	app := newTestApp(t)
+	rev := review.New(app.repo.Root, gitx.Scope{Kind: gitx.ScopeArchived, From: "p1"})
 	rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "Root summary.",
 		Steps: []review.Step{{Title: "Root step", Refs: []review.Ref{
@@ -3054,12 +3054,12 @@ func TestEarlierReviewInFull(t *testing.T) {
 	}
 	th := rev.AddThread(review.Anchor{Kind: review.AnchorLines, File: "cache/cache.go", Side: review.SideNew, Start: 6, End: 6, Quote: "\treturn strings.ToLower(key)"})
 	th.Messages = []review.Message{{Role: review.RoleUser, Text: "Keep keys as they are."}}
-	if err := a.store.SaveReview(rev); err != nil {
+	if err := app.store.SaveReview(rev); err != nil {
 		t.Fatal(err)
 	}
-	a.reload()
-	a.nav.goTo(page{kindArchived, "p1"})
-	tt := ui.NewTester(a.view, 1300, 2400)
+	app.reload()
+	app.nav.goTo(page{kindArchived, "p1"})
+	tt := ui.NewTester(app.view, 1300, 2400)
 	tt.Frame()
 	for _, want := range []string{
 		"Root summary.", "Deeper: Root step", "1. Deeper step", "Question: Why lower case?", "Callers compare keys.",
@@ -3070,20 +3070,20 @@ func TestEarlierReviewInFull(t *testing.T) {
 			t.Errorf("page lacks %q", want)
 		}
 	}
-	if n := slices.Index(tt.Texts(), "1. Root step"); n < 0 || slices.Contains(tt.Texts()[n+1:], "1. Root step") {
-		t.Errorf("the root step shows %v times; texts %q", n, tt.Texts())
+	if index := slices.Index(tt.Texts(), "1. Root step"); index < 0 || slices.Contains(tt.Texts()[index+1:], "1. Root step") {
+		t.Errorf("the root step shows %v times; texts %q", index, tt.Texts())
 	}
 }
 
 // TestOverviewShowsCommitMessage opens a commit: the overview shows its
 // subject and body, and the uncommitted changes show neither.
 func TestOverviewShowsCommitMessage(t *testing.T) {
-	a := newTestApp(t)
-	a.queue = make(chan func(), 64)
-	git(t, a.repo.Root, "commit", "-qam", "Lower the cache keys\n\nKeys differ only by case in some callers.")
-	a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
-	waitLoad(t, a, "the commit")
-	tt := ui.NewTester(a.view, 1300, 900)
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	git(t, app.repo.Root, "commit", "-qam", "Lower the cache keys\n\nKeys differ only by case in some callers.")
+	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
+	waitLoad(t, app, "the commit")
+	tt := ui.NewTester(app.view, 1300, 900)
 	tt.Frame()
 	snapshot(t, tt, "overview-commit")
 	for _, want := range []string{"Lower the cache keys", "Keys differ only by case in some callers."} {
@@ -3091,8 +3091,8 @@ func TestOverviewShowsCommitMessage(t *testing.T) {
 			t.Errorf("overview lacks %q", want)
 		}
 	}
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	waitLoad(t, a, "the uncommitted changes")
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	waitLoad(t, app, "the uncommitted changes")
 	tt.Frame()
 	if tt.HasText("Keys differ only by case in some callers.") {
 		t.Error("the uncommitted changes show the commit body")
@@ -3103,50 +3103,50 @@ func TestOverviewShowsCommitMessage(t *testing.T) {
 // opens the uncommitted changes while it runs. The commit's row shows the
 // run, then that the overview is ready, until the user opens the commit.
 func TestCommitRowShowsOverviewState(t *testing.T) {
-	a := newTestApp(t)
-	a.queue = make(chan func(), 64)
-	a.cfg.DeeperAhead = false
-	fake := newFakeAgent(t, a)
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	app.cfg.DeeperAhead = false
+	fake := newFakeAgent(t, app)
 	fake.answer("o1", sessionsAnswer)
 	fake.hold()
-	pump(t, a, "the commit list", func() bool { return len(a.commits.rows) > 0 })
-	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.commits.rows[0].SHA}
-	a.setScope(commit)
-	waitLoad(t, a, "the commit")
-	rev := a.rev
-	overviewOf := func() targetState { return a.targets.state(rev, review.TargetOverview) }
-	a.generateOverview()
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	waitLoad(t, a, "the uncommitted changes")
+	pump(t, app, "the commit list", func() bool { return len(app.commits.rows) > 0 })
+	commit := gitx.Scope{Kind: gitx.ScopeCommit, Commit: app.commits.rows[0].SHA}
+	app.setScope(commit)
+	waitLoad(t, app, "the commit")
+	rev := app.rev
+	overviewOf := func() targetState { return app.targets.state(rev, review.TargetOverview) }
+	app.generateOverview()
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	waitLoad(t, app, "the uncommitted changes")
 	if got := overviewOf(); got.status != targetRunning {
 		t.Fatalf("state while the overview runs = %+v", got)
 	}
-	tt := ui.NewTester(a.view, 1300, 900)
+	tt := ui.NewTester(app.view, 1300, 900)
 	tt.Frame()
 	snapshot(t, tt, "commit-row-writing")
 	fake.release()
-	pump(t, a, "the overview", func() bool { return !overviewOf().busy() })
+	pump(t, app, "the overview", func() bool { return !overviewOf().busy() })
 	if got := overviewOf(); got != (targetState{status: targetAnswered, unseen: true}) {
 		t.Fatalf("state after the overview = %+v, want answered and unseen", got)
 	}
 	tt.Frame()
 	snapshot(t, tt, "commit-row-ready")
-	if a.targets.unseenIn(a.rev) {
+	if app.targets.unseenIn(app.rev) {
 		t.Error("the uncommitted changes have an unseen answer")
 	}
-	a.setScope(commit)
-	waitLoad(t, a, "the commit again")
+	app.setScope(commit)
+	waitLoad(t, app, "the commit again")
 	if overviewOf().unseen {
 		t.Error("the overview stays unseen after opening the commit")
 	}
 
 	fake.fail(errors.New("claude: executable file not found in $PATH"))
 	fake.hold()
-	a.generateOverview()
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
-	waitLoad(t, a, "the uncommitted changes")
+	app.generateOverview()
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	waitLoad(t, app, "the uncommitted changes")
 	fake.release()
-	pump(t, a, "the failed overview", func() bool { return !overviewOf().busy() })
+	pump(t, app, "the failed overview", func() bool { return !overviewOf().busy() })
 	if got := overviewOf(); got != (targetState{status: targetFailed, unseen: true}) {
 		t.Errorf("state after a failed overview = %+v, want failed and unseen", got)
 	}

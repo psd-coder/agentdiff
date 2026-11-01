@@ -19,26 +19,26 @@ type Snapshot struct {
 	untracked []string
 }
 
-func (r *Repo) Snapshot(ctx context.Context, s Scope) (*Snapshot, error) {
-	v, err := r.resolve(ctx, s)
+func (repo *Repo) Snapshot(ctx context.Context, scope Scope) (*Snapshot, error) {
+	revisions, err := repo.resolve(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
-	snap := &Snapshot{repo: r, revs: v}
-	if v.worktree() {
-		if snap.untracked, err = r.untrackedPaths(ctx); err != nil {
+	snap := &Snapshot{repo: repo, revs: revisions}
+	if revisions.worktree() {
+		if snap.untracked, err = repo.untrackedPaths(ctx); err != nil {
 			return nil, err
 		}
 	}
 	return snap, nil
 }
 
-func (s *Snapshot) Changes(ctx context.Context) ([]FileChange, error) {
-	changes, err := s.repo.trackedChanges(ctx, s.revs)
+func (snap *Snapshot) Changes(ctx context.Context) ([]FileChange, error) {
+	changes, err := snap.repo.trackedChanges(ctx, snap.revs)
 	if err != nil {
 		return nil, err
 	}
-	untracked, err := s.repo.untrackedChanges(s.untracked)
+	untracked, err := snap.repo.untrackedChanges(snap.untracked)
 	if err != nil {
 		return nil, err
 	}
@@ -47,49 +47,49 @@ func (s *Snapshot) Changes(ctx context.Context) ([]FileChange, error) {
 	return changes, nil
 }
 
-func (s *Snapshot) DiffStat(ctx context.Context) (string, error) {
-	out, err := s.repo.diff(ctx, s.revs, "--stat=200")
+func (snap *Snapshot) DiffStat(ctx context.Context) (string, error) {
+	out, err := snap.repo.diff(ctx, snap.revs, "--stat=200")
 	if err != nil {
 		return "", err
 	}
-	untracked, err := s.repo.untrackedChanges(s.untracked)
+	untracked, err := snap.repo.untrackedChanges(snap.untracked)
 	if err != nil {
 		return "", err
 	}
-	var b strings.Builder
-	b.Write(out)
+	var stat strings.Builder
+	stat.Write(out)
 	for _, c := range untracked {
-		b.WriteString(untrackedStatLine(c))
+		stat.WriteString(untrackedStatLine(c))
 	}
-	return b.String(), nil
+	return stat.String(), nil
 }
 
 const statWidth = 40
 
-func untrackedStatLine(c FileChange) string {
-	if c.Binary {
-		return fmt.Sprintf(" %s | Bin (untracked)\n", c.Path)
+func untrackedStatLine(fileChange FileChange) string {
+	if fileChange.Binary {
+		return fmt.Sprintf(" %s | Bin (untracked)\n", fileChange.Path)
 	}
-	return fmt.Sprintf(" %s | %d %s (untracked)\n", c.Path, c.Additions, strings.Repeat("+", min(c.Additions, statWidth)))
+	return fmt.Sprintf(" %s | %d %s (untracked)\n", fileChange.Path, fileChange.Additions, strings.Repeat("+", min(fileChange.Additions, statWidth)))
 }
 
 // Contents reads the old and the new side of f.
-func (s *Snapshot) Contents(ctx context.Context, f FileChange) (old, new string, err error) {
-	if err := checkFile(f); err != nil {
+func (snap *Snapshot) Contents(ctx context.Context, fileChange FileChange) (old, new string, err error) {
+	if err := checkFile(fileChange); err != nil {
 		return "", "", err
 	}
-	return s.repo.sides(ctx, s.revs, f, s.blob(ctx))
+	return snap.repo.sides(ctx, snap.revs, fileChange, snap.blob(ctx))
 }
 
 // File reads path as it is at the end of the snapshot, for a file that
 // is not in its changes.
-func (s *Snapshot) File(ctx context.Context, path string) (string, error) {
+func (snap *Snapshot) File(ctx context.Context, path string) (string, error) {
 	if err := checkPath(path); err != nil {
 		return "", err
 	}
-	return s.repo.newSide(ctx, s.revs, path, s.blob(ctx))
+	return snap.repo.newSide(ctx, snap.revs, path, snap.blob(ctx))
 }
 
-func (s *Snapshot) blob(ctx context.Context) func(rev, path string) (string, error) {
-	return func(rev, path string) (string, error) { return s.repo.blob(ctx, rev, path) }
+func (snap *Snapshot) blob(ctx context.Context) func(rev, path string) (string, error) {
+	return func(rev, path string) (string, error) { return snap.repo.blob(ctx, rev, path) }
 }

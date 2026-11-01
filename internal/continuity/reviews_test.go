@@ -32,59 +32,59 @@ var (
 
 // saved is a review with a done overview, labelled by its Markdown.
 func saved(scope gitx.Scope, label, patch string, files map[string]string) *review.Review {
-	r := review.New(repo, scope)
-	r.Overview = &review.Overview{Markdown: label, PatchID: patch, Files: files, Generated: time.Unix(1, 0)}
-	return r
+	rev := review.New(repo, scope)
+	rev.Overview = &review.Overview{Markdown: label, PatchID: patch, Files: files, Generated: time.Unix(1, 0)}
+	return rev
 }
 
 // load is a load of scope, whose review is cur, that read the changes
 // with the fingerprint fp.
 func load(rs *Reviews, scope gitx.Scope, cur *review.Review, fp gitx.Fingerprint) *Load {
-	l := rs.Begin(repo, scope, cur)
-	l.Read(fp, nil)
-	return l
+	scopeLoad := rs.Begin(repo, scope, cur)
+	scopeLoad.Read(fp, nil)
+	return scopeLoad
 }
 
 func current(scope gitx.Scope) *review.Review {
 	return saved(scope, "current", "pa", map[string]string{"a.go": "ida"})
 }
 
-func removeReview(t *testing.T, s store.Store, scope gitx.Scope) {
+func removeReview(t *testing.T, storage store.Store, scope gitx.Scope) {
 	t.Helper()
-	if err := s.DeleteReview(repo, scope); err != nil {
+	if err := storage.DeleteReview(repo, scope); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func withViewed(r *review.Review, paths ...string) *review.Review {
+func withViewed(rev *review.Review, paths ...string) *review.Review {
 	for _, p := range paths {
-		r.Viewed[p] = true
+		rev.Viewed[p] = true
 	}
-	return r
+	return rev
 }
 
-func viewedFiles(r *review.Review) []string {
-	return slices.Sorted(maps.Keys(r.Viewed))
+func viewedFiles(rev *review.Review) []string {
+	return slices.Sorted(maps.Keys(rev.Viewed))
 }
 
 // archivedReviews are n archived reviews with the ids a0, a1 and so on.
-func archivedReviews(n int) []*review.Review {
+func archivedReviews(count int) []*review.Review {
 	var out []*review.Review
-	for i := range n {
+	for i := range count {
 		id := fmt.Sprint("a", i)
 		out = append(out, saved(gitx.ArchivedScope(id), id, id, nil))
 	}
 	return out
 }
 
-func label(r *review.Review) string {
-	if r == nil {
+func label(rev *review.Review) string {
+	if rev == nil {
 		return ""
 	}
-	if r.Overview == nil {
+	if rev.Overview == nil {
 		return "empty"
 	}
-	return r.Overview.Markdown
+	return rev.Overview.Markdown
 }
 
 // TestDecide pins what a load does with the review of its scope, one row
@@ -108,7 +108,7 @@ func TestDecide(t *testing.T) {
 		restore   bool
 		relaunch  bool
 		startOver bool
-		afterRead func(t *testing.T, rs *Reviews, s store.Store)
+		afterRead func(subtest *testing.T, rs *Reviews, storage store.Store)
 
 		rev, archived string
 		dropped       []string
@@ -266,18 +266,18 @@ func TestDecide(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := store.Store{Dir: t.TempDir()}
+			storage := store.Store{Dir: t.TempDir()}
 			for _, r := range tc.others {
-				if err := s.SaveReview(r); err != nil {
+				if err := storage.SaveReview(r); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if tc.cur != nil && !tc.unsaved {
-				if err := s.SaveReview(tc.cur); err != nil {
+				if err := storage.SaveReview(tc.cur); err != nil {
 					t.Fatal(err)
 				}
 			}
-			rs := New(s)
+			rs := New(storage)
 			for _, sc := range tc.open {
 				rs.Of(repo, sc)
 			}
@@ -303,17 +303,17 @@ func TestDecide(t *testing.T) {
 				}
 				cur = out.Rev
 				if tc.relaunch {
-					rs = New(s)
+					rs = New(storage)
 					cur = rs.Of(repo, tc.scope)
 				}
 			}
 
-			l := rs.Begin(repo, tc.scope, cur)
-			l.Read(tc.fp, tc.fpErr)
+			scopeLoad := rs.Begin(repo, tc.scope, cur)
+			scopeLoad.Read(tc.fp, tc.fpErr)
 			if tc.afterRead != nil {
-				tc.afterRead(t, rs, s)
+				tc.afterRead(t, rs, storage)
 			}
-			out := l.Decide(cur, busy)
+			out := scopeLoad.Decide(cur, busy)
 
 			if got := label(out.Rev); got != tc.rev {
 				t.Errorf("review = %q, want %q", got, tc.rev)
@@ -339,8 +339,8 @@ func TestDecide(t *testing.T) {
 				t.Errorf("earlier = %q, want %q", earlier, tc.earlier)
 			}
 			var from gitx.ScopeKind
-			if f := rs.AdoptedFrom(); f != nil {
-				from = f.Kind
+			if adoptedFrom := rs.AdoptedFrom(); adoptedFrom != nil {
+				from = adoptedFrom.Kind
 			}
 			if from != tc.from {
 				t.Errorf("adopted from %q, want %q", from, tc.from)
@@ -349,12 +349,12 @@ func TestDecide(t *testing.T) {
 				t.Errorf("err = %v, want error %v", out.Err, tc.err)
 			}
 			for _, sc := range tc.gone {
-				if !s.LoadReview(repo, sc).Empty() {
+				if !storage.LoadReview(repo, sc).Empty() {
 					t.Errorf("the review of %s stayed in the store", sc.Key())
 				}
 			}
 			for _, sc := range tc.stored {
-				if s.LoadReview(repo, sc).Empty() {
+				if storage.LoadReview(repo, sc).Empty() {
 					t.Errorf("the review of %s is gone from the store", sc.Key())
 				}
 			}
@@ -362,7 +362,7 @@ func TestDecide(t *testing.T) {
 				if got := viewedFiles(out.Rev); !slices.Equal(got, tc.wantViewed) {
 					t.Errorf("viewed = %q, want %q", got, tc.wantViewed)
 				}
-				if got := viewedFiles(s.LoadReview(repo, tc.scope)); !slices.Equal(got, tc.wantViewed) {
+				if got := viewedFiles(storage.LoadReview(repo, tc.scope)); !slices.Equal(got, tc.wantViewed) {
 					t.Errorf("saved viewed = %q, want %q", got, tc.wantViewed)
 				}
 			}
@@ -385,23 +385,23 @@ func TestLocated(t *testing.T) {
 		{"the drifted review went to the archive", disjoint, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := store.Store{Dir: t.TempDir()}
+			storage := store.Store{Dir: t.TempDir()}
 			for _, r := range []*review.Review{current(uncommitted), saved(gitx.ArchivedScope("pq"), "earlier", "pq", nil)} {
-				if err := s.SaveReview(r); err != nil {
+				if err := storage.SaveReview(r); err != nil {
 					t.Fatal(err)
 				}
 			}
-			rs := New(s)
+			rs := New(storage)
 			cur := rs.Of(repo, uncommitted)
-			l := load(rs, uncommitted, cur, tc.fp)
-			l.Decide(cur, func(*review.Review) bool { return false })
-			movedTo := l.located(map[string]string{"": "c2", "pq": "c3"}, map[string]string{"pq": "c4"})
+			scopeLoad := load(rs, uncommitted, cur, tc.fp)
+			scopeLoad.Decide(cur, func(*review.Review) bool { return false })
+			movedTo := scopeLoad.located(map[string]string{"": "c2", "pq": "c3"}, map[string]string{"pq": "c4"})
 			if movedTo != tc.movedTo {
 				t.Errorf("moved to %q, want %q", movedTo, tc.movedTo)
 			}
-			e := rs.Find("pq")
-			if e == nil || e.MovedTo != "c3" || e.Probably != "c4" {
-				t.Errorf("earlier review %+v, want moved to c3, probably in c4", e)
+			earlier := rs.Find("pq")
+			if earlier == nil || earlier.MovedTo != "c3" || earlier.Probably != "c4" {
+				t.Errorf("earlier review %+v, want moved to c3, probably in c4", earlier)
 			}
 		})
 	}
@@ -410,13 +410,13 @@ func TestLocated(t *testing.T) {
 // TestDecideAfterRun archives the review and takes the source over on the
 // first load after the agent run on the source ends.
 func TestDecideAfterRun(t *testing.T) {
-	s := store.Store{Dir: t.TempDir()}
+	storage := store.Store{Dir: t.TempDir()}
 	for _, r := range []*review.Review{current(uncommitted), saved(commit, "commit", "pb", nil)} {
-		if err := s.SaveReview(r); err != nil {
+		if err := storage.SaveReview(r); err != nil {
 			t.Fatal(err)
 		}
 	}
-	rs := New(s)
+	rs := New(storage)
 	src := rs.Of(repo, commit)
 	running := true
 	busy := func(r *review.Review) bool { return running && r == src }
@@ -437,11 +437,11 @@ func TestDecideAfterRun(t *testing.T) {
 // while its changes go away and come back: it goes to the archive, comes
 // back with its changes, and once restored stays without them.
 func TestArchiveComesBack(t *testing.T) {
-	s := store.Store{Dir: t.TempDir()}
-	if err := s.SaveReview(current(uncommitted)); err != nil {
+	storage := store.Store{Dir: t.TempDir()}
+	if err := storage.SaveReview(current(uncommitted)); err != nil {
 		t.Fatal(err)
 	}
-	rs := New(s)
+	rs := New(storage)
 	never := func(*review.Review) bool { return false }
 	reload := func(fp gitx.Fingerprint) Outcome {
 		t.Helper()
@@ -484,7 +484,7 @@ func TestMoveTo(t *testing.T) {
 		// saved is the saved review of the commit, and open edits the
 		// commit's review in memory.
 		saved *review.Review
-		open  func(r *review.Review)
+		open  func(rev *review.Review)
 		busy  bool
 		moved bool
 	}{
@@ -495,16 +495,16 @@ func TestMoveTo(t *testing.T) {
 		{name: "leaves a commit whose open review an agent writes into", open: func(*review.Review) {}, busy: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := store.Store{Dir: t.TempDir()}
+			storage := store.Store{Dir: t.TempDir()}
 			for _, r := range []*review.Review{saved(archived, "earlier", "pb", nil), tc.saved} {
 				if r == nil {
 					continue
 				}
-				if err := s.SaveReview(r); err != nil {
+				if err := storage.SaveReview(r); err != nil {
 					t.Fatal(err)
 				}
 			}
-			rs := New(s)
+			rs := New(storage)
 			var open *review.Review
 			if tc.open != nil {
 				open = rs.Of(repo, commit)
@@ -524,7 +524,7 @@ func TestMoveTo(t *testing.T) {
 			if next.Open == nil || *next.Open != commit {
 				t.Errorf("opens %v, want the commit", next.Open)
 			}
-			if got := label(s.LoadReview(repo, commit)) == "earlier"; got != tc.moved {
+			if got := label(storage.LoadReview(repo, commit)) == "earlier"; got != tc.moved {
 				t.Errorf("the commit holds the earlier review: %v", got)
 			}
 			if got := rs.Find("pb") == nil; got != tc.moved {
@@ -554,11 +554,11 @@ func TestRestore(t *testing.T) {
 		{name: "fails when the earlier review is gone from the store", gone: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := store.Store{Dir: t.TempDir()}
-			if err := s.SaveReview(saved(archived, "earlier", "pb", nil)); err != nil {
+			storage := store.Store{Dir: t.TempDir()}
+			if err := storage.SaveReview(saved(archived, "earlier", "pb", nil)); err != nil {
 				t.Fatal(err)
 			}
-			rs := New(s)
+			rs := New(storage)
 			open := rs.Of(repo, archived)
 			cur := rs.Of(repo, uncommitted)
 			load(rs, uncommitted, cur, same).Decide(cur, func(*review.Review) bool { return false })
@@ -567,7 +567,7 @@ func TestRestore(t *testing.T) {
 			}
 			busy := func(r *review.Review) bool { return tc.busy && r == open }
 			if tc.gone {
-				removeReview(t, s, archived)
+				removeReview(t, storage, archived)
 			}
 
 			next := rs.Restore(rs.Find("pb"), cur, busy)
@@ -576,8 +576,8 @@ func TestRestore(t *testing.T) {
 				t.Fatalf("left = %v, err = %v, want restored %v", next.Left, next.Err, tc.restored)
 			}
 			if !tc.restored {
-				if next.Rev != nil || next.Open != nil || rs.Find("pb") == nil || !s.LoadReview(repo, uncommitted).Empty() ||
-					!tc.gone && label(s.LoadReview(repo, archived)) != "earlier" {
+				if next.Rev != nil || next.Open != nil || rs.Find("pb") == nil || !storage.LoadReview(repo, uncommitted).Empty() ||
+					!tc.gone && label(storage.LoadReview(repo, archived)) != "earlier" {
 					t.Errorf("a refused restore changed something: %+v", next)
 				}
 				return
@@ -588,7 +588,7 @@ func TestRestore(t *testing.T) {
 			if next.Open == nil || *next.Open != uncommitted {
 				t.Errorf("opens %v, want the uncommitted changes", next.Open)
 			}
-			if got := s.LoadReview(repo, uncommitted); label(got) != "earlier" || !got.Kept {
+			if got := storage.LoadReview(repo, uncommitted); label(got) != "earlier" || !got.Kept {
 				t.Errorf("saved review %q, kept %v", label(got), got.Kept)
 			}
 		})
@@ -607,11 +607,11 @@ func TestDelete(t *testing.T) {
 		{name: "keeps the earlier review when the store fails", broken: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := store.Store{Dir: t.TempDir()}
-			if err := s.SaveReview(saved(archived, "earlier", "pb", nil)); err != nil {
+			storage := store.Store{Dir: t.TempDir()}
+			if err := storage.SaveReview(saved(archived, "earlier", "pb", nil)); err != nil {
 				t.Fatal(err)
 			}
-			rs := New(s)
+			rs := New(storage)
 			cur := rs.Of(repo, uncommitted)
 			load(rs, uncommitted, cur, same).Decide(cur, func(*review.Review) bool { return false })
 			if tc.broken {
@@ -632,7 +632,7 @@ func TestDelete(t *testing.T) {
 			if got := rs.Find("pb") == nil; got != tc.deleted {
 				t.Errorf("left the list: %v", got)
 			}
-			if got := s.LoadReview(repo, archived).Empty(); got != tc.deleted {
+			if got := storage.LoadReview(repo, archived).Empty(); got != tc.deleted {
 				t.Errorf("gone from the store: %v", got)
 			}
 		})
@@ -650,11 +650,11 @@ func TestLocate(t *testing.T) {
 	writeFile(t, dir, "a.go", "package a\n\nvar A = 1\n")
 	gitIn(t, dir, "commit", "-qam", "second")
 	second := gitIn(t, dir, "rev-parse", "HEAD")
-	r, err := gitx.Open(dir)
+	gitRepo, err := gitx.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids, err := r.CommitPatchIDs(t.Context(), "", "", 10)
+	ids, err := gitRepo.CommitPatchIDs(t.Context(), "", "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,36 +668,36 @@ func TestLocate(t *testing.T) {
 		t.Fatalf("no patch id for the second commit in %v", ids)
 	}
 
-	s := store.Store{Dir: t.TempDir()}
+	storage := store.Store{Dir: t.TempDir()}
 	for _, rev := range []*review.Review{
 		saved(gitx.ArchivedScope(patch), "moved", patch, map[string]string{"a.go": "x"}),
 		saved(gitx.ArchivedScope("pz"), "edited", "pz", map[string]string{"a.go": "y"}),
 	} {
-		if err := s.SaveReview(rev); err != nil {
+		if err := storage.SaveReview(rev); err != nil {
 			t.Fatal(err)
 		}
 	}
-	rs := New(s)
+	rs := New(storage)
 	cur := rs.Of(repo, uncommitted)
-	l := load(rs, uncommitted, cur, same)
-	l.Decide(cur, func(*review.Review) bool { return false })
+	uncommittedLoad := load(rs, uncommitted, cur, same)
+	uncommittedLoad.Decide(cur, func(*review.Review) bool { return false })
 
-	located := l.Locate(t.Context(), r)
+	located := uncommittedLoad.Locate(t.Context(), gitRepo)
 	if located == nil {
 		t.Fatal("nothing to look for")
 	}
 	if movedTo := located(); movedTo != "" {
 		t.Errorf("moved to %q for a review that did not drift", movedTo)
 	}
-	if e := rs.Find(patch); e == nil || e.MovedTo != second {
-		t.Errorf("the review with the patch of the second commit: %+v, want moved to %s", e, second)
+	if earlier := rs.Find(patch); earlier == nil || earlier.MovedTo != second {
+		t.Errorf("the review with the patch of the second commit: %+v, want moved to %s", earlier, second)
 	}
-	if e := rs.Find("pz"); e == nil || e.MovedTo != "" || e.Probably != second {
-		t.Errorf("the review of other changes to a.go: %+v, want probably in %s", e, second)
+	if earlier := rs.Find("pz"); earlier == nil || earlier.MovedTo != "" || earlier.Probably != second {
+		t.Errorf("the review of other changes to a.go: %+v, want probably in %s", earlier, second)
 	}
 
 	commitLoad := load(rs, commit, rs.Of(repo, commit), same)
-	if commitLoad.Locate(t.Context(), r) != nil {
+	if commitLoad.Locate(t.Context(), gitRepo) != nil {
 		t.Error("a commit load without earlier reviews looks for commits")
 	}
 }
@@ -721,16 +721,16 @@ func TestRescope(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rs := New(store.Store{Dir: t.TempDir()})
-			r := rs.Of(repo, tc.from)
-			if got := rs.Rescope(r, tc.to); got != tc.ok {
+			rev := rs.Of(repo, tc.from)
+			if got := rs.Rescope(rev, tc.to); got != tc.ok {
 				t.Fatalf("Rescope = %v, want %v", got, tc.ok)
 			}
 			want := tc.from
 			if tc.ok {
 				want = tc.to
 			}
-			if r.Scope != want {
-				t.Errorf("scope %+v, want %+v", r.Scope, want)
+			if rev.Scope != want {
+				t.Errorf("scope %+v, want %+v", rev.Scope, want)
 			}
 		})
 	}

@@ -11,38 +11,38 @@ import (
 // newTestTargets follows a test runner. The targets in onScreen are on
 // screen.
 func newTestTargets() (*targets, *runner, *fakeStream, map[string]bool) {
-	r, f := newTestRunner()
+	agentRunner, stream := newTestRunner()
 	onScreen := map[string]bool{}
-	return newTargets(r, func(_ *review.Review, target string) bool { return onScreen[target] }), r, f, onScreen
+	return newTargets(agentRunner, func(_ *review.Review, target string) bool { return onScreen[target] }), agentRunner, stream, onScreen
 }
 
-func startThread(r *runner, rev *review.Review, th *review.Thread) {
-	r.start(review.ThreadExchange(rev, th, runnerCfg, nil, "", "Why?"), "Thread", "", nil)
+func startThread(agentRunner *runner, rev *review.Review, th *review.Thread) {
+	agentRunner.start(review.ThreadExchange(rev, th, runnerCfg, nil, "", "Why?"), "Thread", "", nil)
 }
 
 func failed(msg string) agent.Event { return agent.Event{Kind: agent.EventError, Err: errors.New(msg)} }
 
 func TestTargetStateRunBeatsSavedFailure(t *testing.T) {
-	ts, r, _, _ := newTestTargets()
+	ts, agentRunner, _, _ := newTestTargets()
 	rev := newRunnerReview()
 	rev.Overview = &review.Overview{Markdown: "Old.", Err: "boom"}
 	if got := ts.state(rev, review.TargetOverview); got != (targetState{status: targetFailed}) {
 		t.Fatalf("before the run: %+v", got)
 	}
-	r.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil), "Overview", "", nil)
+	agentRunner.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil), "Overview", "", nil)
 	if got := ts.state(rev, review.TargetOverview); got.status != targetRunning || !got.busy() {
 		t.Errorf("during the run: %+v", got)
 	}
 }
 
 func TestTargetStateQueued(t *testing.T) {
-	ts, r, _, _ := newTestTargets()
+	ts, agentRunner, _, _ := newTestTargets()
 	rev := newRunnerReview()
-	w := writeAhead(r, rev, maxAhead+1)
-	if got := ts.state(rev, w[maxAhead].ID); got.status != targetQueued || !got.busy() {
+	walks := writeAhead(agentRunner, rev, maxAhead+1)
+	if got := ts.state(rev, walks[maxAhead].ID); got.status != targetQueued || !got.busy() {
 		t.Errorf("the walk past the slots: %+v", got)
 	}
-	if got := ts.state(rev, w[0].ID); got.status != targetRunning {
+	if got := ts.state(rev, walks[0].ID); got.status != targetRunning {
 		t.Errorf("the first walk: %+v", got)
 	}
 }
@@ -51,7 +51,7 @@ func TestTargetStateUnseen(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		onScreen bool
-		end      func(t *testing.T, r *runner, f *fakeStream, rev *review.Review, th *review.Thread)
+		end      func(subtest *testing.T, agentRunner *runner, stream *fakeStream, rev *review.Review, th *review.Thread)
 		want     targetState
 	}{
 		{
@@ -85,12 +85,12 @@ func TestTargetStateUnseen(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ts, r, f, onScreen := newTestTargets()
+			ts, agentRunner, stream, onScreen := newTestTargets()
 			rev := newRunnerReview()
 			th := rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
 			onScreen[th.ID] = tc.onScreen
-			startThread(r, rev, th)
-			tc.end(t, r, f, rev, th)
+			startThread(agentRunner, rev, th)
+			tc.end(t, agentRunner, stream, rev, th)
 			if got := ts.state(rev, th.ID); got != tc.want {
 				t.Errorf("state = %+v, want %+v", got, tc.want)
 			}
@@ -102,28 +102,28 @@ func TestTargetStateUnseen(t *testing.T) {
 }
 
 func TestWriteAheadWalkEndsWithoutUnseenMark(t *testing.T) {
-	ts, r, f, _ := newTestTargets()
+	ts, agentRunner, stream, _ := newTestTargets()
 	rev := newRunnerReview()
-	w := writeAhead(r, rev, 1)[0]
-	f.last(t, rev, w.ID).onEvent(done("Answer."))
-	if got := ts.state(rev, w.ID); got != (targetState{status: targetAnswered}) {
+	walk := writeAhead(agentRunner, rev, 1)[0]
+	stream.last(t, rev, walk.ID).onEvent(done("Answer."))
+	if got := ts.state(rev, walk.ID); got != (targetState{status: targetAnswered}) {
 		t.Errorf("state = %+v", got)
 	}
 }
 
 func TestSeenClearsTheUnseenMark(t *testing.T) {
-	ts, r, f, _ := newTestTargets()
+	ts, agentRunner, stream, _ := newTestTargets()
 	rev := newRunnerReview()
-	a, b := rev.AddThread(review.Anchor{}), rev.AddThread(review.Anchor{})
-	for _, th := range []*review.Thread{a, b} {
-		startThread(r, rev, th)
-		f.last(t, rev, th.ID).onEvent(done("Because."))
+	first, second := rev.AddThread(review.Anchor{}), rev.AddThread(review.Anchor{})
+	for _, th := range []*review.Thread{first, second} {
+		startThread(agentRunner, rev, th)
+		stream.last(t, rev, th.ID).onEvent(done("Because."))
 	}
-	ts.seen(rev, a.ID)
-	if ts.state(rev, a.ID).unseen || !ts.state(rev, b.ID).unseen || !ts.unseenIn(rev) {
-		t.Fatalf("after opening a: a unseen %v, b unseen %v", ts.state(rev, a.ID).unseen, ts.state(rev, b.ID).unseen)
+	ts.seen(rev, first.ID)
+	if ts.state(rev, first.ID).unseen || !ts.state(rev, second.ID).unseen || !ts.unseenIn(rev) {
+		t.Fatalf("after opening a: a unseen %v, b unseen %v", ts.state(rev, first.ID).unseen, ts.state(rev, second.ID).unseen)
 	}
-	rev.DeleteThread(b.ID)
+	rev.DeleteThread(second.ID)
 	if ts.unseenIn(rev) {
 		t.Error("a deleted thread keeps its review unseen")
 	}

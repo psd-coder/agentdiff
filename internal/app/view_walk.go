@@ -29,91 +29,91 @@ type reveal struct {
 
 // walkthrough shows a summary, its steps and its sections. parent is the
 // walk they belong to, empty for the overview.
-func (a *app) walkthrough(c *ui.Context, parent string, w *review.Walkthrough) {
-	if w.Summary != "" {
-		ui.Text(c, w.Summary).FontSize(15).Selectable()
+func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.Walkthrough) {
+	if walkthrough.Summary != "" {
+		ui.Text(ctx, walkthrough.Summary).FontSize(15).Selectable()
 	}
-	for i, s := range w.Steps {
-		a.stepCard(c.Key(fmt.Sprintf("step-%s-%d", parent, i)), parent, i, s)
+	for i, s := range walkthrough.Steps {
+		app.stepCard(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i)), parent, i, s)
 	}
-	t := c.Theme()
-	for si, sec := range w.Sections {
+	theme := ctx.Theme()
+	for si, sec := range walkthrough.Sections {
 		if sec.Title != "" {
-			ui.Text(c.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title).FontSize(18).Bold().Margin(8, 0, 0, 0)
+			ui.Text(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title).FontSize(18).Bold().Margin(8, 0, 0, 0)
 		}
 		for i, it := range sec.Items {
-			ui.Column(c.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, t.Border).Children(func() {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, it.Title).Bold().Grow(1)
-					a.sectionThreads(c, a.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1))), it.Text)
+			ui.Column(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, theme.Border).Children(func() {
+				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(ctx, it.Title).Bold().Grow(1)
+					app.sectionThreads(ctx, app.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1))), it.Text)
 				})
 				if it.Text != "" {
-					markdown.View(c, it.Text, &a.md)
+					markdown.View(ctx, it.Text, &app.md)
 				}
 				for ri, r := range it.Refs {
-					a.refView(c.Key(fmt.Sprintf("ref-%d", ri)), r)
+					app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r)
 				}
 			})
 		}
 	}
 }
 
-func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
-	t := c.Theme()
-	ui.Column(c).Gap(10).Padding(16, 20).Radius(10).Background(t.Surface).Border(1, t.Border).Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, fmt.Sprintf("%d. %s", i+1, s.Title)).FontSize(16).Bold().Grow(1)
-			a.sectionThreads(c, a.pathLabel(parent, s.Title), s.Text)
+func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.Step) {
+	theme := ctx.Theme()
+	ui.Column(ctx).Gap(10).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border).Children(func() {
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(ctx, fmt.Sprintf("%d. %s", index+1, step.Title)).FontSize(16).Bold().Grow(1)
+			app.sectionThreads(ctx, app.pathLabel(parent, step.Title), step.Text)
 		})
-		if s.Text != "" {
-			markdown.View(c, s.Text, &a.md)
+		if step.Text != "" {
+			markdown.View(ctx, step.Text, &app.md)
 		}
-		for ri, r := range s.Refs {
-			a.refView(c.Key(fmt.Sprintf("ref-%d", ri)), r)
+		for ri, r := range step.Refs {
+			app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r)
 		}
 		var deeper *review.Walk
 		var asked []*review.Walk
-		for _, w := range a.rev.WalksOn(parent, i) {
+		for _, w := range app.rev.WalksOn(parent, index) {
 			if w.Question == "" && deeper == nil {
 				deeper = w
 			} else {
 				asked = append(asked, w)
 			}
 		}
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 			if deeper != nil {
-				ui.Button(c, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { a.nav.goTo(page{kindWalk, deeper.ID}) })
-				if a.busy(deeper.ID) {
-					ui.Spinner(c).Size(12, 12)
+				ui.Button(ctx, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { app.nav.goTo(page{kindWalk, deeper.ID}) })
+				if app.busy(deeper.ID) {
+					ui.Spinner(ctx).Size(12, 12)
 				}
 			} else {
-				ui.PrimaryButton(c, "Go deeper").Tooltip("A walkthrough of this step, one level closer to the code").OnClick(func() { a.deeper(parent, i, "") })
+				ui.PrimaryButton(ctx, "Go deeper").Tooltip("A walkthrough of this step, one level closer to the code").OnClick(func() { app.deeper(parent, index, "") })
 			}
-			ui.Button(c, "Ask about this step").Tooltip("Ask in the side panel").OnClick(func() { a.askAbout(parent, i) })
+			ui.Button(ctx, "Ask about this step").Tooltip("Ask in the side panel").OnClick(func() { app.askAbout(parent, index) })
 		})
 		for _, w := range asked {
-			a.walkRow(c, w)
+			app.walkRow(ctx, w)
 		}
 	})
 }
 
 // walkRow links to a walk from the page above it.
-func (a *app) walkRow(c *ui.Context, w *review.Walk) {
-	t := c.Theme()
-	row := ui.ButtonBase(c.Key("walk-"+w.ID)).Padding(8, 12).Gap(8).Radius(8).Border(1, t.Border).AlignItems(ui.Center)
+func (app *app) walkRow(ctx *ui.Context, walk *review.Walk) {
+	theme := ctx.Theme()
+	row := ui.ButtonBase(ctx.Key("walk-"+walk.ID)).Padding(8, 12).Gap(8).Radius(8).Border(1, theme.Border).AlignItems(ui.Center)
 	if row.Hovered() {
-		row.Background(t.SurfaceHover)
+		row.Background(theme.SurfaceHover)
 	}
 	row.Children(func() {
-		ui.Text(c, "›").TextColor(t.Accent)
-		ui.Text(c, a.rev.WalkTitle(w)).SingleLine().Shrink(1).Grow(1)
-		targetMark(c, a.state(w.ID))
+		ui.Text(ctx, "›").TextColor(theme.Accent)
+		ui.Text(ctx, app.rev.WalkTitle(walk)).SingleLine().Shrink(1).Grow(1)
+		targetMark(ctx, app.state(walk.ID))
 	})
 	if row.Clicked() {
-		if w.Question != "" {
-			a.openQuestion(w.ID)
+		if walk.Question != "" {
+			app.openQuestion(walk.ID)
 		} else {
-			a.nav.goTo(page{kindWalk, w.ID})
+			app.nav.goTo(page{kindWalk, walk.ID})
 		}
 	}
 }
@@ -121,10 +121,10 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 // pathLabel names a step or an item of a section for the threads about
 // it: the titles of the walks above it, then its own titles. For an item
 // of the overview, this is the section title and the item title.
-func (a *app) pathLabel(parent string, titles ...string) string {
+func (app *app) pathLabel(parent string, titles ...string) string {
 	var parts []string
-	for _, w := range a.rev.WalkPath(parent) {
-		parts = append(parts, a.rev.WalkTitle(w))
+	for _, w := range app.rev.WalkPath(parent) {
+		parts = append(parts, app.rev.WalkTitle(w))
 	}
 	return strings.Join(append(parts, titles...), " › ")
 }
@@ -139,73 +139,73 @@ type snippet struct {
 	missing string
 }
 
-func (a *app) snippetOf(r review.Ref) snippet {
-	if a.diffs[r.File] == nil {
-		a.readExtra(r.File)
+func (app *app) snippetOf(ref review.Ref) snippet {
+	if app.diffs[ref.File] == nil {
+		app.readExtra(ref.File)
 	}
-	s, _ := a.loadedSnippet(r)
-	return s
+	snippet, _ := app.loadedSnippet(ref)
+	return snippet
 }
 
 // loadedSnippet is the snippet of a reference from the files read so
 // far. It reports false when its file is not read yet.
-func (a *app) loadedSnippet(r review.Ref) (snippet, bool) {
-	if d := a.diffs[r.File]; d != nil {
-		if d.state == nil {
-			return snippet{loading: d.loading, missing: d.err}, true
+func (app *app) loadedSnippet(ref review.Ref) (snippet, bool) {
+	if diff := app.diffs[ref.File]; diff != nil {
+		if diff.state == nil {
+			return snippet{loading: diff.loading, missing: diff.err}, true
 		}
-		buf := d.state.New
-		if r.Side == review.SideOld {
-			buf = d.state.Old
+		buf := diff.state.New
+		if ref.Side == review.SideOld {
+			buf = diff.state.Old
 		}
-		n := buf.LineCount()
-		if n > 0 && buf.Line(n-1) == "" {
-			n--
+		lineCount := buf.LineCount()
+		if lineCount > 0 && buf.Line(lineCount-1) == "" {
+			lineCount--
 		}
-		s := cut(n, buf.Line, r)
-		s.inDiff = true
-		if s.missing == "" {
-			hunks := d.state.Hunks()
-			for i := range s.lines {
-				s.changed[i] = inHunk(hunks, r.Side, r.Start-1+i)
+		snippet := cut(lineCount, buf.Line, ref)
+		snippet.inDiff = true
+		if snippet.missing == "" {
+			hunks := diff.state.Hunks()
+			for i := range snippet.lines {
+				snippet.changed[i] = inHunk(hunks, ref.Side, ref.Start-1+i)
 			}
 		}
-		return s, true
+		return snippet, true
 	}
-	f := a.extra[r.File]
-	if f == nil {
+	file := app.extra[ref.File]
+	if file == nil {
 		return snippet{}, false
 	}
-	if f.loading || f.err != "" {
-		return snippet{loading: f.loading, missing: f.err}, true
+	if file.loading || file.err != "" {
+		return snippet{loading: file.loading, missing: file.err}, true
 	}
-	return cut(len(f.lines), func(i int) string { return f.lines[i] }, r), true
+	return cut(len(file.lines), func(i int) string { return file.lines[i] }, ref), true
 }
 
 // savedSnippet is the snippet of a reference from the code the review
 // saved, for a review whose changes are gone.
-func savedSnippet(r review.Ref) snippet {
-	if len(r.Code) == 0 {
+func savedSnippet(ref review.Ref) snippet {
+	if len(ref.Code) == 0 {
 		return snippet{missing: "The code of this snippet was not saved with the review."}
 	}
-	var s snippet
-	for _, l := range r.Code {
-		s.lines = append(s.lines, l.Text)
-		s.changed = append(s.changed, l.Changed)
+	var snippet snippet
+	for _, l := range ref.Code {
+		snippet.lines = append(snippet.lines, l.Text)
+		snippet.changed = append(snippet.changed, l.Changed)
 	}
-	return s
+	return snippet
 }
 
-func cut(count int, line func(int) string, r review.Ref) snippet {
-	if r.Start > count {
+func cut(count int, line func(int) string, ref review.Ref) snippet {
+	if ref.Start > count {
 		return snippet{missing: fmt.Sprintf("The file has %d lines", count)}
 	}
-	var s snippet
-	for i := r.Start - 1; i < min(r.End, count); i++ {
-		s.lines = append(s.lines, line(i))
+	var snippet snippet
+	for i := ref.Start - 1; i < min(ref.End, count); i++ {
+		snippet.lines = append(snippet.lines, line(i))
 	}
-	s.changed = make([]bool, len(s.lines))
-	return s
+	snippet.changed = make([]bool, len(snippet.lines))
+	return snippet
 }
 
 func inHunk(hunks []editor.DiffHunk, side review.Side, line int) bool {
@@ -223,12 +223,12 @@ func inHunk(hunks []editor.DiffHunk, side review.Side, line int) bool {
 
 // readExtra reads a file outside the changes on its first use. The
 // first load has no snapshot yet, and the view asks again once it shows.
-func (a *app) readExtra(path string) {
-	if a.extra[path] != nil || a.snap == nil {
+func (app *app) readExtra(path string) {
+	if app.extra[path] != nil || app.snap == nil {
 		return
 	}
-	a.extra[path] = &extraFile{loading: true}
-	a.loader.readFile(a.snap, path)
+	app.extra[path] = &extraFile{loading: true}
+	app.loader.readFile(app.snap, path)
 }
 
 // newExtraFile is a file outside the changes, read as text, or failing
@@ -240,195 +240,195 @@ func newExtraFile(text string, err error) *extraFile {
 	return &extraFile{lines: strings.Split(strings.TrimSuffix(text, "\n"), "\n")}
 }
 
-func (a *app) refView(c *ui.Context, r review.Ref) {
-	a.snippetView(c, r, a.snippetOf(r))
+func (app *app) refView(ctx *ui.Context, ref review.Ref) {
+	app.snippetView(ctx, ref, app.snippetOf(ref))
 }
 
 // snippetView shows the lines of a reference under its label. The label
 // opens the diff when the lines are in it.
-func (a *app) snippetView(c *ui.Context, r review.Ref, s snippet) {
-	t := c.Theme()
-	ui.Column(c).Radius(8).Border(1, t.Border).Clip().Children(func() {
-		ui.Row(c).Gap(10).Padding(6, 10).AlignItems(ui.Center).Background(t.Surface).Children(func() {
-			if s.inDiff {
-				if textLink(c, r.Label(), func(e ui.Element) { e.Font("monospace").FontSize(12) }).Shrink(0).Tooltip("Open in the diff").Clicked() {
-					a.openRef(r)
+func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet) {
+	theme := ctx.Theme()
+	ui.Column(ctx).Radius(8).Border(1, theme.Border).Clip().Children(func() {
+		ui.Row(ctx).Gap(10).Padding(6, 10).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
+			if snippet.inDiff {
+				if textLink(ctx, ref.Label(), func(e ui.Element) { e.Font("monospace").FontSize(12) }).Shrink(0).Tooltip("Open in the diff").Clicked() {
+					app.openRef(ref)
 				}
 			} else {
-				ui.Text(c, r.Label()).Font("monospace").FontSize(12).SingleLine().Shrink(0)
+				ui.Text(ctx, ref.Label()).Font("monospace").FontSize(12).SingleLine().Shrink(0)
 			}
-			if r.Why != "" {
-				ui.Text(c, r.Why).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
+			if ref.Why != "" {
+				ui.Text(ctx, ref.Why).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1)
 			}
 		})
 		switch {
-		case s.loading:
-			ui.Spinner(c).Size(12, 12).Margin(8, 10)
-		case s.missing != "":
-			ui.Text(c, s.missing).FontSize(12).TextColor(t.TextMuted).Padding(6, 10)
+		case snippet.loading:
+			ui.Spinner(ctx).Size(12, 12).Margin(8, 10)
+		case snippet.missing != "":
+			ui.Text(ctx, snippet.missing).FontSize(12).TextColor(theme.TextMuted).Padding(6, 10)
 		}
-		mark := t.Success.Alpha(0.14)
-		if r.Side == review.SideOld {
-			mark = t.Danger.Alpha(0.14)
+		mark := theme.Success.Alpha(0.14)
+		if ref.Side == review.SideOld {
+			mark = theme.Danger.Alpha(0.14)
 		}
-		for i, line := range s.lines {
-			row := ui.Row(c.Key(i)).Gap(10).Padding(1, 10)
-			if s.changed[i] {
+		for i, line := range snippet.lines {
+			row := ui.Row(ctx.Key(i)).Gap(10).Padding(1, 10)
+			if snippet.changed[i] {
 				row.Background(mark)
 			}
 			row.Children(func() {
-				ui.Text(c, fmt.Sprint(r.Start+i)).Font("monospace").FontSize(12).TextColor(t.TextMuted).Width(32).TextAlign(ui.End)
-				ui.Text(c, strings.ReplaceAll(line, "\t", "    ")).Font("monospace").FontSize(12).SingleLine().Shrink(1)
+				ui.Text(ctx, fmt.Sprint(ref.Start+i)).Font("monospace").FontSize(12).TextColor(theme.TextMuted).Width(32).TextAlign(ui.End)
+				ui.Text(ctx, strings.ReplaceAll(line, "\t", "    ")).Font("monospace").FontSize(12).SingleLine().Shrink(1)
 			})
 		}
 	})
 }
 
 // openRef shows a reference in its file's diff, with its lines selected.
-func (a *app) openRef(r review.Ref) {
-	d := a.diffs[r.File]
-	if d == nil || d.state == nil {
+func (app *app) openRef(ref review.Ref) {
+	diff := app.diffs[ref.File]
+	if diff == nil || diff.state == nil {
 		return
 	}
-	a.nav.goTo(page{kindFile, r.File})
-	d.state.SetSelectedLines(editor.DiffLineRange{Side: diffSide(r.Side), Start: r.Start - 1, End: r.End - 1}, true)
-	a.reveal = &reveal{file: r.File, hunk: nearestHunk(d.state.Hunks(), r)}
+	app.nav.goTo(page{kindFile, ref.File})
+	diff.state.SetSelectedLines(editor.DiffLineRange{Side: diffSide(ref.Side), Start: ref.Start - 1, End: ref.End - 1}, true)
+	app.reveal = &reveal{file: ref.File, hunk: nearestHunk(diff.state.Hunks(), ref)}
 }
 
 // nearestHunk is the hunk holding the reference's first line, or the
 // closest one to it.
-func nearestHunk(hunks []editor.DiffHunk, r review.Ref) int {
+func nearestHunk(hunks []editor.DiffHunk, ref review.Ref) int {
 	best, dist := -1, 0
-	line := r.Start - 1
+	line := ref.Start - 1
 	for i, h := range hunks {
 		lo, hi := h.NewStart, h.NewEnd
-		if r.Side == review.SideOld {
+		if ref.Side == review.SideOld {
 			lo, hi = h.OldStart, h.OldEnd
 		}
-		d := 0
+		hunkDistance := 0
 		switch {
 		case line < lo:
-			d = lo - line
+			hunkDistance = lo - line
 		case line >= hi:
-			d = line - hi + 1
+			hunkDistance = line - hi + 1
 		}
-		if best < 0 || d < dist {
-			best, dist = i, d
+		if best < 0 || hunkDistance < dist {
+			best, dist = i, hunkDistance
 		}
 	}
 	return best
 }
 
-func (a *app) walkPage(c *ui.Context, id string) {
-	t := c.Theme()
-	w := a.rev.Walk(id)
-	if w == nil {
-		a.overviewPage(c)
+func (app *app) walkPage(ctx *ui.Context, id string) {
+	theme := ctx.Theme()
+	walk := app.rev.Walk(id)
+	if walk == nil {
+		app.overviewPage(ctx)
 		return
 	}
-	run := a.runner.run(a.rev, w.ID)
-	st := a.state(w.ID)
-	path := a.rev.WalkPath(w.ID)
-	a.pageScroll(c, page{kindWalk, w.ID}).Grow(1).FillWidth().Children(func() {
-		ui.Column(c).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
+	run := app.runner.run(app.rev, walk.ID)
+	st := app.state(walk.ID)
+	path := app.rev.WalkPath(walk.ID)
+	app.pageScroll(ctx, page{kindWalk, walk.ID}).Grow(1).FillWidth().Children(func() {
+		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
+			ui.Row(ctx).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
 				crumb := func(label string, p page) {
-					link := textLink(c, excerpt(label, 40), func(e ui.Element) { e.FontSize(12) }).Tooltip(label)
+					link := textLink(ctx, excerpt(label, 40), func(e ui.Element) { e.FontSize(12) }).Tooltip(label)
 					if link.Clicked() {
-						a.nav.goTo(p)
+						app.nav.goTo(p)
 					}
-					ui.Text(c, "›").FontSize(12).TextColor(t.TextMuted)
+					ui.Text(ctx, "›").FontSize(12).TextColor(theme.TextMuted)
 				}
 				crumb("Overview", overview)
 				for _, p := range path[:len(path)-1] {
-					crumb(a.rev.WalkTitle(p), page{kindWalk, p.ID})
+					crumb(app.rev.WalkTitle(p), page{kindWalk, p.ID})
 				}
-				ui.Text(c, excerpt(a.rev.WalkTitle(w), 40)).FontSize(12).TextColor(t.TextMuted)
+				ui.Text(ctx, excerpt(app.rev.WalkTitle(walk), 40)).FontSize(12).TextColor(theme.TextMuted)
 			})
-			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, a.rev.WalkTitle(w)).FontSize(22).Bold().Grow(1).Shrink(1)
-				a.cmdButton(c, "stop-walk", w.ID, "Stop")
-				a.cmdButton(c, "regenerate-walk", w.ID, "Regenerate")
-				a.cmdButton(c, "walk-log", w.ID, "Log")
-				a.cmdButton(c, "delete-walk", w.ID, "Delete")
+			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
+				ui.Text(ctx, app.rev.WalkTitle(walk)).FontSize(22).Bold().Grow(1).Shrink(1)
+				app.cmdButton(ctx, "stop-walk", walk.ID, "Stop")
+				app.cmdButton(ctx, "regenerate-walk", walk.ID, "Regenerate")
+				app.cmdButton(ctx, "walk-log", walk.ID, "Log")
+				app.cmdButton(ctx, "delete-walk", walk.ID, "Delete")
 			})
-			if s, ok := a.rev.StepOf(w); ok && w.Question != "" {
-				ui.Text(c, "About the step: "+s.Title).FontSize(12).TextColor(t.TextMuted)
+			if step, ok := app.rev.StepOf(walk); ok && walk.Question != "" {
+				ui.Text(ctx, "About the step: "+step.Title).FontSize(12).TextColor(theme.TextMuted)
 			}
-			a.staleBanner(c)
+			app.staleBanner(ctx)
 			switch {
-			case run != nil && len(w.More) == 0:
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
+			case run != nil && len(walk.More) == 0:
+				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(ctx).Size(14, 14)
+					ui.Text(ctx, run.activity).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1)
 				})
 			case st.status == targetQueued:
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(t.TextMuted)
-					ui.Button(c, "Start now").OnClick(func() { a.runner.startNow(a.rev, w.ID) })
+				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(ctx).Size(14, 14)
+					ui.Text(ctx, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(theme.TextMuted)
+					ui.Button(ctx, "Start now").OnClick(func() { app.runner.startNow(app.rev, walk.ID) })
 				})
-			case w.Content != nil:
-				a.walkthrough(c, w.ID, w.Content)
-			case w.Markdown != "":
-				markdown.View(c, w.Markdown, &a.md)
+			case walk.Content != nil:
+				app.walkthrough(ctx, walk.ID, walk.Content)
+			case walk.Markdown != "":
+				markdown.View(ctx, walk.Markdown, &app.md)
 			}
-			for i, turn := range w.More {
-				ui.Column(c.Key(fmt.Sprintf("more-%d", i))).Gap(10).Padding(16, 20).Radius(10).Border(1, t.Border).Children(func() {
-					ui.Text(c, "Follow-up: "+turn.Question).FontSize(16).Bold()
-					if i == len(w.More)-1 && run != nil {
-						ui.Spinner(c).Size(14, 14)
+			for i, turn := range walk.More {
+				ui.Column(ctx.Key(fmt.Sprintf("more-%d", i))).Gap(10).Padding(16, 20).Radius(10).Border(1, theme.Border).Children(func() {
+					ui.Text(ctx, "Follow-up: "+turn.Question).FontSize(16).Bold()
+					if i == len(walk.More)-1 && run != nil {
+						ui.Spinner(ctx).Size(14, 14)
 						return
 					}
-					a.answerView(c, turn)
+					app.answerView(ctx, turn)
 				})
 			}
-			if w.Question != "" && !st.busy() {
-				ui.Button(c, "Ask a follow-up").Tooltip("Continue this conversation in the side panel").OnClick(func() { a.openQuestion(w.ID) })
+			if walk.Question != "" && !st.busy() {
+				ui.Button(ctx, "Ask a follow-up").Tooltip("Continue this conversation in the side panel").OnClick(func() { app.openQuestion(walk.ID) })
 			}
-			if w.Err != "" && run == nil {
-				failureBox(c, w.Err)
+			if walk.Err != "" && run == nil {
+				failureBox(ctx, walk.Err)
 			}
-			if run == nil && w.Agent != "" {
-				ui.Text(c, writtenBy(w.Agent, w.Model, w.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(t.TextMuted)
+			if run == nil && walk.Agent != "" {
+				ui.Text(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(theme.TextMuted)
 			}
-			a.askWalk(c, w.ID)
+			app.askWalk(ctx, walk.ID)
 		})
 	})
 }
 
-func writtenBy(p agent.Provider, model, when string) string {
-	s := "By " + p.Name()
+func writtenBy(provider agent.Provider, model, when string) string {
+	byline := "By " + provider.Name()
 	if model != "" {
-		s += " (" + model + ")"
+		byline += " (" + model + ")"
 	}
-	return s + ", " + when
+	return byline + ", " + when
 }
 
 // askWalk asks a question about a walkthrough as a whole, and lists the
 // questions asked before.
-func (a *app) askWalk(c *ui.Context, parent string) {
-	t := c.Theme()
-	key := a.questionDraftKey(nil, askTarget{parent, -1})
-	draft := a.drafts[key]
+func (app *app) askWalk(ctx *ui.Context, parent string) {
+	theme := ctx.Theme()
+	key := app.questionDraftKey(nil, askTarget{parent, -1})
+	draft := app.drafts[key]
 	submit := func() {
-		if q := strings.TrimSpace(draft); q != "" {
-			a.drafts[key] = ""
-			a.askQuestion(parent, -1, q)
+		if question := strings.TrimSpace(draft); question != "" {
+			app.drafts[key] = ""
+			app.askQuestion(parent, -1, question)
 		}
 	}
-	ui.Column(c).Gap(8).Margin(8, 0, 0, 0).Children(func() {
-		ui.Text(c, "Ask about the changes").FontSize(18).Bold()
-		ui.Text(c, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.").FontSize(12).TextColor(t.TextMuted)
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			in := ui.TextInput(c.Key("ask-"+key), &draft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
+	ui.Column(ctx).Gap(8).Margin(8, 0, 0, 0).Children(func() {
+		ui.Text(ctx, "Ask about the changes").FontSize(18).Bold()
+		ui.Text(ctx, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.").FontSize(12).TextColor(theme.TextMuted)
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			in := ui.TextInput(ctx.Key("ask-"+key), &draft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
 			if in.Changed() {
-				a.drafts[key] = draft
+				app.drafts[key] = draft
 			}
-			ui.PrimaryButton(c, "Ask").Disabled(strings.TrimSpace(draft) == "").OnClick(submit)
+			ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "").OnClick(submit)
 		})
-		for _, w := range a.rev.WalksOn(parent, -1) {
-			a.walkRow(c, w)
+		for _, w := range app.rev.WalksOn(parent, -1) {
+			app.walkRow(ctx, w)
 		}
 	})
 }

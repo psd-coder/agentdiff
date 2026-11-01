@@ -7,8 +7,8 @@ import (
 
 func TestPageStringRoundTrip(t *testing.T) {
 	for _, tc := range []struct {
-		p page
-		s string
+		page page
+		text string
 	}{
 		{overview, "overview"},
 		{page{kind: kindThreads}, "threads"},
@@ -19,11 +19,11 @@ func TestPageStringRoundTrip(t *testing.T) {
 		{page{kindGroup, "Tests: unit #2"}, "group:Tests: unit #2"},
 		{page{kindArchived, "p1"}, "archived:p1"},
 	} {
-		if got := tc.p.String(); got != tc.s {
-			t.Errorf("%+v.String() = %q, want %q", tc.p, got, tc.s)
+		if got := tc.page.String(); got != tc.text {
+			t.Errorf("%+v.String() = %q, want %q", tc.page, got, tc.text)
 		}
-		if got := parsePage(tc.s); got != tc.p {
-			t.Errorf("parsePage(%q) = %+v, want %+v", tc.s, got, tc.p)
+		if got := parsePage(tc.text); got != tc.page {
+			t.Errorf("parsePage(%q) = %+v, want %+v", tc.text, got, tc.page)
 		}
 	}
 }
@@ -50,113 +50,113 @@ var noneGone = goneOf()
 
 // visit opens the pages in turn from the Overview.
 func visit(pages ...page) *navigation {
-	n := &navigation{}
+	navigation := &navigation{}
 	for _, p := range pages {
-		n.goTo(p)
+		navigation.goTo(p)
 	}
-	return n
+	return navigation
 }
 
 func TestBackAndForwardReturnThroughThePages(t *testing.T) {
-	n := visit(pageA, pageB)
-	n.back(noneGone)
-	if n.page != pageA {
-		t.Fatalf("back = %+v", n.page)
+	navigation := visit(pageA, pageB)
+	navigation.back(noneGone)
+	if navigation.page != pageA {
+		t.Fatalf("back = %+v", navigation.page)
 	}
-	n.forward(noneGone)
-	if n.page != pageB {
-		t.Fatalf("forward = %+v", n.page)
+	navigation.forward(noneGone)
+	if navigation.page != pageB {
+		t.Fatalf("forward = %+v", navigation.page)
 	}
-	n.back(noneGone)
-	n.back(noneGone)
-	n.back(noneGone)
-	if n.page != overview {
-		t.Errorf("back past the first page = %+v", n.page)
+	navigation.back(noneGone)
+	navigation.back(noneGone)
+	navigation.back(noneGone)
+	if navigation.page != overview {
+		t.Errorf("back past the first page = %+v", navigation.page)
 	}
 }
 
 func TestGoToDropsForward(t *testing.T) {
-	n := visit(pageA, pageB)
-	n.back(noneGone)
-	n.goTo(pageC)
-	n.forward(noneGone)
-	if n.page != pageC {
-		t.Errorf("forward after a new page = %+v", n.page)
+	navigation := visit(pageA, pageB)
+	navigation.back(noneGone)
+	navigation.goTo(pageC)
+	navigation.forward(noneGone)
+	if navigation.page != pageC {
+		t.Errorf("forward after a new page = %+v", navigation.page)
 	}
 }
 
 func TestGoToTheSamePageAddsNoEntry(t *testing.T) {
-	n := visit(pageA, pageA)
-	n.back(noneGone)
-	if n.page != overview {
-		t.Errorf("back = %+v", n.page)
+	navigation := visit(pageA, pageA)
+	navigation.back(noneGone)
+	if navigation.page != overview {
+		t.Errorf("back = %+v", navigation.page)
 	}
 }
 
 func TestBackSkipsGonePages(t *testing.T) {
-	n := visit(pageA, pageB, pageC)
-	n.back(goneOf(pageB))
-	if n.page != pageA {
-		t.Errorf("back = %+v", n.page)
+	navigation := visit(pageA, pageB, pageC)
+	navigation.back(goneOf(pageB))
+	if navigation.page != pageA {
+		t.Errorf("back = %+v", navigation.page)
 	}
 }
 
 func TestForwardSkipsGonePages(t *testing.T) {
-	n := visit(pageA, pageB, pageC)
-	n.back(noneGone)
-	n.back(noneGone)
-	n.forward(goneOf(pageB))
-	if n.page != pageC {
-		t.Errorf("forward = %+v", n.page)
+	navigation := visit(pageA, pageB, pageC)
+	navigation.back(noneGone)
+	navigation.back(noneGone)
+	navigation.forward(goneOf(pageB))
+	if navigation.page != pageC {
+		t.Errorf("forward = %+v", navigation.page)
 	}
 }
 
 func TestBackWithOnlyGonePagesStays(t *testing.T) {
-	n := &navigation{page: pageB, history: []page{pageA}}
-	n.back(goneOf(pageA))
-	if n.page != pageB {
-		t.Errorf("back = %+v", n.page)
+	navigation := &navigation{page: pageB, history: []page{pageA}}
+	navigation.back(goneOf(pageA))
+	if navigation.page != pageB {
+		t.Errorf("back = %+v", navigation.page)
 	}
 }
 
 func TestReplaceAddsNoEntry(t *testing.T) {
-	n := visit(pageA, pageB)
-	n.back(noneGone)
-	n.replace(pageC)
-	n.back(noneGone)
-	if n.page != overview {
-		t.Errorf("back = %+v", n.page)
+	navigation := visit(pageA, pageB)
+	navigation.back(noneGone)
+	navigation.replace(pageC)
+	navigation.back(noneGone)
+	if navigation.page != overview {
+		t.Errorf("back = %+v", navigation.page)
 	}
-	n.forward(noneGone)
-	n.forward(noneGone)
-	if n.page != pageB {
-		t.Errorf("forward after replace = %+v", n.page)
+	navigation.forward(noneGone)
+	navigation.forward(noneGone)
+	if navigation.page != pageB {
+		t.Errorf("forward after replace = %+v", navigation.page)
 	}
 }
 
 func TestForgetRemovesGonePagesFromBackAndForward(t *testing.T) {
-	n := visit(pageC, pageA, pageB, pageC)
-	n.back(noneGone)
-	n.back(noneGone)
-	n.forget(goneOf(pageC))
-	if slices.Contains(n.history, pageC) || slices.Contains(n.ahead, pageC) {
-		t.Errorf("history %+v, ahead %+v", n.history, n.ahead)
+	navigation := visit(pageC, pageA, pageB, pageC)
+	navigation.back(noneGone)
+	navigation.back(noneGone)
+	navigation.forget(goneOf(pageC))
+	if slices.Contains(navigation.history, pageC) || slices.Contains(navigation.ahead, pageC) {
+		t.Errorf("history %+v, ahead %+v", navigation.history, navigation.ahead)
 	}
-	n.forward(noneGone)
-	if n.page != pageB {
-		t.Errorf("forward = %+v", n.page)
+	navigation.forward(noneGone)
+	if navigation.page != pageB {
+		t.Errorf("forward = %+v", navigation.page)
 	}
 }
 
 func TestBackSkipsTheTopEqualToThePageAfterReplace(t *testing.T) {
-	n := visit(pageA, pageC)
-	n.replace(pageA)
-	if p, _ := n.prev(noneGone); p != overview {
-		t.Errorf("prev = %+v", p)
+	navigation := visit(pageA, pageC)
+	navigation.replace(pageA)
+	if previous, _ := navigation.prev(noneGone); previous != overview {
+		t.Errorf("prev = %+v", previous)
 	}
-	n.back(noneGone)
-	if n.page != overview {
-		t.Errorf("back = %+v", n.page)
+	navigation.back(noneGone)
+	if navigation.page != overview {
+		t.Errorf("back = %+v", navigation.page)
 	}
 }
 
@@ -188,11 +188,11 @@ func TestPrevNamesThePageBackOpens(t *testing.T) {
 }
 
 func TestHistoryKeepsTheLastPages(t *testing.T) {
-	n := &navigation{}
+	navigation := &navigation{}
 	for i := range maxHistory + 5 {
-		n.goTo(page{kindWalk, string(rune('a' + i))})
+		navigation.goTo(page{kindWalk, string(rune('a' + i))})
 	}
-	if len(n.history) != maxHistory {
-		t.Errorf("history holds %d pages", len(n.history))
+	if len(navigation.history) != maxHistory {
+		t.Errorf("history holds %d pages", len(navigation.history))
 	}
 }

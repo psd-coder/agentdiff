@@ -41,13 +41,13 @@ type logger struct {
 
 func newLogger(sink func(LogEntry)) *logger { return &logger{sink: sink} }
 
-func (l *logger) add(kind LogKind, text string) {
-	if l.sink == nil {
+func (log *logger) add(kind LogKind, text string) {
+	if log.sink == nil {
 		return
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.sink(LogEntry{Time: time.Now(), Kind: kind, Text: text})
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	log.sink(LogEntry{Time: time.Now(), Kind: kind, Text: text})
 }
 
 // lineWriter hands each complete line written to it to emit.
@@ -57,26 +57,26 @@ type lineWriter struct {
 	emit func(string)
 }
 
-func (w *lineWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.buf = append(w.buf, p...)
+func (writer *lineWriter) Write(data []byte) (int, error) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	writer.buf = append(writer.buf, data...)
 	for {
-		i := bytes.IndexByte(w.buf, '\n')
-		if i < 0 {
-			return len(p), nil
+		newline := bytes.IndexByte(writer.buf, '\n')
+		if newline < 0 {
+			return len(data), nil
 		}
-		w.emit(strings.TrimRight(string(w.buf[:i]), "\r"))
-		w.buf = w.buf[i+1:]
+		writer.emit(strings.TrimRight(string(writer.buf[:newline]), "\r"))
+		writer.buf = writer.buf[newline+1:]
 	}
 }
 
-func (w *lineWriter) flush() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if len(w.buf) > 0 {
-		w.emit(string(w.buf))
-		w.buf = nil
+func (writer *lineWriter) flush() {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	if len(writer.buf) > 0 {
+		writer.emit(string(writer.buf))
+		writer.buf = nil
 	}
 }
 
@@ -112,17 +112,17 @@ func commandLine(dir, bin string, args []string) string {
 	return line
 }
 
-func shellQuote(s string) string {
-	if plainArg.MatchString(s) {
-		return s
+func shellQuote(arg string) string {
+	if plainArg.MatchString(arg) {
+		return arg
 	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
 // ResumedSession is the session that a command logged by commandLine
 // resumed or forked, empty for a new session.
-func ResumedSession(p Provider, command string) string {
-	return specOf(p).resumed(shellWords(command))
+func ResumedSession(provider Provider, command string) string {
+	return specOf(provider).resumed(shellWords(command))
 }
 
 // shellWords splits a command line that shellQuote wrote back into words.
@@ -131,26 +131,26 @@ func shellWords(line string) []string {
 	var word strings.Builder
 	inWord, quoted := false, false
 	for i := 0; i < len(line); i++ {
-		c := line[i]
+		char := line[i]
 		switch {
-		case quoted && c == '\'':
+		case quoted && char == '\'':
 			quoted = false
 		case quoted:
-			word.WriteByte(c)
-		case c == '\'':
+			word.WriteByte(char)
+		case char == '\'':
 			quoted, inWord = true, true
-		case c == '\\' && i+1 < len(line):
+		case char == '\\' && i+1 < len(line):
 			i++
 			word.WriteByte(line[i])
 			inWord = true
-		case c == ' ':
+		case char == ' ':
 			if inWord {
 				words = append(words, word.String())
 				word.Reset()
 				inWord = false
 			}
 		default:
-			word.WriteByte(c)
+			word.WriteByte(char)
 			inWord = true
 		}
 	}
@@ -193,80 +193,82 @@ type Usage struct {
 	SessionCost float64 `json:"sessionCost,omitempty"`
 }
 
-func (u Usage) Total() int { return u.Input + u.Output + u.CacheRead + u.CacheWrite }
+func (usage Usage) Total() int {
+	return usage.Input + usage.Output + usage.CacheRead + usage.CacheWrite
+}
 
-func (u *Usage) Add(o Usage) {
-	u.Input += o.Input
-	u.Output += o.Output
-	u.CacheRead += o.CacheRead
-	u.CacheWrite += o.CacheWrite
-	u.CostUSD += o.CostUSD
-	if o.Context > 0 {
-		u.Context = o.Context
+func (usage *Usage) Add(other Usage) {
+	usage.Input += other.Input
+	usage.Output += other.Output
+	usage.CacheRead += other.CacheRead
+	usage.CacheWrite += other.CacheWrite
+	usage.CostUSD += other.CostUSD
+	if other.Context > 0 {
+		usage.Context = other.Context
 	}
-	if o.Session != "" {
-		u.Session, u.SessionCost = o.Session, o.SessionCost
+	if other.Session != "" {
+		usage.Session, usage.SessionCost = other.Session, other.SessionCost
 	}
 }
 
-func (u Usage) String() string {
-	s := fmt.Sprintf("%s tokens processed: %s in, %s cache read, %s cache write, %s out",
-		Count(u.Total()), Count(u.Input), Count(u.CacheRead), Count(u.CacheWrite), Count(u.Output))
+func (usage Usage) String() string {
+	text := fmt.Sprintf("%s tokens processed: %s in, %s cache read, %s cache write, %s out",
+		Count(usage.Total()), Count(usage.Input), Count(usage.CacheRead), Count(usage.CacheWrite), Count(usage.Output))
 	switch {
-	case u.CostUSD > 0:
-		s += fmt.Sprintf(", $%.4f at API prices", u.CostUSD)
-	case u.SessionCost > 0:
-		s += fmt.Sprintf(", $%.4f at API prices for the whole session", u.SessionCost)
+	case usage.CostUSD > 0:
+		text += fmt.Sprintf(", $%.4f at API prices", usage.CostUSD)
+	case usage.SessionCost > 0:
+		text += fmt.Sprintf(", $%.4f at API prices for the whole session", usage.SessionCost)
 	}
-	if u.Context > 0 {
-		s = fmt.Sprintf("%s tokens in context, %s", Count(u.Context), s)
+	if usage.Context > 0 {
+		text = fmt.Sprintf("%s tokens in context, %s", Count(usage.Context), text)
 	}
-	return s
+	return text
 }
 
 // Short is the context size, or the processed total when the CLI does
 // not report the context.
-func (u Usage) Short() string {
-	if u.Context > 0 {
-		return Count(u.Context) + " tokens"
+func (usage Usage) Short() string {
+	if usage.Context > 0 {
+		return Count(usage.Context) + " tokens"
 	}
-	return Count(u.Total()) + " tokens processed"
+	return Count(usage.Total()) + " tokens processed"
 }
 
 // Count writes a token count short: 950, 12.3k, 1.2M.
-func Count(n int) string {
+func Count(tokens int) string {
 	switch {
-	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1e6)
-	case n >= 10_000:
-		return fmt.Sprintf("%dk", n/1000)
-	case n >= 1000:
-		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	case tokens >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(tokens)/1e6)
+	case tokens >= 10_000:
+		return fmt.Sprintf("%dk", tokens/1000)
+	case tokens >= 1000:
+		return fmt.Sprintf("%.1fk", float64(tokens)/1000)
 	}
-	return fmt.Sprint(n)
+	return fmt.Sprint(tokens)
 }
 
-func Summarize(p Provider, e LogEntry) []LogItem {
-	switch e.Kind {
+func Summarize(provider Provider, entry LogEntry) []LogItem {
+	switch entry.Kind {
 	case LogCommand:
-		return []LogItem{{Title: "Command", Detail: e.Text}}
+		return []LogItem{{Title: "Command", Detail: entry.Text}}
 	case LogStdin:
-		return []LogItem{{Title: "Prompt", Detail: e.Text}}
+		return []LogItem{{Title: "Prompt", Detail: entry.Text}}
 	case LogStderr:
-		if strings.TrimSpace(e.Text) == "" {
+		if strings.TrimSpace(entry.Text) == "" {
 			return nil
 		}
-		return []LogItem{{Title: "Stderr", Detail: e.Text}}
+		return []LogItem{{Title: "Stderr", Detail: entry.Text}}
 	case LogExit:
-		return []LogItem{{Title: e.Text, Failed: e.Text != exitOK, exit: exitStatus(e.Text)}}
+		return []LogItem{{Title: entry.Text, Failed: entry.Text != exitOK, exit: exitStatus(entry.Text)}}
 	case LogStdout:
-		if strings.TrimSpace(e.Text) == "" {
+		if strings.TrimSpace(entry.Text) == "" {
 			return nil
 		}
-		if !json.Valid([]byte(e.Text)) {
-			return []LogItem{{Title: "Output", Detail: e.Text}}
+		if !json.Valid([]byte(entry.Text)) {
+			return []LogItem{{Title: "Output", Detail: entry.Text}}
 		}
-		return specOf(p).logItems([]byte(e.Text))
+		return specOf(provider).logItems([]byte(entry.Text))
 	}
 	return nil
 }
@@ -324,26 +326,26 @@ type claudeTokens struct {
 }
 
 func claudeItems(raw []byte) []LogItem {
-	var l claudeLogLine
-	if json.Unmarshal(raw, &l) != nil {
+	var line claudeLogLine
+	if json.Unmarshal(raw, &line) != nil {
 		return []LogItem{{Title: "Output", Detail: string(raw)}}
 	}
-	switch l.Type {
+	switch line.Type {
 	case "stream_event":
 		return nil
 	case "system":
-		return claudeSystem(l)
+		return claudeSystem(line)
 	case "rate_limit_event":
-		if l.RateLimit == nil {
+		if line.RateLimit == nil {
 			return []LogItem{{Title: "Rate limit"}}
 		}
-		return []LogItem{{Title: "Rate limit: " + l.RateLimit.Status, Detail: l.RateLimit.Type, Failed: l.RateLimit.Status != "allowed"}}
+		return []LogItem{{Title: "Rate limit: " + line.RateLimit.Status, Detail: line.RateLimit.Type, Failed: line.RateLimit.Status != "allowed"}}
 	case "assistant", "user":
-		if l.Message == nil {
+		if line.Message == nil {
 			return nil
 		}
 		var items []LogItem
-		for _, b := range l.Message.Content {
+		for _, b := range line.Message.Content {
 			switch b.Type {
 			case "text":
 				items = append(items, LogItem{Title: "Assistant", Detail: b.Text})
@@ -361,66 +363,66 @@ func claudeItems(raw []byte) []LogItem {
 				items = append(items, LogItem{Title: title, Detail: toolResultText(b.Content), Failed: b.IsError})
 			}
 		}
-		if m := l.Message.Usage; m != nil && l.Type == "assistant" && l.Parent == nil && len(items) > 0 {
-			items[0].Usage = &Usage{Context: m.Input + m.CacheRead + m.CacheWrite + m.Output}
+		if tokens := line.Message.Usage; tokens != nil && line.Type == "assistant" && line.Parent == nil && len(items) > 0 {
+			items[0].Usage = &Usage{Context: tokens.Input + tokens.CacheRead + tokens.CacheWrite + tokens.Output}
 		}
 		return items
 	case "result":
-		failed := l.IsError || strings.HasPrefix(l.Subtype, "error")
-		u := claudeUsage(l)
-		item := LogItem{Title: "Result: " + firstNonEmpty(l.Subtype, "done"), Detail: claudeStats(l, u), Failed: failed, Usage: &u, result: failedStatus(failed)}
-		if failed && l.Result != "" {
-			item.Detail = l.Result + "\n" + item.Detail
+		failed := line.IsError || strings.HasPrefix(line.Subtype, "error")
+		usage := claudeUsage(line)
+		item := LogItem{Title: "Result: " + firstNonEmpty(line.Subtype, "done"), Detail: claudeStats(line, usage), Failed: failed, Usage: &usage, result: failedStatus(failed)}
+		if failed && line.Result != "" {
+			item.Detail = line.Result + "\n" + item.Detail
 		}
 		return []LogItem{item}
 	}
-	return []LogItem{{Title: firstNonEmpty(l.Type, "Output")}}
+	return []LogItem{{Title: firstNonEmpty(line.Type, "Output")}}
 }
 
-func claudeSystem(l claudeLogLine) []LogItem {
-	switch l.Subtype {
+func claudeSystem(line claudeLogLine) []LogItem {
+	switch line.Subtype {
 	case "status", "thinking_tokens":
 		return nil
 	case "init":
 		return []LogItem{{
 			Title:  "Session started",
-			Detail: fmt.Sprintf("model %s, permission mode %s, %d tools, cwd %s", l.Model, l.Mode, len(l.Tools), l.CWD),
+			Detail: fmt.Sprintf("model %s, permission mode %s, %d tools, cwd %s", line.Model, line.Mode, len(line.Tools), line.CWD),
 		}}
 	case "hook_started":
-		return []LogItem{{Title: "Hook started: " + l.Hook}}
+		return []LogItem{{Title: "Hook started: " + line.Hook}}
 	case "hook_response":
-		detail := strings.TrimSpace(strings.Join([]string{l.Output, l.Stdout, l.Stderr}, "\n"))
-		return []LogItem{{Title: "Hook " + l.Hook + ": " + l.Outcome, Detail: detail, Failed: l.Outcome != "success"}}
+		detail := strings.TrimSpace(strings.Join([]string{line.Output, line.Stdout, line.Stderr}, "\n"))
+		return []LogItem{{Title: "Hook " + line.Hook + ": " + line.Outcome, Detail: detail, Failed: line.Outcome != "success"}}
 	case "informational":
-		return []LogItem{{Title: "Notice", Detail: l.Content}}
+		return []LogItem{{Title: "Notice", Detail: line.Content}}
 	}
-	return []LogItem{{Title: "System: " + l.Subtype}}
+	return []LogItem{{Title: "System: " + line.Subtype}}
 }
 
-func claudeStats(l claudeLogLine, u Usage) string {
-	return fmt.Sprintf("%d turns, %.1f s\n%s", l.Turns, float64(l.DurationMS)/1000, u)
+func claudeStats(line claudeLogLine, usage Usage) string {
+	return fmt.Sprintf("%d turns, %.1f s\n%s", line.Turns, float64(line.DurationMS)/1000, usage)
 }
 
 // claudeUsage reads the tokens of the run from the top-level usage.
 // modelUsage and the cost count the whole session, also the runs this one
 // resumed, so modelUsage is only the fallback and the cost is the
 // session's. The app subtracts the cost of the resumed run.
-func claudeUsage(l claudeLogLine) Usage {
-	u := Usage{Session: l.SessionID, SessionCost: l.Cost}
-	if t := l.Usage; t != nil {
-		u.Add(Usage{Input: t.Input, Output: t.Output, CacheRead: t.CacheRead, CacheWrite: t.CacheWrite})
-		return u
+func claudeUsage(line claudeLogLine) Usage {
+	usage := Usage{Session: line.SessionID, SessionCost: line.Cost}
+	if tokens := line.Usage; tokens != nil {
+		usage.Add(Usage{Input: tokens.Input, Output: tokens.Output, CacheRead: tokens.CacheRead, CacheWrite: tokens.CacheWrite})
+		return usage
 	}
-	for _, m := range l.ModelUsage {
-		u.Add(Usage{Input: m.Input, Output: m.Output, CacheRead: m.CacheRead, CacheWrite: m.CacheWrite})
+	for _, m := range line.ModelUsage {
+		usage.Add(Usage{Input: m.Input, Output: m.Output, CacheRead: m.CacheRead, CacheWrite: m.CacheWrite})
 	}
-	return u
+	return usage
 }
 
 func toolResultText(raw json.RawMessage) string {
-	var s string
-	if json.Unmarshal(raw, &s) == nil {
-		return s
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
 	}
 	var blocks []struct {
 		Type string `json:"type"`
@@ -464,44 +466,44 @@ type codexLogLine struct {
 }
 
 func codexItems(raw []byte) []LogItem {
-	var l codexLogLine
-	if json.Unmarshal(raw, &l) != nil {
+	var line codexLogLine
+	if json.Unmarshal(raw, &line) != nil {
 		return []LogItem{{Title: "Output", Detail: string(raw)}}
 	}
-	switch l.Type {
+	switch line.Type {
 	case "thread.started":
-		return []LogItem{{Title: "Session started", Detail: l.ThreadID}}
+		return []LogItem{{Title: "Session started", Detail: line.ThreadID}}
 	case "turn.started", "item.updated":
 		return nil
 	case "item.started":
-		if l.Item != nil && l.Item.Type == "command_execution" {
-			return []LogItem{{Title: "Tool call", Detail: commandText(l.Item.Command)}}
+		if line.Item != nil && line.Item.Type == "command_execution" {
+			return []LogItem{{Title: "Tool call", Detail: commandText(line.Item.Command)}}
 		}
 		return nil
 	case "item.completed":
-		return codexCompleted(l)
+		return codexCompleted(line)
 	case "error":
-		return []LogItem{{Title: "Notice", Detail: l.Message}}
+		return []LogItem{{Title: "Notice", Detail: line.Message}}
 	case "turn.failed":
 		msg := ""
-		if l.Error != nil {
-			msg = l.Error.Message
+		if line.Error != nil {
+			msg = line.Error.Message
 		}
 		return []LogItem{{Title: "Turn failed", Detail: msg, Failed: true, result: RunFailed}}
 	case "turn.completed":
 		item := LogItem{Title: "Turn completed", result: RunDone}
-		if c := l.Usage; c != nil {
-			u := Usage{Input: c.Input - c.Cached, CacheRead: c.Cached, Output: c.Output}
-			item.Usage = &u
-			item.Detail = fmt.Sprintf("%s, of them %s reasoning", u, Count(c.Reasoning))
+		if tokens := line.Usage; tokens != nil {
+			usage := Usage{Input: tokens.Input - tokens.Cached, CacheRead: tokens.Cached, Output: tokens.Output}
+			item.Usage = &usage
+			item.Detail = fmt.Sprintf("%s, of them %s reasoning", usage, Count(tokens.Reasoning))
 		}
 		return []LogItem{item}
 	}
-	return []LogItem{{Title: firstNonEmpty(l.Type, "Output")}}
+	return []LogItem{{Title: firstNonEmpty(line.Type, "Output")}}
 }
 
-func codexCompleted(l codexLogLine) []LogItem {
-	it := l.Item
+func codexCompleted(line codexLogLine) []LogItem {
+	it := line.Item
 	if it == nil {
 		return nil
 	}

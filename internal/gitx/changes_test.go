@@ -33,8 +33,8 @@ func uncommittedFixture(t *testing.T) *testRepo {
 
 func TestChangesUncommitted(t *testing.T) {
 	tr := uncommittedFixture(t)
-	r := tr.open()
-	got, err := snapshot(t, r, Scope{Kind: ScopeUncommitted}).Changes(t.Context())
+	repo := tr.open()
+	got, err := snapshot(t, repo, Scope{Kind: ScopeUncommitted}).Changes(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,32 +90,32 @@ type historyFixture struct {
 
 func newHistoryFixture(t *testing.T) historyFixture {
 	tr := newTestRepo(t)
-	h := historyFixture{testRepo: tr}
+	history := historyFixture{testRepo: tr}
 	tr.write("readme.md", "hello\n")
 	tr.write("src/app.go", "package app\n")
-	h.root = tr.commit("root")
+	history.root = tr.commit("root")
 	tr.write("src/app.go", "package app\n\nfunc A() {}\n")
 	tr.write("rename me.txt", "line one\nline two\nline three\n")
-	h.second = tr.commit("second")
+	history.second = tr.commit("second")
 
 	tr.git("checkout", "-q", "-b", "feature")
 	tr.write("src/app.go", "package app\n\nfunc A() {}\n\nfunc B() {}\n")
 	tr.git("mv", "rename me.txt", "renamed.txt")
-	h.featureA = tr.commit("feature a")
+	history.featureA = tr.commit("feature a")
 	tr.write("feature.txt", "feature\n")
 	tr.remove("readme.md")
-	h.featureB = tr.commit("feature b")
+	history.featureB = tr.commit("feature b")
 
 	tr.git("checkout", "-q", "main")
 	tr.write("main-only.txt", "main\n")
-	h.mainAfter = tr.commit("main after fork")
+	history.mainAfter = tr.commit("main after fork")
 	tr.git("checkout", "-q", "feature")
-	return h
+	return history
 }
 
 func TestChangesCommittedScopes(t *testing.T) {
-	h := newHistoryFixture(t)
-	r := h.open()
+	history := newHistoryFixture(t)
+	repo := history.open()
 	tests := []struct {
 		name  string
 		scope Scope
@@ -123,7 +123,7 @@ func TestChangesCommittedScopes(t *testing.T) {
 	}{
 		{
 			name:  "root commit",
-			scope: Scope{Kind: ScopeCommit, Commit: h.root},
+			scope: Scope{Kind: ScopeCommit, Commit: history.root},
 			want: []FileChange{
 				{Path: "readme.md", Status: StatusAdded, Additions: 1},
 				{Path: "src/app.go", Status: StatusAdded, Additions: 1},
@@ -131,7 +131,7 @@ func TestChangesCommittedScopes(t *testing.T) {
 		},
 		{
 			name:  "commit with rename",
-			scope: Scope{Kind: ScopeCommit, Commit: h.featureA},
+			scope: Scope{Kind: ScopeCommit, Commit: history.featureA},
 			want: []FileChange{
 				{Path: "renamed.txt", OldPath: "rename me.txt", Status: StatusRenamed},
 				{Path: "src/app.go", Status: StatusModified, Additions: 2},
@@ -149,7 +149,7 @@ func TestChangesCommittedScopes(t *testing.T) {
 		},
 		{
 			name:  "range",
-			scope: Scope{Kind: ScopeRange, From: h.root, To: h.second},
+			scope: Scope{Kind: ScopeRange, From: history.root, To: history.second},
 			want: []FileChange{
 				{Path: "rename me.txt", Status: StatusAdded, Additions: 3},
 				{Path: "src/app.go", Status: StatusModified, Additions: 2},
@@ -169,7 +169,7 @@ func TestChangesCommittedScopes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := snapshot(t, r, tt.scope).Changes(t.Context())
+			got, err := snapshot(t, repo, tt.scope).Changes(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -181,28 +181,28 @@ func TestChangesCommittedScopes(t *testing.T) {
 }
 
 func TestChangesInvalidScopes(t *testing.T) {
-	h := newHistoryFixture(t)
-	r := h.open()
+	history := newHistoryFixture(t)
+	repo := history.open()
 	scopes := []Scope{
 		{Kind: "bogus"},
 		{Kind: ScopeBranch},
 		{Kind: ScopeBranch, Base: "nope"},
 		{Kind: ScopeBranch, Base: "--output=/tmp/x"},
 		{Kind: ScopeCommit, Commit: "deadbeef"},
-		{Kind: ScopeRange, From: h.root},
+		{Kind: ScopeRange, From: history.root},
 	}
 	for _, s := range scopes {
-		if _, err := r.Snapshot(t.Context(), s); err == nil {
+		if _, err := repo.Snapshot(t.Context(), s); err == nil {
 			t.Errorf("Snapshot(%+v) succeeded", s)
 		}
 	}
 }
 
 func TestChangesBranchWithoutCommonAncestor(t *testing.T) {
-	h := newHistoryFixture(t)
-	h.git("checkout", "-q", "--orphan", "lonely")
-	h.commit("orphan root")
-	_, err := h.open().Snapshot(t.Context(), Scope{Kind: ScopeBranch, Base: "main"})
+	history := newHistoryFixture(t)
+	history.git("checkout", "-q", "--orphan", "lonely")
+	history.commit("orphan root")
+	_, err := history.open().Snapshot(t.Context(), Scope{Kind: ScopeBranch, Base: "main"})
 	if err == nil || !strings.Contains(err.Error(), "common ancestor") {
 		t.Errorf("error = %v, want a common ancestor error", err)
 	}

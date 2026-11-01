@@ -34,58 +34,58 @@ type codexParser struct {
 	lastErr   string
 }
 
-func (p *codexParser) streamError() error {
-	if p.lastErr == "" {
+func (parser *codexParser) streamError() error {
+	if parser.lastErr == "" {
 		return nil
 	}
-	return errors.New(p.lastErr)
+	return errors.New(parser.lastErr)
 }
 
-func (p *codexParser) parse(raw []byte) []Event {
+func (parser *codexParser) parse(raw []byte) []Event {
 	var line codexLine
 	if json.Unmarshal(raw, &line) != nil {
 		return nil
 	}
 	switch line.Type {
 	case "thread.started":
-		if p.sessionID == "" && line.ThreadID != "" {
-			p.sessionID = line.ThreadID
-			return []Event{{Kind: EventSession, SessionID: p.sessionID}}
+		if parser.sessionID == "" && line.ThreadID != "" {
+			parser.sessionID = line.ThreadID
+			return []Event{{Kind: EventSession, SessionID: parser.sessionID}}
 		}
 	case "item.started":
-		return p.itemStarted(line.Item)
+		return parser.itemStarted(line.Item)
 	case "item.completed":
-		return p.itemCompleted(line.Item)
+		return parser.itemCompleted(line.Item)
 	// codex also reports retry notices as error events, so only turn.failed ends the run.
 	case "error":
 		if line.Message != "" {
-			p.lastErr = line.Message
+			parser.lastErr = line.Message
 			return []Event{{Kind: EventActivity, Text: line.Message}}
 		}
 	case "turn.failed":
-		msg := p.lastErr
+		msg := parser.lastErr
 		if line.Error != nil && line.Error.Message != "" {
 			msg = line.Error.Message
 		}
-		return []Event{{Kind: EventError, SessionID: p.sessionID, Err: errors.New(firstNonEmpty(msg, "codex turn failed"))}}
+		return []Event{{Kind: EventError, SessionID: parser.sessionID, Err: errors.New(firstNonEmpty(msg, "codex turn failed"))}}
 	case "turn.completed":
-		return []Event{{Kind: EventDone, Text: strings.Join(p.texts, "\n\n"), SessionID: p.sessionID}}
+		return []Event{{Kind: EventDone, Text: strings.Join(parser.texts, "\n\n"), SessionID: parser.sessionID}}
 	}
 	return nil
 }
 
-func (p *codexParser) itemStarted(item *codexItem) []Event {
+func (parser *codexParser) itemStarted(item *codexItem) []Event {
 	if item == nil || item.Type != "command_execution" {
 		return nil
 	}
-	if p.started == nil {
-		p.started = map[string]bool{}
+	if parser.started == nil {
+		parser.started = map[string]bool{}
 	}
-	p.started[item.ID] = true
+	parser.started[item.ID] = true
 	return []Event{commandActivity(item.Command)}
 }
 
-func (p *codexParser) itemCompleted(item *codexItem) []Event {
+func (parser *codexParser) itemCompleted(item *codexItem) []Event {
 	if item == nil {
 		return nil
 	}
@@ -95,13 +95,13 @@ func (p *codexParser) itemCompleted(item *codexItem) []Event {
 			return nil
 		}
 		text := item.Text
-		if len(p.texts) > 0 {
+		if len(parser.texts) > 0 {
 			text = "\n\n" + text
 		}
-		p.texts = append(p.texts, item.Text)
+		parser.texts = append(parser.texts, item.Text)
 		return []Event{{Kind: EventText, Text: text}}
 	case "command_execution":
-		if !p.started[item.ID] {
+		if !parser.started[item.ID] {
 			return []Event{commandActivity(item.Command)}
 		}
 	}
@@ -113,9 +113,9 @@ func commandActivity(raw json.RawMessage) Event {
 }
 
 func commandText(raw json.RawMessage) string {
-	var s string
-	if json.Unmarshal(raw, &s) == nil {
-		return unwrapShell(s)
+	var command string
+	if json.Unmarshal(raw, &command) == nil {
+		return unwrapShell(command)
 	}
 	var argv []string
 	if json.Unmarshal(raw, &argv) != nil {
@@ -134,11 +134,11 @@ var (
 )
 
 func unwrapShell(command string) string {
-	m := shellWrapper.FindStringSubmatch(strings.TrimSpace(command))
-	if m == nil {
+	match := shellWrapper.FindStringSubmatch(strings.TrimSpace(command))
+	if match == nil {
 		return command
 	}
-	arg := m[1]
+	arg := match[1]
 	switch {
 	case len(arg) >= 2 && arg[0] == '\'' && arg[len(arg)-1] == '\'':
 		return strings.ReplaceAll(arg[1:len(arg)-1], `'\''`, `'`)
@@ -148,15 +148,15 @@ func unwrapShell(command string) string {
 	return arg
 }
 
-func unescapeDouble(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) && strings.IndexByte("\"\\$`", s[i+1]) >= 0 {
+func unescapeDouble(text string) string {
+	var unescaped strings.Builder
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\\' && i+1 < len(text) && strings.IndexByte("\"\\$`", text[i+1]) >= 0 {
 			i++
 		}
-		b.WriteByte(s[i])
+		unescaped.WriteByte(text[i])
 	}
-	return b.String()
+	return unescaped.String()
 }
 
 // codexArgs keeps Codex in its read-only sandbox. Without the user's
@@ -199,8 +199,8 @@ func codexPrompt(req Request) string {
 // codexResumed takes the session after resume or fork near the end, before
 // "-".
 func codexResumed(words []string) string {
-	if n := len(words); n >= 3 && words[n-1] == "-" && (words[n-3] == "resume" || words[n-3] == "fork") {
-		return words[n-2]
+	if count := len(words); count >= 3 && words[count-1] == "-" && (words[count-3] == "resume" || words[count-3] == "fork") {
+		return words[count-2]
 	}
 	return ""
 }

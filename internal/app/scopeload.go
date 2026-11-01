@@ -96,19 +96,19 @@ func newScopeLoader(reviews *continuity.Reviews, async, update func(func()), sin
 // and hands them to the sink at once, so the page does not grow as they
 // come. Then the sink gets the commit that holds the changes of the
 // review, and the other files one by one.
-func (l *scopeLoader) start(req loadRequest) {
-	l.stop()
+func (loader *scopeLoader) start(req loadRequest) {
+	loader.stop()
 	ctx, cancel := context.WithCancel(context.Background())
-	l.cancel = cancel
-	l.gen++
-	gen, keep := l.gen, l.shown
-	l.pending = req.scopeLoad
-	l.phase = loadFirst
+	loader.cancel = cancel
+	loader.gen++
+	gen, keep := loader.gen, loader.shown
+	loader.pending = req.scopeLoad
+	loader.phase = loadFirst
 	if keep {
-		l.phase = loadSwitch
+		loader.phase = loadSwitch
 	}
-	cont := l.reviews.Begin(req.repo.Root, req.scope, req.rev)
-	l.async(func() {
+	cont := loader.reviews.Begin(req.repo.Root, req.scope, req.rev)
+	loader.async(func() {
 		defer cancel()
 		read, err := readScope(ctx, req.repo, req.scope, req.first)
 		if err == nil {
@@ -119,15 +119,15 @@ func (l *scopeLoader) start(req loadRequest) {
 			}()
 			cont.Read(read.perLoad.fp, read.fpErr)
 		}
-		l.update(func() {
-			if gen != l.gen {
+		loader.update(func() {
+			if gen != loader.gen {
 				return
 			}
-			l.phase = loadIdle
+			loader.phase = loadIdle
 			if err == nil {
-				l.shown = true
+				loader.shown = true
 			}
-			l.sink.scopeLanded(landing{
+			loader.sink.scopeLanded(landing{
 				scopeLoad: req.scopeLoad, rev: req.rev, enter: req.fresh && keep,
 				perLoad: read.perLoad, first: read.first, cont: cont,
 			})
@@ -136,9 +136,9 @@ func (l *scopeLoader) start(req loadRequest) {
 			return
 		}
 		if located := cont.Locate(ctx, req.repo); located != nil {
-			l.update(func() {
-				if gen == l.gen {
-					l.sink.commitsLocated(located())
+			loader.update(func() {
+				if gen == loader.gen {
+					loader.sink.commitsLocated(located())
 				}
 			})
 		}
@@ -150,9 +150,9 @@ func (l *scopeLoader) start(req loadRequest) {
 				continue
 			}
 			oldText, newText, cerr := read.cr.Contents(f)
-			l.update(func() {
-				if gen == l.gen {
-					l.sink.fileRead(contents{f, oldText, newText, cerr})
+			loader.update(func() {
+				if gen == loader.gen {
+					loader.sink.fileRead(contents{f, oldText, newText, cerr})
 				}
 			})
 		}
@@ -161,50 +161,50 @@ func (l *scopeLoader) start(req loadRequest) {
 
 // again is the scope a reload reads, and whether it opens anew: the
 // scope of the load that runs, or else current.
-func (l *scopeLoader) again(current gitx.Scope) scopeLoad {
-	if l.phase != loadIdle {
-		return l.pending
+func (loader *scopeLoader) again(current gitx.Scope) scopeLoad {
+	if loader.phase != loadIdle {
+		return loader.pending
 	}
 	return scopeLoad{scope: current}
 }
 
 // readFile reads a file outside the changes from snap and hands it to
 // the sink, unless another load started.
-func (l *scopeLoader) readFile(snap *gitx.Snapshot, path string) {
-	gen := l.gen
-	l.async(func() {
+func (loader *scopeLoader) readFile(snap *gitx.Snapshot, path string) {
+	gen := loader.gen
+	loader.async(func() {
 		text, err := snap.File(context.Background(), path)
-		l.update(func() {
-			if gen == l.gen {
-				l.sink.fileRead(contents{change: gitx.FileChange{Path: path}, newText: text, err: err})
+		loader.update(func() {
+			if gen == loader.gen {
+				loader.sink.fileRead(contents{change: gitx.FileChange{Path: path}, newText: text, err: err})
 			}
 		})
 	})
 }
 
 // reset drops the load that runs, for a project that closes or opens.
-func (l *scopeLoader) reset() {
-	l.stop()
-	l.gen++
-	l.phase, l.shown = loadIdle, false
+func (loader *scopeLoader) reset() {
+	loader.stop()
+	loader.gen++
+	loader.phase, loader.shown = loadIdle, false
 }
 
-func (l *scopeLoader) stop() {
-	if l.cancel != nil {
-		l.cancel()
+func (loader *scopeLoader) stop() {
+	if loader.cancel != nil {
+		loader.cancel()
 	}
 }
 
 // firstLoad reports whether a load runs while the window shows no
 // changes yet.
-func (l *scopeLoader) firstLoad() bool { return l.phase == loadFirst }
+func (loader *scopeLoader) firstLoad() bool { return loader.phase == loadFirst }
 
 // switching reports whether a load runs while the window shows the
 // changes it showed before.
-func (l *scopeLoader) switching() bool { return l.phase == loadSwitch }
+func (loader *scopeLoader) switching() bool { return loader.phase == loadSwitch }
 
 // idle reports whether no load runs.
-func (l *scopeLoader) idle() bool { return l.phase == loadIdle }
+func (loader *scopeLoader) idle() bool { return loader.phase == loadIdle }
 
 // scopeRead is what readScope read: the changes, and the files of the
 // first page. cr reads the other files, and the caller closes it.
@@ -217,16 +217,16 @@ type scopeRead struct {
 
 // readScope reads the changes of s and the files in first. On an error,
 // perLoad holds only the error.
-func readScope(ctx context.Context, r *gitx.Repo, s gitx.Scope, first []string) (scopeRead, error) {
+func readScope(ctx context.Context, repo *gitx.Repo, scope gitx.Scope, first []string) (scopeRead, error) {
 	out := scopeRead{perLoad: newPerLoad()}
-	p := &out.perLoad
-	snap, err := r.Snapshot(ctx, s)
+	loaded := &out.perLoad
+	snap, err := repo.Snapshot(ctx, scope)
 	// A scope that does not resolve has no fingerprint either.
 	out.fpErr = err
 	if err == nil {
-		p.fp, out.fpErr = snap.Fingerprint(ctx)
-		if p.files, err = snap.Changes(ctx); err == nil {
-			p.diffstat, err = snap.DiffStat(ctx)
+		loaded.fp, out.fpErr = snap.Fingerprint(ctx)
+		if loaded.files, err = snap.Changes(ctx); err == nil {
+			loaded.diffstat, err = snap.DiffStat(ctx)
 		}
 	}
 	if out.fpErr != nil {
@@ -237,13 +237,13 @@ func readScope(ctx context.Context, r *gitx.Repo, s gitx.Scope, first []string) 
 		out.perLoad.loadErr = err.Error()
 		return out, err
 	}
-	p.snap, p.patchKnown = snap, out.fpErr == nil
-	for _, f := range p.files {
-		p.diffs[f.Path] = &fileDiff{change: f, loading: true}
+	loaded.snap, loaded.patchKnown = snap, out.fpErr == nil
+	for _, f := range loaded.files {
+		loaded.diffs[f.Path] = &fileDiff{change: f, loading: true}
 	}
-	if s.Kind == gitx.ScopeCommit {
-		if cm, cerr := r.Commit(ctx, s.Commit); cerr == nil {
-			p.commit = &cm
+	if scope.Kind == gitx.ScopeCommit {
+		if cm, cerr := repo.Commit(ctx, scope.Commit); cerr == nil {
+			loaded.commit = &cm
 		} else {
 			log.Printf("commit message: %v", cerr)
 		}
@@ -251,9 +251,9 @@ func readScope(ctx context.Context, r *gitx.Repo, s gitx.Scope, first []string) 
 	out.cr = snap.NewContentReader(ctx)
 	out.first = map[string]contents{}
 	for _, path := range first {
-		if i := slices.IndexFunc(p.files, func(f gitx.FileChange) bool { return f.Path == path }); i >= 0 {
-			oldText, newText, cerr := out.cr.Contents(p.files[i])
-			out.first[path] = contents{p.files[i], oldText, newText, cerr}
+		if index := slices.IndexFunc(loaded.files, func(f gitx.FileChange) bool { return f.Path == path }); index >= 0 {
+			oldText, newText, cerr := out.cr.Contents(loaded.files[index])
+			out.first[path] = contents{loaded.files[index], oldText, newText, cerr}
 		} else {
 			text, cerr := out.cr.File(path)
 			out.first[path] = contents{change: gitx.FileChange{Path: path}, newText: text, err: cerr}
@@ -275,12 +275,12 @@ const (
 	overviewStale
 )
 
-func (a *app) freshness() freshness {
-	ov := a.rev.Overview
+func (app *app) freshness() freshness {
+	ov := app.rev.Overview
 	switch {
-	case !ov.Done() || a.loader.firstLoad() || ov.PatchID != "" && !a.patchKnown || a.busy(review.TargetOverview):
+	case !ov.Done() || app.loader.firstLoad() || ov.PatchID != "" && !app.patchKnown || app.busy(review.TargetOverview):
 		return freshnessUnknown
-	case ov.Stale(a.fp.Patch, a.fileNames()):
+	case ov.Stale(app.fp.Patch, app.fileNames()):
 		return overviewStale
 	}
 	return overviewFresh

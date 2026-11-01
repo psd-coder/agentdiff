@@ -38,84 +38,84 @@ type assignment struct {
 // keeps them, and the other gets its default back, or no keys when the
 // default is taken.
 func newKeymap(cmds []*command, reserved map[string]string, user map[string]string) *keymap {
-	k := &keymap{defaults: map[string]string{}, keys: map[string]string{}, reserved: map[string]string{}}
+	keymap := &keymap{defaults: map[string]string{}, keys: map[string]string{}, reserved: map[string]string{}}
 	for keys, use := range reserved {
-		k.reserved[canonical(keys)] = use
+		keymap.reserved[canonical(keys)] = use
 	}
 	owner := map[string]string{}
 	var lost []string
 	for _, cm := range cmds {
-		k.defaults[cm.id] = canonical(cm.keys)
-		keys := k.defaults[cm.id]
-		if u, ok := user[cm.id]; ok && (u == "" || canonical(u) != "") {
-			keys = canonical(u)
+		keymap.defaults[cm.id] = canonical(cm.keys)
+		keys := keymap.defaults[cm.id]
+		if override, ok := user[cm.id]; ok && (override == "" || canonical(override) != "") {
+			keys = canonical(override)
 		}
-		if keys != "" && (owner[keys] != "" || k.reserved[keys] != "") {
+		if keys != "" && (owner[keys] != "" || keymap.reserved[keys] != "") {
 			lost = append(lost, cm.id)
 			continue
 		}
-		k.keys[cm.id] = keys
+		keymap.keys[cm.id] = keys
 		if keys != "" {
 			owner[keys] = cm.id
 		}
 	}
 	for _, id := range lost {
-		if def := k.defaults[id]; def != "" && owner[def] == "" {
-			k.keys[id] = def
+		if def := keymap.defaults[id]; def != "" && owner[def] == "" {
+			keymap.keys[id] = def
 			owner[def] = id
 		} else {
-			k.keys[id] = ""
+			keymap.keys[id] = ""
 		}
 	}
-	return k
+	return keymap
 }
 
 // of are the keys of the command id, "" for none.
-func (k *keymap) of(id string) string { return k.keys[id] }
+func (keymap *keymap) of(id string) string { return keymap.keys[id] }
 
 // changed tells whether the command id has other keys than its default.
-func (k *keymap) changed(id string) bool { return k.keys[id] != k.defaults[id] }
+func (keymap *keymap) changed(id string) bool { return keymap.keys[id] != keymap.defaults[id] }
 
 // assign gives the command id the keys, "" for none. Reserved keys stay
 // where they are, and keys another command has move from it.
-func (k *keymap) assign(id, keys string) assignment {
+func (keymap *keymap) assign(id, keys string) assignment {
 	keys = canonical(keys)
-	if keys == k.keys[id] {
+	if keys == keymap.keys[id] {
 		return assignment{kind: assignUnchanged}
 	}
-	if use := k.reserved[keys]; keys != "" && use != "" {
+	if use := keymap.reserved[keys]; keys != "" && use != "" {
 		return assignment{kind: assignTaken, other: use}
 	}
 	res := assignment{kind: assignSet}
-	for other, has := range k.keys {
+	for other, has := range keymap.keys {
 		if keys != "" && other != id && has == keys {
-			k.keys[other] = ""
+			keymap.keys[other] = ""
 			res = assignment{kind: assignMoved, other: other}
 		}
 	}
-	k.keys[id] = keys
+	keymap.keys[id] = keys
 	return res
 }
 
 // reset gives the commands ids their default keys back, every command for
 // none. A command that has one of them loses it.
-func (k *keymap) reset(ids ...string) {
+func (keymap *keymap) reset(ids ...string) {
 	if len(ids) == 0 {
-		k.keys = maps.Clone(k.defaults)
+		keymap.keys = maps.Clone(keymap.defaults)
 		return
 	}
 	for _, id := range ids {
-		k.assign(id, k.defaults[id])
+		keymap.assign(id, keymap.defaults[id])
 	}
 }
 
 // overrides are the keys of the commands that differ from their defaults,
 // by command id, "" for none: what the config keeps.
-func (k *keymap) overrides() map[string]string {
+func (keymap *keymap) overrides() map[string]string {
 	out := map[string]string{}
-	for id := range k.keys {
-		if k.changed(id) {
-			out[id] = k.keys[id]
+	for id := range keymap.keys {
+		if keymap.changed(id) {
+			out[id] = keymap.keys[id]
 		}
 	}
 	return out

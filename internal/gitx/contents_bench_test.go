@@ -31,17 +31,17 @@ func benchScopes(b *testing.B) (*Repo, map[string]Scope) {
 }
 
 func BenchmarkLoad(b *testing.B) {
-	r, scopes := benchScopes(b)
+	repo, scopes := benchScopes(b)
 	for _, name := range []string{"uncommitted", "branch", "commit"} {
-		s := scopes[name]
-		snap := snapshot(b, r, s)
+		scope := scopes[name]
+		snap := snapshot(b, repo, scope)
 		files, err := snap.Changes(b.Context())
 		if err != nil || len(files) != benchFiles {
 			b.Fatalf("Changes(%s) = %d files, %v", name, len(files), err)
 		}
 		b.Run(name, func(b *testing.B) {
 			for b.Loop() {
-				cr := snapshot(b, r, s).NewContentReader(b.Context())
+				cr := snapshot(b, repo, scope).NewContentReader(b.Context())
 				for _, f := range files {
 					if _, _, err := cr.Contents(f); err != nil {
 						b.Fatal(err)
@@ -56,10 +56,10 @@ func BenchmarkLoad(b *testing.B) {
 }
 
 func BenchmarkFile(b *testing.B) {
-	r, scopes := benchScopes(b)
+	repo, scopes := benchScopes(b)
 	for _, name := range []string{"uncommitted", "branch", "commit"} {
-		s := scopes[name]
-		snap := snapshot(b, r, s)
+		scope := scopes[name]
+		snap := snapshot(b, repo, scope)
 		files, err := snap.Changes(b.Context())
 		if err != nil || len(files) != benchFiles {
 			b.Fatalf("Changes(%s) = %d files, %v", name, len(files), err)
@@ -71,12 +71,12 @@ func BenchmarkFile(b *testing.B) {
 					b.Error(err)
 				}
 			})
-			i := 0
+			index := 0
 			for b.Loop() {
-				if _, _, err := cr.Contents(files[i%len(files)]); err != nil {
+				if _, _, err := cr.Contents(files[index%len(files)]); err != nil {
 					b.Fatal(err)
 				}
-				i++
+				index++
 			}
 		})
 	}

@@ -38,23 +38,23 @@ type Scope struct {
 func ArchivedScope(id string) Scope { return Scope{Kind: ScopeArchived, From: id} }
 
 // Key returns a stable id that is safe as a file name, also on case-insensitive file systems.
-func (s Scope) Key() string {
-	switch s.Kind {
+func (scope Scope) Key() string {
+	switch scope.Kind {
 	case ScopeUncommitted:
 		return "uncommitted"
 	case ScopeBranch:
-		if b := s.branchName(); b != "" {
-			return "branch-" + keyPart(b) + "-vs-" + keyPart(s.Base)
+		if branch := scope.branchName(); branch != "" {
+			return "branch-" + keyPart(branch) + "-vs-" + keyPart(scope.Base)
 		}
-		return "branch-" + keyPart(s.Base)
+		return "branch-" + keyPart(scope.Base)
 	case ScopeCommit:
-		return "commit-" + keyPart(truncate(s.Commit, 12))
+		return "commit-" + keyPart(truncate(scope.Commit, 12))
 	case ScopeRange:
-		return "range-" + keyPart(s.From) + "-" + keyPart(s.To)
+		return "range-" + keyPart(scope.From) + "-" + keyPart(scope.To)
 	case ScopeArchived:
-		return "archived-" + keyPart(s.From)
+		return "archived-" + keyPart(scope.From)
 	}
-	return "unknown-" + keyPart(string(s.Kind))
+	return "unknown-" + keyPart(string(scope.Kind))
 }
 
 const maxKeyPart = 48
@@ -62,75 +62,75 @@ const maxKeyPart = 48
 // keyPart keeps [a-z0-9._] and appends a hash of the raw ref whenever it had to change
 // anything. That keeps keys unique ("-" is the part separator) and readable.
 func keyPart(ref string) string {
-	var b strings.Builder
+	var sanitized strings.Builder
 	for _, c := range ref {
 		switch {
 		case c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '.':
-			b.WriteRune(c)
+			sanitized.WriteRune(c)
 		case c >= 'A' && c <= 'Z':
-			b.WriteRune(c + ('a' - 'A'))
+			sanitized.WriteRune(c + ('a' - 'A'))
 		default:
-			b.WriteByte('_')
+			sanitized.WriteByte('_')
 		}
 	}
-	part := truncate(b.String(), maxKeyPart)
+	part := truncate(sanitized.String(), maxKeyPart)
 	if part == ref && part != "" {
 		return part
 	}
-	h := fnv.New32a()
-	h.Write([]byte(ref))
-	return fmt.Sprintf("%s_%08x", part, h.Sum32())
+	refHash := fnv.New32a()
+	refHash.Write([]byte(ref))
+	return fmt.Sprintf("%s_%08x", part, refHash.Sum32())
 }
 
-func (s Scope) Label() string {
-	switch s.Kind {
+func (scope Scope) Label() string {
+	switch scope.Kind {
 	case ScopeUncommitted:
 		return "Uncommitted changes"
 	case ScopeBranch:
-		if b := s.branchName(); b != "" {
-			return b + " vs " + s.Base
+		if branch := scope.branchName(); branch != "" {
+			return branch + " vs " + scope.Base
 		}
-		return "Branch vs " + s.Base
+		return "Branch vs " + scope.Base
 	case ScopeCommit:
-		return "Commit " + shortRef(s.Commit)
+		return "Commit " + shortRef(scope.Commit)
 	case ScopeRange:
-		return shortRef(s.From) + ".." + shortRef(s.To)
+		return shortRef(scope.From) + ".." + shortRef(scope.To)
 	case ScopeArchived:
 		return "Earlier uncommitted changes"
 	}
-	return string(s.Kind)
+	return string(scope.Kind)
 }
 
-func (s Scope) Describe() string {
-	switch s.Kind {
+func (scope Scope) Describe() string {
+	switch scope.Kind {
 	case ScopeUncommitted:
 		return "the uncommitted changes in the working tree: `git diff HEAD` plus untracked files listed by `git ls-files --others --exclude-standard`"
 	case ScopeBranch:
-		if s.Head != "" {
-			return fmt.Sprintf("the changes on branch `%s` since it diverged from `%s`: `git diff %s...%s` (commits listed by `git log %s..%s`). This branch is not checked out, so the files in the working directory belong to another branch: read the reviewed version of a file with `git show %s:<path>`", s.Head, s.Base, s.Base, s.Head, s.Base, s.Head, s.Head)
+		if scope.Head != "" {
+			return fmt.Sprintf("the changes on branch `%s` since it diverged from `%s`: `git diff %s...%s` (commits listed by `git log %s..%s`). This branch is not checked out, so the files in the working directory belong to another branch: read the reviewed version of a file with `git show %s:<path>`", scope.Head, scope.Base, scope.Base, scope.Head, scope.Base, scope.Head, scope.Head)
 		}
-		return fmt.Sprintf("the changes on the current branch since it diverged from `%s`: `git diff %s...HEAD` (commits listed by `git log %s..HEAD`)", s.Base, s.Base, s.Base)
+		return fmt.Sprintf("the changes on the current branch since it diverged from `%s`: `git diff %s...HEAD` (commits listed by `git log %s..HEAD`)", scope.Base, scope.Base, scope.Base)
 	case ScopeCommit:
-		return fmt.Sprintf("the changes introduced by commit %s: `git show %s`", s.Commit, s.Commit)
+		return fmt.Sprintf("the changes introduced by commit %s: `git show %s`", scope.Commit, scope.Commit)
 	case ScopeRange:
-		return fmt.Sprintf("the changes between `%s` and `%s`: `git diff %s %s` (commits listed by `git log %s..%s`)", s.From, s.To, s.From, s.To, s.From, s.To)
+		return fmt.Sprintf("the changes between `%s` and `%s`: `git diff %s %s` (commits listed by `git log %s..%s`)", scope.From, scope.To, scope.From, scope.To, scope.From, scope.To)
 	default:
 		return "an unknown change set"
 	}
 }
 
-func (s Scope) branchName() string { return cmp.Or(s.Head, s.Branch) }
+func (scope Scope) branchName() string { return cmp.Or(scope.Head, scope.Branch) }
 
 // NewRev is the revision that holds the new side of the changes, empty
 // for the working tree.
-func (s Scope) NewRev() string {
-	switch s.Kind {
+func (scope Scope) NewRev() string {
+	switch scope.Kind {
 	case ScopeBranch:
-		return cmp.Or(s.Head, "HEAD")
+		return cmp.Or(scope.Head, "HEAD")
 	case ScopeCommit:
-		return s.Commit
+		return scope.Commit
 	case ScopeRange:
-		return s.To
+		return scope.To
 	default:
 		return ""
 	}
@@ -143,8 +143,8 @@ func shortRef(ref string) string {
 	return ref
 }
 
-func isHex(s string) bool {
-	for _, c := range s {
+func isHex(value string) bool {
+	for _, c := range value {
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
@@ -152,9 +152,9 @@ func isHex(s string) bool {
 	return true
 }
 
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n]
+func truncate(value string, limit int) string {
+	if len(value) > limit {
+		return value[:limit]
 	}
-	return s
+	return value
 }

@@ -53,18 +53,18 @@ func (ct codeTheme) ownBackground() bool {
 }
 
 // colors returns the editor theme of ct for the window theme t.
-func (ct codeTheme) colors(t *ui.Theme) *editor.Theme {
-	v := ct.light
-	if t.Dark && ct.dark != nil || v == nil {
-		v = ct.dark
+func (ct codeTheme) colors(windowTheme *ui.Theme) *editor.Theme {
+	variant := ct.light
+	if windowTheme.Dark && ct.dark != nil || variant == nil {
+		variant = ct.dark
 	}
-	if v == nil {
-		return editor.DefaultTheme(t)
+	if variant == nil {
+		return editor.DefaultTheme(windowTheme)
 	}
-	base := t
+	base := windowTheme
 	if ct.ownBackground() {
 		base = ui.LightTheme()
-		if v.dark {
+		if variant.dark {
 			base = ui.DarkTheme()
 		}
 	}
@@ -75,22 +75,22 @@ func (ct codeTheme) colors(t *ui.Theme) *editor.Theme {
 				*c = ui.Hex(hex)
 			}
 		}
-		set(&out.Background, v.background)
-		set(&out.Text, v.text)
-		set(&out.LineNumber, v.lineNumber)
-		set(&out.ActiveLineNumber, v.activeLineNumber)
-		set(&out.Selection, v.selection)
+		set(&out.Background, variant.background)
+		set(&out.Text, variant.text)
+		set(&out.LineNumber, variant.lineNumber)
+		set(&out.ActiveLineNumber, variant.activeLineNumber)
+		set(&out.Selection, variant.selection)
 		out.InactiveSelection = out.Selection.Alpha(0.55)
 	}
 	// A token the theme leaves out shows as text, as in VS Code.
 	for k := range out.Tokens {
 		out.Tokens[k].Color = out.Text
 	}
-	for k, tok := range v.tokens {
-		s := &out.Tokens[k]
-		s.Color = ui.Hex(tok.color)
-		s.Italic = s.Italic || tok.italic
-		s.Bold = s.Bold || tok.bold
+	for k, tok := range variant.tokens {
+		style := &out.Tokens[k]
+		style.Color = ui.Hex(tok.color)
+		style.Italic = style.Italic || tok.italic
+		style.Bold = style.Bold || tok.bold
 	}
 	return out
 }
@@ -104,15 +104,15 @@ type codeThemeKey struct {
 // syncCodeTheme makes the code colors follow the setting and the window
 // theme. It keeps them while both stay the same, because Markdown views
 // highlight their code again whenever the colors change.
-func (a *app) syncCodeTheme(c *ui.Context) {
-	key := codeThemeKey{name: a.cfg.CodeTheme, ui: *c.Theme()}
-	if a.codeColors != nil && key == a.codeKey {
+func (app *app) syncCodeTheme(ctx *ui.Context) {
+	key := codeThemeKey{name: app.cfg.CodeTheme, ui: *ctx.Theme()}
+	if app.codeColors != nil && key == app.codeKey {
 		return
 	}
-	ct := codeThemeNamed(a.cfg.CodeTheme)
-	a.codeKey, a.codeColors = key, ct.colors(c.Theme())
-	a.md.Theme = &markdown.Theme{CodeColors: a.codeColors}
+	ct := codeThemeNamed(app.cfg.CodeTheme)
+	app.codeKey, app.codeColors = key, ct.colors(ctx.Theme())
+	app.md.Theme = &markdown.Theme{CodeColors: app.codeColors}
 	if ct.ownBackground() {
-		a.md.Theme.CodeBlockBackground = a.codeColors.Background
+		app.md.Theme.CodeBlockBackground = app.codeColors.Background
 	}
 }

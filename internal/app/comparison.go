@@ -30,52 +30,54 @@ type comparison struct {
 
 // headBranch is the branch under review: the picked one, or the one
 // checked out.
-func (c *comparison) headBranch() string { return cmp.Or(c.head, c.branch) }
+func (comparison *comparison) headBranch() string { return cmp.Or(comparison.head, comparison.branch) }
 
 // commitBase is the base the commit list is relative to: on a feature
 // branch the commits not on the base yet, else the latest commits.
-func (c *comparison) commitBase() string {
-	head := c.headBranch()
-	if c.base == "" || head == "" || c.base == head || !c.baseSet && strings.HasSuffix(c.base, "/"+head) {
+func (comparison *comparison) commitBase() string {
+	head := comparison.headBranch()
+	if comparison.base == "" || head == "" || comparison.base == head || !comparison.baseSet && strings.HasSuffix(comparison.base, "/"+head) {
 		return ""
 	}
-	return c.base
+	return comparison.base
 }
 
 // listRange is the base and the head of the commit list.
-func (c *comparison) listRange() (string, string) {
-	if c.rng != nil {
-		return c.rng.From, c.rng.To
+func (comparison *comparison) listRange() (string, string) {
+	if comparison.rng != nil {
+		return comparison.rng.From, comparison.rng.To
 	}
-	return c.commitBase(), c.head
+	return comparison.commitBase(), comparison.head
 }
 
 // allScope is every change of the commit list at once: the custom range,
 // or the branch since its base.
-func (c *comparison) allScope() (gitx.Scope, bool) {
-	if c.rng != nil {
-		return *c.rng, true
+func (comparison *comparison) allScope() (gitx.Scope, bool) {
+	if comparison.rng != nil {
+		return *comparison.rng, true
 	}
-	return c.branchScope()
+	return comparison.branchScope()
 }
 
 // uncommittedShown reports whether the sidebar lists the uncommitted
 // changes, which belong to the checked-out branch.
-func (c *comparison) uncommittedShown() bool { return c.rng == nil && c.head == "" }
+func (comparison *comparison) uncommittedShown() bool {
+	return comparison.rng == nil && comparison.head == ""
+}
 
 // branchScope is the changes of the branch under review since its base.
-func (c *comparison) branchScope() (gitx.Scope, bool) {
-	base := c.commitBase()
+func (comparison *comparison) branchScope() (gitx.Scope, bool) {
+	base := comparison.commitBase()
 	if base == "" {
 		return gitx.Scope{}, false
 	}
-	return c.branchScopeOf(c.headBranch(), base), true
+	return comparison.branchScopeOf(comparison.headBranch(), base), true
 }
 
 // branchScopeOf is the changes of a branch since base. The checked-out
 // branch is read from HEAD, any other one by its name.
-func (c *comparison) branchScopeOf(branch, base string) gitx.Scope {
-	if branch == c.branch {
+func (comparison *comparison) branchScopeOf(branch, base string) gitx.Scope {
+	if branch == comparison.branch {
 		return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Branch: branch}
 	}
 	return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Head: branch}
@@ -83,57 +85,57 @@ func (c *comparison) branchScopeOf(branch, base string) gitx.Scope {
 
 // label names what the commit list shows: the branch and its base, or the
 // custom range.
-func (c *comparison) label() (string, string) {
-	if c.rng != nil {
-		return c.rng.Label(), ""
+func (comparison *comparison) label() (string, string) {
+	if comparison.rng != nil {
+		return comparison.rng.Label(), ""
 	}
-	if base := c.commitBase(); base != "" {
-		return c.headBranch(), "vs " + base
+	if base := comparison.commitBase(); base != "" {
+		return comparison.headBranch(), "vs " + base
 	}
-	return c.headBranch(), ""
+	return comparison.headBranch(), ""
 }
 
 // pick compares branch with the base and drops the custom range. It
 // returns all the changes of the branch, when there is a base to compare
 // with.
-func (c *comparison) pick(branch string) (gitx.Scope, bool) {
-	c.head, c.rng = branch, nil
-	if branch == c.branch {
-		c.head = ""
+func (comparison *comparison) pick(branch string) (gitx.Scope, bool) {
+	comparison.head, comparison.rng = branch, nil
+	if branch == comparison.branch {
+		comparison.head = ""
 	}
-	return c.allScope()
+	return comparison.allScope()
 }
 
 // compare compares branch with base, as picked in the Compare dialog.
-func (c *comparison) compare(branch, base string) (gitx.Scope, bool) {
-	c.base, c.baseSet = base, true
-	return c.pick(branch)
+func (comparison *comparison) compare(branch, base string) (gitx.Scope, bool) {
+	comparison.base, comparison.baseSet = base, true
+	return comparison.pick(branch)
 }
 
 // setRange compares two revisions.
-func (c *comparison) setRange(from, to string) gitx.Scope {
-	s := gitx.Scope{Kind: gitx.ScopeRange, From: from, To: to}
-	c.rng = &s
-	return s
+func (comparison *comparison) setRange(from, to string) gitx.Scope {
+	scope := gitx.Scope{Kind: gitx.ScopeRange, From: from, To: to}
+	comparison.rng = &scope
+	return scope
 }
 
 // checkedOut follows a newly checked-out branch. A branch scope cur keeps
 // comparing the same branch: it returns the scope that names that branch
 // now, and true.
-func (c *comparison) checkedOut(branch string, branches []string, cur gitx.Scope) (gitx.Scope, bool) {
-	c.branch, c.branches = branch, branches
+func (comparison *comparison) checkedOut(branch string, branches []string, cur gitx.Scope) (gitx.Scope, bool) {
+	comparison.branch, comparison.branches = branch, branches
 	if cur.Kind != gitx.ScopeBranch || cur.Head == "" && cur.Branch == "" {
-		if c.head == branch {
-			c.head = ""
+		if comparison.head == branch {
+			comparison.head = ""
 		}
 		return gitx.Scope{}, false
 	}
 	name := cmp.Or(cur.Head, cur.Branch)
-	c.head = name
+	comparison.head = name
 	if name == branch {
-		c.head = ""
+		comparison.head = ""
 	}
-	return c.branchScopeOf(name, cur.Base), true
+	return comparison.branchScopeOf(name, cur.Base), true
 }
 
 // branchRow is a branch in the branch list.
@@ -149,47 +151,47 @@ type branchRow struct {
 
 // branchRows are the branches whose name holds query, ignoring case. root
 // is the worktree of the open repository.
-func (c *comparison) branchRows(query, root string) []branchRow {
+func (comparison *comparison) branchRows(query, root string) []branchRow {
 	trees := map[string]string{}
-	for _, w := range c.worktrees {
+	for _, w := range comparison.worktrees {
 		if w.Path != root {
 			trees[w.Branch] = w.Path
 		}
 	}
-	q := strings.ToLower(query)
+	lowerQuery := strings.ToLower(query)
 	var rows []branchRow
-	for _, b := range c.branches {
-		if !strings.Contains(strings.ToLower(b), q) {
+	for _, b := range comparison.branches {
+		if !strings.Contains(strings.ToLower(b), lowerQuery) {
 			continue
 		}
 		rows = append(rows, branchRow{
 			name:       b,
 			tree:       trees[b],
-			checkedOut: b == c.branch,
-			chosen:     c.rng == nil && b == c.headBranch(),
+			checkedOut: b == comparison.branch,
+			chosen:     comparison.rng == nil && b == comparison.headBranch(),
 		})
 	}
 	return rows
 }
 
 // tag is the note next to the name of the branch.
-func (r branchRow) tag() string {
+func (branchRow branchRow) tag() string {
 	switch {
-	case r.checkedOut:
+	case branchRow.checkedOut:
 		return "checked out"
-	case r.tree != "":
+	case branchRow.tree != "":
 		return "worktree"
 	}
 	return ""
 }
 
 // label is what a screen reader says for the row.
-func (r branchRow) label() string {
-	label := r.name
-	if tag := r.tag(); tag != "" {
+func (branchRow branchRow) label() string {
+	label := branchRow.name
+	if tag := branchRow.tag(); tag != "" {
 		label += ", " + tag
 	}
-	if r.chosen {
+	if branchRow.chosen {
 		label += ", selected"
 	}
 	return label

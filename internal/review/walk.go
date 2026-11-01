@@ -61,9 +61,9 @@ const checklistTitle = "Checklist"
 // UnmarshalJSON reads a walkthrough. The checklist of a walkthrough
 // written before sections becomes its first section, with the questions
 // as item titles.
-func (w *Walkthrough) UnmarshalJSON(b []byte) error {
+func (walkthrough *Walkthrough) UnmarshalJSON(data []byte) error {
 	type plain Walkthrough
-	var v struct {
+	var decoded struct {
 		plain
 		Checklist []struct {
 			Question string `json:"question"`
@@ -71,18 +71,18 @@ func (w *Walkthrough) UnmarshalJSON(b []byte) error {
 			Refs     []Ref  `json:"refs"`
 		} `json:"checklist"`
 	}
-	if err := json.Unmarshal(b, &v); err != nil {
+	if err := json.Unmarshal(data, &decoded); err != nil {
 		return err
 	}
-	*w = Walkthrough(v.plain)
-	if len(v.Checklist) == 0 {
+	*walkthrough = Walkthrough(decoded.plain)
+	if len(decoded.Checklist) == 0 {
 		return nil
 	}
-	items := make([]Step, len(v.Checklist))
-	for i, c := range v.Checklist {
+	items := make([]Step, len(decoded.Checklist))
+	for i, c := range decoded.Checklist {
 		items[i] = Step{Title: c.Question, Text: c.Answer, Refs: c.Refs}
 	}
-	w.Sections = append([]Section{{Title: checklistTitle, Items: items}}, w.Sections...)
+	walkthrough.Sections = append([]Section{{Title: checklistTitle, Items: items}}, walkthrough.Sections...)
 	return nil
 }
 
@@ -116,30 +116,30 @@ type Turn struct {
 
 // Turns returns the walk's first question and answer, then the
 // follow-ups.
-func (w *Walk) Turns() []Turn {
-	first := Turn{Question: w.Question, Content: w.Content, Markdown: w.Markdown, Err: w.Err, Generated: w.Generated}
-	return append([]Turn{first}, w.More...)
+func (walk *Walk) Turns() []Turn {
+	first := Turn{Question: walk.Question, Content: walk.Content, Markdown: walk.Markdown, Err: walk.Err, Generated: walk.Generated}
+	return append([]Turn{first}, walk.More...)
 }
 
 // setAnswer puts an answer, or the error that came instead, into the
 // latest turn.
-func (w *Walk) setAnswer(content *Walkthrough, markdown, err string, at time.Time) {
-	if n := len(w.More); n > 0 {
-		t := &w.More[n-1]
-		t.Content, t.Markdown, t.Err, t.Generated = content, markdown, err, at
+func (walk *Walk) setAnswer(content *Walkthrough, markdown, err string, at time.Time) {
+	if count := len(walk.More); count > 0 {
+		turn := &walk.More[count-1]
+		turn.Content, turn.Markdown, turn.Err, turn.Generated = content, markdown, err, at
 		return
 	}
-	w.Content, w.Markdown, w.Err, w.Generated = content, markdown, err, at
+	walk.Content, walk.Markdown, walk.Err, walk.Generated = content, markdown, err, at
 }
 
-func (r *Review) AddWalk(parent string, step int, question string) *Walk {
-	w := &Walk{ID: newID(), Parent: parent, Step: step, Question: strings.TrimSpace(question), Generated: time.Now()}
-	r.Walks = append(r.Walks, w)
-	return w
+func (review *Review) AddWalk(parent string, step int, question string) *Walk {
+	walk := &Walk{ID: newID(), Parent: parent, Step: step, Question: strings.TrimSpace(question), Generated: time.Now()}
+	review.Walks = append(review.Walks, walk)
+	return walk
 }
 
-func (r *Review) Walk(id string) *Walk {
-	for _, w := range r.Walks {
+func (review *Review) Walk(id string) *Walk {
+	for _, w := range review.Walks {
 		if w.ID == id {
 			return w
 		}
@@ -149,9 +149,9 @@ func (r *Review) Walk(id string) *Walk {
 
 // WalksOn returns the walks under a step of a parent, or under the parent
 // as a whole for step -1.
-func (r *Review) WalksOn(parent string, step int) []*Walk {
+func (review *Review) WalksOn(parent string, step int) []*Walk {
 	var out []*Walk
-	for _, w := range r.Walks {
+	for _, w := range review.Walks {
 		if w.Parent == parent && w.Step == step {
 			out = append(out, w)
 		}
@@ -160,7 +160,7 @@ func (r *Review) WalksOn(parent string, step int) []*Walk {
 }
 
 // EachRef calls fn with every reference of the review's walkthroughs.
-func (r *Review) EachRef(fn func(*Ref)) {
+func (review *Review) EachRef(fn func(*Ref)) {
 	walkthrough := func(w *Walkthrough) {
 		if w == nil {
 			return
@@ -178,10 +178,10 @@ func (r *Review) EachRef(fn func(*Ref)) {
 			}
 		}
 	}
-	if r.Overview != nil {
-		walkthrough(r.Overview.Walk)
+	if review.Overview != nil {
+		walkthrough(review.Overview.Walk)
 	}
-	for _, w := range r.Walks {
+	for _, w := range review.Walks {
 		walkthrough(w.Content)
 		for _, t := range w.More {
 			walkthrough(t.Content)
@@ -190,48 +190,48 @@ func (r *Review) EachRef(fn func(*Ref)) {
 }
 
 // WalkPath returns a walk and its ancestors, the overview's child first.
-func (r *Review) WalkPath(id string) []*Walk {
+func (review *Review) WalkPath(id string) []*Walk {
 	var path []*Walk
-	for w := r.Walk(id); w != nil && len(path) <= len(r.Walks); w = r.Walk(w.Parent) {
+	for w := review.Walk(id); w != nil && len(path) <= len(review.Walks); w = review.Walk(w.Parent) {
 		path = append([]*Walk{w}, path...)
 	}
 	return path
 }
 
 // DeleteWalk deletes a walk with every walk under it.
-func (r *Review) DeleteWalk(id string) {
+func (review *Review) DeleteWalk(id string) {
 	gone := map[string]bool{id: true}
 	for changed := true; changed; {
 		changed = false
-		for _, w := range r.Walks {
+		for _, w := range review.Walks {
 			if !gone[w.ID] && gone[w.Parent] {
 				gone[w.ID], changed = true, true
 			}
 		}
 	}
-	kept := r.Walks[:0]
-	for _, w := range r.Walks {
+	kept := review.Walks[:0]
+	for _, w := range review.Walks {
 		if !gone[w.ID] {
 			kept = append(kept, w)
 		}
 	}
-	r.Walks = kept
+	review.Walks = kept
 }
 
 // DeleteStepWalks deletes the walks into the steps of a parent, with the
 // walks under them. They point at steps by index, so they go when the
 // parent gets new steps. Questions about the parent as a whole stay.
-func (r *Review) DeleteStepWalks(parent string) {
-	for _, w := range slices.Clone(r.Walks) {
+func (review *Review) DeleteStepWalks(parent string) {
+	for _, w := range slices.Clone(review.Walks) {
 		if w.Parent == parent && w.Step >= 0 {
-			r.DeleteWalk(w.ID)
+			review.DeleteWalk(w.ID)
 		}
 	}
 }
 
 // HasStepWalks reports whether a parent has walks into its steps.
-func (r *Review) HasStepWalks(parent string) bool {
-	for _, w := range r.Walks {
+func (review *Review) HasStepWalks(parent string) bool {
+	for _, w := range review.Walks {
 		if w.Parent == parent && w.Step >= 0 {
 			return true
 		}
@@ -240,35 +240,35 @@ func (r *Review) HasStepWalks(parent string) bool {
 }
 
 // Steps returns the steps of a parent: the overview's for "".
-func (r *Review) Steps(parent string) []Step {
+func (review *Review) Steps(parent string) []Step {
 	if parent == "" {
-		if r.Overview != nil && r.Overview.Walk != nil {
-			return r.Overview.Walk.Steps
+		if review.Overview != nil && review.Overview.Walk != nil {
+			return review.Overview.Walk.Steps
 		}
 		return nil
 	}
-	if w := r.Walk(parent); w != nil && w.Content != nil {
-		return w.Content.Steps
+	if walk := review.Walk(parent); walk != nil && walk.Content != nil {
+		return walk.Content.Steps
 	}
 	return nil
 }
 
 // StepOf returns the step a walk goes deeper into, if it is about one.
-func (r *Review) StepOf(w *Walk) (Step, bool) {
-	steps := r.Steps(w.Parent)
-	if w.Step < 0 || w.Step >= len(steps) {
+func (review *Review) StepOf(walk *Walk) (Step, bool) {
+	steps := review.Steps(walk.Parent)
+	if walk.Step < 0 || walk.Step >= len(steps) {
 		return Step{}, false
 	}
-	return steps[w.Step], true
+	return steps[walk.Step], true
 }
 
 // WalkTitle is what a walk is about, in a few words.
-func (r *Review) WalkTitle(w *Walk) string {
-	if w.Question != "" {
-		return w.Question
+func (review *Review) WalkTitle(walk *Walk) string {
+	if walk.Question != "" {
+		return walk.Question
 	}
-	if s, ok := r.StepOf(w); ok {
-		return s.Title
+	if step, ok := review.StepOf(walk); ok {
+		return step.Title
 	}
 	return "Deeper"
 }
@@ -280,29 +280,29 @@ var jsonFence = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*\\})\\s*```")
 // answer holds no walkthrough, so the caller can show it as Markdown.
 func parseWalkthrough(answer string) (*Walkthrough, bool) {
 	raw := ""
-	if m := jsonFence.FindAllStringSubmatch(answer, -1); len(m) > 0 {
-		raw = m[len(m)-1][1]
-	} else if i, j := strings.Index(answer, "{"), strings.LastIndex(answer, "}"); i >= 0 && j > i {
-		raw = answer[i : j+1]
+	if matches := jsonFence.FindAllStringSubmatch(answer, -1); len(matches) > 0 {
+		raw = matches[len(matches)-1][1]
+	} else if start, end := strings.Index(answer, "{"), strings.LastIndex(answer, "}"); start >= 0 && end > start {
+		raw = answer[start : end+1]
 	}
-	var w Walkthrough
-	if raw == "" || json.Unmarshal([]byte(raw), &w) != nil {
+	var walkthrough Walkthrough
+	if raw == "" || json.Unmarshal([]byte(raw), &walkthrough) != nil {
 		return nil, false
 	}
-	w.Summary = strings.TrimSpace(w.Summary)
-	w.Steps = cleanSteps(w.Steps)
+	walkthrough.Summary = strings.TrimSpace(walkthrough.Summary)
+	walkthrough.Steps = cleanSteps(walkthrough.Steps)
 	var sections []Section
-	for _, s := range w.Sections {
+	for _, s := range walkthrough.Sections {
 		s.Title, s.Items = strings.TrimSpace(s.Title), cleanSteps(s.Items)
 		if len(s.Items) > 0 {
 			sections = append(sections, s)
 		}
 	}
-	w.Sections = sections
-	if w.Summary == "" && len(w.Steps) == 0 {
+	walkthrough.Sections = sections
+	if walkthrough.Summary == "" && len(walkthrough.Steps) == 0 {
 		return nil, false
 	}
-	return &w, true
+	return &walkthrough, true
 }
 
 // cleanSteps drops the steps without a title and a text, and cleans the
@@ -344,6 +344,6 @@ func cleanRefs(refs []Ref) []Ref {
 }
 
 // Label is the reference as a reviewer reads it: path:start-end.
-func (r Ref) Label() string {
-	return Anchor{Kind: AnchorLines, File: r.File, Side: r.Side, Start: r.Start, End: r.End}.Label()
+func (ref Ref) Label() string {
+	return Anchor{Kind: AnchorLines, File: ref.File, Side: ref.Side, Start: ref.Start, End: ref.End}.Label()
 }

@@ -25,7 +25,9 @@ type targetState struct {
 
 // busy reports whether a run writes into the target or waits in the
 // queue to.
-func (s targetState) busy() bool { return s.status == targetQueued || s.status == targetRunning }
+func (state targetState) busy() bool {
+	return state.status == targetQueued || state.status == targetRunning
+}
 
 // targets tells the state of every run target from the runner and the
 // saved outcome, and keeps the targets with an unseen result.
@@ -37,45 +39,45 @@ type targets struct {
 // newTargets follows the runs of r: a run the user started that ends
 // while onScreen is false for its target marks the target unseen. A write-ahead
 // walk and a run the user stopped do not.
-func newTargets(r *runner, onScreen func(*review.Review, string) bool) *targets {
-	t := &targets{runner: r, unseen: map[*review.Review]map[string]bool{}}
-	r.onEnd = func(key runKey, ahead bool) {
+func newTargets(agentRunner *runner, onScreen func(*review.Review, string) bool) *targets {
+	targetSet := &targets{runner: agentRunner, unseen: map[*review.Review]map[string]bool{}}
+	agentRunner.onEnd = func(key runKey, ahead bool) {
 		if ahead || onScreen(key.rev, key.target) || key.rev.Outcome(key.target) == review.OutcomeStopped {
 			return
 		}
-		if t.unseen[key.rev] == nil {
-			t.unseen[key.rev] = map[string]bool{}
+		if targetSet.unseen[key.rev] == nil {
+			targetSet.unseen[key.rev] = map[string]bool{}
 		}
-		t.unseen[key.rev][key.target] = true
+		targetSet.unseen[key.rev][key.target] = true
 	}
-	return t
+	return targetSet
 }
 
 // state is the state of target of rev. A run beats the saved outcome.
-func (t *targets) state(rev *review.Review, target string) targetState {
-	s := targetState{unseen: t.unseen[rev][target]}
+func (targetSet *targets) state(rev *review.Review, target string) targetState {
+	state := targetState{unseen: targetSet.unseen[rev][target]}
 	switch {
-	case t.runner.run(rev, target) != nil:
-		s.status = targetRunning
-	case t.runner.queued(rev, target):
-		s.status = targetQueued
+	case targetSet.runner.run(rev, target) != nil:
+		state.status = targetRunning
+	case targetSet.runner.queued(rev, target):
+		state.status = targetQueued
 	default:
 		switch rev.Outcome(target) {
 		case review.OutcomeAnswered:
-			s.status = targetAnswered
+			state.status = targetAnswered
 		case review.OutcomeFailed:
-			s.status = targetFailed
+			state.status = targetFailed
 		case review.OutcomeStopped:
-			s.status = targetStopped
+			state.status = targetStopped
 		case review.OutcomeNone:
 		}
 	}
-	return s
+	return state
 }
 
 // unseenIn reports whether rev has a target with an unseen result.
-func (t *targets) unseenIn(rev *review.Review) bool {
-	for target := range t.unseen[rev] {
+func (targetSet *targets) unseenIn(rev *review.Review) bool {
+	for target := range targetSet.unseen[rev] {
 		if _, ok := rev.Resolve(target); ok {
 			return true
 		}
@@ -84,35 +86,35 @@ func (t *targets) unseenIn(rev *review.Review) bool {
 }
 
 // seen clears the unseen mark of target of rev.
-func (t *targets) seen(rev *review.Review, target string) {
-	delete(t.unseen[rev], target)
+func (targetSet *targets) seen(rev *review.Review, target string) {
+	delete(targetSet.unseen[rev], target)
 }
 
 // forget drops the unseen marks of rev.
-func (t *targets) forget(rev *review.Review) { delete(t.unseen, rev) }
+func (targetSet *targets) forget(rev *review.Review) { delete(targetSet.unseen, rev) }
 
 // onScreen reports whether the user sees target of rev: the overview of the
 // review on screen, the walk on the page or in the side panel, or the
 // thread in the side panel.
-func (a *app) onScreen(rev *review.Review, target string) bool {
-	if rev != a.rev {
+func (app *app) onScreen(rev *review.Review, target string) bool {
+	if rev != app.rev {
 		return false
 	}
-	return target == review.TargetOverview || a.nav.page == (page{kindWalk, target}) ||
-		a.questionID() == target || a.threadID() == target
+	return target == review.TargetOverview || app.nav.page == (page{kindWalk, target}) ||
+		app.questionID() == target || app.threadID() == target
 }
 
 // markSeen clears the unseen marks of the targets on screen. The view
 // calls it in every frame, so a page that opens in any way clears its
 // mark.
-func (a *app) markSeen() {
-	if a.rev == nil {
+func (app *app) markSeen() {
+	if app.rev == nil {
 		return
 	}
-	a.targets.seen(a.rev, review.TargetOverview)
-	if a.nav.page.kind == kindWalk {
-		a.targets.seen(a.rev, a.nav.page.key)
+	app.targets.seen(app.rev, review.TargetOverview)
+	if app.nav.page.kind == kindWalk {
+		app.targets.seen(app.rev, app.nav.page.key)
 	}
-	a.targets.seen(a.rev, a.questionID())
-	a.targets.seen(a.rev, a.threadID())
+	app.targets.seen(app.rev, app.questionID())
+	app.targets.seen(app.rev, app.threadID())
 }

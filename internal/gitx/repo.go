@@ -40,32 +40,32 @@ func Open(path string) (*Repo, error) {
 	return &Repo{Root: root}, nil
 }
 
-func (r *Repo) Name() string { return filepath.Base(r.Root) }
+func (repo *Repo) Name() string { return filepath.Base(repo.Root) }
 
-func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
-	name, _, err := r.optionalLine(ctx, "symbolic-ref", "-q", "--short", "HEAD")
+func (repo *Repo) CurrentBranch(ctx context.Context) (string, error) {
+	name, _, err := repo.optionalLine(ctx, "symbolic-ref", "-q", "--short", "HEAD")
 	return name, err
 }
 
-func (r *Repo) HasHead(ctx context.Context) bool {
-	_, ok, err := r.optionalLine(ctx, "rev-parse", "-q", "--verify", "HEAD^{commit}")
+func (repo *Repo) HasHead(ctx context.Context) bool {
+	_, ok, err := repo.optionalLine(ctx, "rev-parse", "-q", "--verify", "HEAD^{commit}")
 	return ok && err == nil
 }
 
-func (r *Repo) DefaultBase(ctx context.Context) string {
-	if ref, ok, _ := r.optionalLine(ctx, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"); ok {
+func (repo *Repo) DefaultBase(ctx context.Context) string {
+	if ref, ok, _ := repo.optionalLine(ctx, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"); ok {
 		return ref
 	}
 	for _, name := range []string{"main", "master"} {
-		if _, ok, _ := r.optionalLine(ctx, "rev-parse", "-q", "--verify", "refs/heads/"+name); ok {
+		if _, ok, _ := repo.optionalLine(ctx, "rev-parse", "-q", "--verify", "refs/heads/"+name); ok {
 			return name
 		}
 	}
 	return ""
 }
 
-func (r *Repo) Branches(ctx context.Context) ([]string, error) {
-	out, err := r.output(ctx, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
+func (repo *Repo) Branches(ctx context.Context) ([]string, error) {
+	out, err := repo.output(ctx, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
 	if err != nil {
 		return nil, err
 	}
@@ -108,35 +108,35 @@ type CommitLog struct {
 
 // CommitLog fixes the commits of head, those not on base when base is
 // set. An empty head means HEAD.
-func (r *Repo) CommitLog(ctx context.Context, base, head string) (CommitLog, error) {
-	if !r.HasHead(ctx) {
-		return CommitLog{repo: r}, nil
+func (repo *Repo) CommitLog(ctx context.Context, base, head string) (CommitLog, error) {
+	if !repo.HasHead(ctx) {
+		return CommitLog{repo: repo}, nil
 	}
-	head, err := r.resolveCommit(ctx, cmp.Or(head, "HEAD"))
+	head, err := repo.resolveCommit(ctx, cmp.Or(head, "HEAD"))
 	if err != nil {
 		return CommitLog{}, err
 	}
 	if base != "" {
-		if base, err = r.resolveCommit(ctx, base); err != nil {
+		if base, err = repo.resolveCommit(ctx, base); err != nil {
 			return CommitLog{}, err
 		}
 	}
-	return CommitLog{repo: r, base: base, head: head}, nil
+	return CommitLog{repo: repo, base: base, head: head}, nil
 }
 
-func (l CommitLog) revs() string {
-	if l.base == "" {
-		return l.head
+func (commitLog CommitLog) revs() string {
+	if commitLog.base == "" {
+		return commitLog.head
 	}
-	return l.base + ".." + l.head
+	return commitLog.base + ".." + commitLog.head
 }
 
 // Count is the number of commits in the log.
-func (l CommitLog) Count(ctx context.Context) (int, error) {
-	if l.head == "" {
+func (commitLog CommitLog) Count(ctx context.Context) (int, error) {
+	if commitLog.head == "" {
 		return 0, nil
 	}
-	out, err := l.repo.line(ctx, "rev-list", "--count", l.revs(), "--")
+	out, err := commitLog.repo.line(ctx, "rev-list", "--count", commitLog.revs(), "--")
 	if err != nil {
 		return 0, err
 	}
@@ -144,14 +144,14 @@ func (l CommitLog) Count(ctx context.Context) (int, error) {
 }
 
 // Page lists up to limit commits of the log after the first skip.
-func (l CommitLog) Page(ctx context.Context, skip, limit int) ([]Commit, error) {
-	if l.head == "" {
+func (commitLog CommitLog) Page(ctx context.Context, skip, limit int) ([]Commit, error) {
+	if commitLog.head == "" {
 		return []Commit{}, nil
 	}
-	out, err := l.repo.output(ctx,
+	out, err := commitLog.repo.output(ctx,
 		"log", "-z", "--no-show-signature", "--no-color",
 		"--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%b",
-		"--skip="+strconv.Itoa(skip), "-n", strconv.Itoa(limit), l.revs(), "--")
+		"--skip="+strconv.Itoa(skip), "-n", strconv.Itoa(limit), commitLog.revs(), "--")
 	if err != nil {
 		return nil, err
 	}
@@ -159,12 +159,12 @@ func (l CommitLog) Page(ctx context.Context, skip, limit int) ([]Commit, error) 
 }
 
 // Commit reads the commit that ref names.
-func (r *Repo) Commit(ctx context.Context, ref string) (Commit, error) {
-	sha, err := r.resolveCommit(ctx, ref)
+func (repo *Repo) Commit(ctx context.Context, ref string) (Commit, error) {
+	sha, err := repo.resolveCommit(ctx, ref)
 	if err != nil {
 		return Commit{}, err
 	}
-	commits, err := CommitLog{repo: r, head: sha}.Page(ctx, 0, 1)
+	commits, err := CommitLog{repo: repo, head: sha}.Page(ctx, 0, 1)
 	if err != nil {
 		return Commit{}, err
 	}
@@ -181,18 +181,18 @@ func parseCommits(out []byte) ([]Commit, error) {
 	}
 	commits := make([]Commit, 0, len(fields)/commitFields)
 	for i := 0; i < len(fields); i += commitFields {
-		f := fields[i : i+commitFields]
-		t, err := time.Parse(time.RFC3339, f[3])
+		record := fields[i : i+commitFields]
+		date, err := time.Parse(time.RFC3339, record[3])
 		if err != nil {
-			return nil, fmt.Errorf("gitx: commit %s: %w", f[0], err)
+			return nil, fmt.Errorf("gitx: commit %s: %w", record[0], err)
 		}
 		commits = append(commits, Commit{
-			SHA:     strings.TrimSpace(f[0]),
-			Short:   f[1],
-			Author:  f[2],
-			Time:    t,
-			Subject: f[4],
-			Body:    strings.TrimSpace(f[5]),
+			SHA:     strings.TrimSpace(record[0]),
+			Short:   record[1],
+			Author:  record[2],
+			Time:    date,
+			Subject: record[4],
+			Body:    strings.TrimSpace(record[5]),
 		})
 	}
 	return commits, nil
@@ -205,11 +205,11 @@ func splitNUL(out []byte) []string {
 	return strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00")
 }
 
-func (r *Repo) resolveCommit(ctx context.Context, ref string) (string, error) {
+func (repo *Repo) resolveCommit(ctx context.Context, ref string) (string, error) {
 	if ref == "" || strings.HasPrefix(ref, "-") {
 		return "", fmt.Errorf("gitx: invalid ref %q", ref)
 	}
-	sha, ok, err := r.optionalLine(ctx, "rev-parse", "-q", "--verify", ref+"^{commit}")
+	sha, ok, err := repo.optionalLine(ctx, "rev-parse", "-q", "--verify", ref+"^{commit}")
 	if err != nil {
 		return "", err
 	}
@@ -221,25 +221,25 @@ func (r *Repo) resolveCommit(ctx context.Context, ref string) (string, error) {
 
 // GitDir is the repository's git directory, which git leaves out of every
 // diff.
-func (r *Repo) GitDir(ctx context.Context) (string, error) {
-	return r.line(ctx, "rev-parse", "--absolute-git-dir")
+func (repo *Repo) GitDir(ctx context.Context) (string, error) {
+	return repo.line(ctx, "rev-parse", "--absolute-git-dir")
 }
 
 // CommonDir is the git directory that every working tree of the
 // repository shares, with the refs. It is GitDir in the main working tree.
-func (r *Repo) CommonDir(ctx context.Context) (string, error) {
-	return r.line(ctx, "rev-parse", "--path-format=absolute", "--git-common-dir")
+func (repo *Repo) CommonDir(ctx context.Context) (string, error) {
+	return repo.line(ctx, "rev-parse", "--path-format=absolute", "--git-common-dir")
 }
 
 // Ignored reports which of paths, relative to the root, the gitignore
 // rules leave out.
-func (r *Repo) Ignored(ctx context.Context, paths []string) (map[string]bool, error) {
+func (repo *Repo) Ignored(ctx context.Context, paths []string) (map[string]bool, error) {
 	var in, out bytes.Buffer
 	for _, p := range paths {
 		in.WriteString(p)
 		in.WriteByte(0)
 	}
-	err := runIn(ctx, r.Root, &in, &out, "check-ignore", "--stdin", "-z")
+	err := runIn(ctx, repo.Root, &in, &out, "check-ignore", "--stdin", "-z")
 	if err != nil && exitCode(err) != 1 {
 		return nil, err
 	}
@@ -257,8 +257,8 @@ type Worktree struct {
 
 // Worktrees lists the working trees of the repository, the main one
 // first. Branch is empty for a detached HEAD.
-func (r *Repo) Worktrees(ctx context.Context) ([]Worktree, error) {
-	out, err := r.output(ctx, "worktree", "list", "--porcelain")
+func (repo *Repo) Worktrees(ctx context.Context) ([]Worktree, error) {
+	out, err := repo.output(ctx, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}

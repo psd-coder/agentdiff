@@ -24,86 +24,86 @@ const (
 	bigFileLines = 1000
 )
 
-func (a *app) filePage(c *ui.Context, file string) {
-	d := a.diffs[file]
-	if d == nil {
-		a.emptyState(c, "File not in this scope", file)
+func (app *app) filePage(ctx *ui.Context, file string) {
+	diff := app.diffs[file]
+	if diff == nil {
+		app.emptyState(ctx, "File not in this scope", file)
 		return
 	}
-	ui.Column(c).Fill().Children(func() {
-		a.fileHeader(c, d, true)
-		a.fileThreads(c, file)
-		a.diffBody(c, d, false)
+	ui.Column(ctx).Fill().Children(func() {
+		app.fileHeader(ctx, diff, true)
+		app.fileThreads(ctx, file)
+		app.diffBody(ctx, diff, false)
 	})
-	if r := a.reveal; r != nil && r.file == file && d.state != nil {
-		a.reveal = nil
-		d.state.GoToHunk(r.hunk)
+	if request := app.reveal; request != nil && request.file == file && diff.state != nil {
+		app.reveal = nil
+		diff.state.GoToHunk(request.hunk)
 	}
 }
 
-func (a *app) groupPage(c *ui.Context, gi string) {
-	t := c.Theme()
-	i, ok := a.groupIndex(gi)
+func (app *app) groupPage(ctx *ui.Context, gi string) {
+	theme := ctx.Theme()
+	index, ok := app.groupIndex(gi)
 	if !ok {
-		a.overviewPage(c)
+		app.overviewPage(ctx)
 		return
 	}
-	g := a.groups()[i]
-	rows := a.cardRows([]pageRow{{kind: titleRow}}, g.Files)
-	a.cardList(c, page{kindGroup, gi}, rows, func(pageRow) {
-		pageTitle(c).AlignItems(ui.Start).Children(func() {
-			ui.Column(c).Gap(6).Grow(1).Shrink(1).Children(func() {
-				ui.Text(c, fmt.Sprintf("%d. %s", i+1, g.Title)).FontSize(18).Bold()
-				if g.Summary != "" {
-					ui.Text(c, g.Summary).TextColor(t.TextMuted)
+	group := app.groups()[index]
+	rows := app.cardRows([]pageRow{{kind: titleRow}}, group.Files)
+	app.cardList(ctx, page{kindGroup, gi}, rows, func(pageRow) {
+		pageTitle(ctx).AlignItems(ui.Start).Children(func() {
+			ui.Column(ctx).Gap(6).Grow(1).Shrink(1).Children(func() {
+				ui.Text(ctx, fmt.Sprintf("%d. %s", index+1, group.Title)).FontSize(18).Bold()
+				if group.Summary != "" {
+					ui.Text(ctx, group.Summary).TextColor(theme.TextMuted)
 				}
 			})
-			a.cmdButton(c, "mark-group-viewed", gi, "Mark all as viewed")
-			a.cmdButton(c, "mark-group-not-viewed", gi, "Mark all as not viewed")
-			a.layoutSwitch(c)
+			app.cmdButton(ctx, "mark-group-viewed", gi, "Mark all as viewed")
+			app.cmdButton(ctx, "mark-group-not-viewed", gi, "Mark all as not viewed")
+			app.layoutSwitch(ctx)
 		})
 	})
 }
 
 // allPage shows the diff of every file of the scope, in the order the
 // sidebar lists them.
-func (a *app) allPage(c *ui.Context) {
-	t := c.Theme()
+func (app *app) allPage(ctx *ui.Context) {
+	theme := ctx.Theme()
 	add, del := 0, 0
-	for _, f := range a.files {
+	for _, f := range app.files {
 		add += f.Additions
 		del += f.Deletions
 	}
 	rows := []pageRow{{kind: titleRow}}
-	groups := a.groups()
-	if a.cfg.FlatFiles {
-		rows = a.cardRows(rows, a.fileNames())
+	groups := app.groups()
+	if app.cfg.FlatFiles {
+		rows = app.cardRows(rows, app.fileNames())
 	} else {
 		for i, g := range groups {
-			rows = a.cardRows(append(rows, pageRow{kind: groupRow, group: i}), g.Files)
+			rows = app.cardRows(append(rows, pageRow{kind: groupRow, group: i}), g.Files)
 		}
 	}
-	a.cardList(c, page{kind: kindAll}, rows, func(r pageRow) {
+	app.cardList(ctx, page{kind: kindAll}, rows, func(r pageRow) {
 		if r.kind == groupRow {
-			g := groups[r.group]
-			ui.Text(c, fmt.Sprintf("%d. %s", r.group+1, g.Title)).FontSize(16).Bold().Padding(4, 20, cardGap/2, 20)
+			group := groups[r.group]
+			ui.Text(ctx, fmt.Sprintf("%d. %s", r.group+1, group.Title)).FontSize(16).Bold().Padding(4, 20, cardGap/2, 20)
 			return
 		}
-		pageTitle(c).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "All files diff").FontSize(18).Bold()
-			ui.Text(c, fmt.Sprintf("%d files", len(a.files))).TextColor(t.TextMuted)
-			ui.Text(c, fmt.Sprintf("+%d", add)).TextColor(t.Success)
-			ui.Text(c, fmt.Sprintf("−%d", del)).TextColor(t.Danger)
-			ui.Spacer(c)
-			a.cmdButton(c, "mark-all-viewed", "", "Mark all as viewed")
-			a.cmdButton(c, "mark-all-not-viewed", "", "Mark all as not viewed")
-			a.layoutSwitch(c)
+		pageTitle(ctx).AlignItems(ui.Center).Children(func() {
+			ui.Text(ctx, "All files diff").FontSize(18).Bold()
+			ui.Text(ctx, fmt.Sprintf("%d files", len(app.files))).TextColor(theme.TextMuted)
+			ui.Text(ctx, fmt.Sprintf("+%d", add)).TextColor(theme.Success)
+			ui.Text(ctx, fmt.Sprintf("−%d", del)).TextColor(theme.Danger)
+			ui.Spacer(ctx)
+			app.cmdButton(ctx, "mark-all-viewed", "", "Mark all as viewed")
+			app.cmdButton(ctx, "mark-all-not-viewed", "", "Mark all as not viewed")
+			app.layoutSwitch(ctx)
 		})
 	})
 }
 
-func pageTitle(c *ui.Context) ui.Element {
-	return ui.Row(c).Gap(12).Padding(16, 20).Margin(0, 0, cardGap/2, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
+func pageTitle(ctx *ui.Context) ui.Element {
+	return ui.Row(ctx).Gap(12).Padding(16, 20).Margin(0, 0, cardGap/2, 0).BorderWidth(0, 0, 1, 0).BorderColor(ctx.Theme().Border)
 }
 
 type rowKind uint8
@@ -128,13 +128,13 @@ type pageRow struct {
 
 // cardRows adds the rows of the cards of the files to rows: a header, the
 // diff of a file not folded, and a gap.
-func (a *app) cardRows(rows []pageRow, files []string) []pageRow {
+func (app *app) cardRows(rows []pageRow, files []string) []pageRow {
 	for _, f := range files {
-		if a.diffs[f] == nil {
+		if app.diffs[f] == nil {
 			continue
 		}
 		rows = append(rows, pageRow{kind: headRow, file: f})
-		if !a.isFolded(f) {
+		if !app.isFolded(f) {
 			rows = append(rows, pageRow{kind: bodyRow, file: f})
 		}
 		rows = append(rows, pageRow{kind: gapRow, file: f})
@@ -152,29 +152,29 @@ type cardPage struct {
 // cardList shows the cards of a page, building only the rows in view, as
 // a page with thousands of changed lines lays out slowly. other builds the
 // rows that are not cards.
-func (a *app) cardList(c *ui.Context, pg page, rows []pageRow, other func(pageRow)) {
-	t := c.Theme()
-	p := a.cardsOf(pg)
-	s := &p.list
+func (app *app) cardList(ctx *ui.Context, pg page, rows []pageRow, other func(pageRow)) {
+	theme := ctx.Theme()
+	cards := app.cardsOf(pg)
+	listState := &cards.list
 	// A card folded under its pinned header would leave the page where
 	// its diff ended: the folded card goes to the top instead.
-	if f := p.pinned; f != "" && a.isFolded(f) {
-		if i := slices.Index(rows, pageRow{kind: headRow, file: f}); i >= 0 {
-			s.ScrollTo(i, ui.Start)
+	if pinnedFile := cards.pinned; pinnedFile != "" && app.isFolded(pinnedFile) {
+		if index := slices.Index(rows, pageRow{kind: headRow, file: pinnedFile}); index >= 0 {
+			listState.ScrollTo(index, ui.Start)
 		}
 	}
-	p.pinned = ""
-	s.Key = func(i int) any { return rows[i] }
-	s.Header = func(i int) bool { return rows[i].kind == headRow || rows[i].kind == gapRow }
-	list := ui.List(c.Key("page-"+pg.String()), s, len(rows)).Grow(1).FillWidth().Focusable().FocusRing(false)
+	cards.pinned = ""
+	listState.Key = func(i int) any { return rows[i] }
+	listState.Header = func(i int) bool { return rows[i].kind == headRow || rows[i].kind == gapRow }
+	list := ui.List(ctx.Key("page-"+pg.String()), listState, len(rows)).Grow(1).FillWidth().Focusable().FocusRing(false)
 	top := list.LayoutBounds().Y
 	list.Rows(func(lr ui.ListRow) {
-		r := rows[lr.Index]
-		d := a.diffs[r.file]
-		switch r.kind {
+		cardRow := rows[lr.Index]
+		diff := app.diffs[cardRow.file]
+		switch cardRow.kind {
 		case headRow:
-			folded := a.isFolded(r.file)
-			row := ui.Column(c.Key("head:"+r.file)).Padding(0, pageInset)
+			folded := app.isFolded(cardRow.file)
+			row := ui.Column(ctx.Key("head:"+cardRow.file)).Padding(0, pageInset)
 			// The list pins a header at its top, where it is square, and
 			// pushes it up at the end of its card, where it rounds its
 			// bottom as the card does.
@@ -182,10 +182,10 @@ func (a *app) cardList(c *ui.Context, pg page, rows []pageRow, other func(pageRo
 			pinned := at.H > 0 && at.Y <= top
 			pushed := pinned && at.Y < top
 			if pinned && !folded {
-				p.pinned = r.file
+				cards.pinned = cardRow.file
 			}
 			row.Children(func() {
-				head := a.fileHeader(c, d, false).Border(cardBorder, t.Border)
+				head := app.fileHeader(ctx, diff, false).Border(cardBorder, theme.Border)
 				switch {
 				case pinned:
 					// The line under the page's top bar is its top border.
@@ -200,20 +200,20 @@ func (a *app) cardList(c *ui.Context, pg page, rows []pageRow, other func(pageRo
 				}
 			})
 		case bodyRow:
-			ui.Column(c.Key("body:"+r.file)).Padding(0, pageInset).Children(func() {
-				ui.Column(c).BorderWidth(0, cardBorder, cardBorder, cardBorder).BorderColor(t.Border).Radius(0, 0, cardRadius, cardRadius).Children(func() {
-					a.fileThreads(c, r.file)
-					a.diffBody(c, d, true)
-					a.cardCorners(c)
+			ui.Column(ctx.Key("body:"+cardRow.file)).Padding(0, pageInset).Children(func() {
+				ui.Column(ctx).BorderWidth(0, cardBorder, cardBorder, cardBorder).BorderColor(theme.Border).Radius(0, 0, cardRadius, cardRadius).Children(func() {
+					app.fileThreads(ctx, cardRow.file)
+					app.diffBody(ctx, diff, true)
+					app.cardCorners(ctx)
 				})
 			})
 		case gapRow:
-			ui.Box(c.Key("gap:" + r.file)).Height(cardGap)
+			ui.Box(ctx.Key("gap:" + cardRow.file)).Height(cardGap)
 		default:
-			ui.Column(c).Children(func() { other(r) })
+			ui.Column(ctx).Children(func() { other(cardRow) })
 		}
 	})
-	a.takeFocus(list, "page")
+	app.takeFocus(list, "page")
 }
 
 // cardCorners paints the rounded bottom corners of a card over its diff.
@@ -221,173 +221,173 @@ func (a *app) cardList(c *ui.Context, pg page, rows []pageRow, other func(pageRo
 // own content, so a card that clipped its content would clip it to a
 // square. A ring in the color of the page covers the content outside the
 // corners, and the border goes over the content.
-func (a *app) cardCorners(c *ui.Context) {
-	t := c.Theme()
+func (app *app) cardCorners(ctx *ui.Context) {
+	theme := ctx.Theme()
 	const ring float32 = cardBorder + cardRadius
-	ui.Box(c).Absolute().Left(-ring).Top(0).Right(-ring).Bottom(-ring).
-		Radius(0, 0, 2*cardRadius, 2*cardRadius).BorderWidth(0, cardRadius, cardRadius, cardRadius).BorderColor(t.Background).PassThrough()
-	ui.Box(c).Absolute().Left(-cardBorder).Top(0).Right(-cardBorder).Bottom(-cardBorder).
-		Radius(0, 0, cardRadius, cardRadius).BorderWidth(0, cardBorder, cardBorder, cardBorder).BorderColor(t.Border).PassThrough()
+	ui.Box(ctx).Absolute().Left(-ring).Top(0).Right(-ring).Bottom(-ring).
+		Radius(0, 0, 2*cardRadius, 2*cardRadius).BorderWidth(0, cardRadius, cardRadius, cardRadius).BorderColor(theme.Background).PassThrough()
+	ui.Box(ctx).Absolute().Left(-cardBorder).Top(0).Right(-cardBorder).Bottom(-cardBorder).
+		Radius(0, 0, cardRadius, cardRadius).BorderWidth(0, cardBorder, cardBorder, cardBorder).BorderColor(theme.Border).PassThrough()
 }
 
-func statusLabel(f gitx.FileChange) string {
+func statusLabel(fileChange gitx.FileChange) string {
 	switch {
-	case f.Untracked:
+	case fileChange.Untracked:
 		return "new, untracked"
-	case f.Status == gitx.StatusRenamed:
-		return "renamed from " + f.OldPath
-	case f.Status == gitx.StatusCopied:
-		return "copied from " + f.OldPath
+	case fileChange.Status == gitx.StatusRenamed:
+		return "renamed from " + fileChange.OldPath
+	case fileChange.Status == gitx.StatusCopied:
+		return "copied from " + fileChange.OldPath
 	}
-	return string(f.Status)
+	return string(fileChange.Status)
 }
 
-func (a *app) fileHeader(c *ui.Context, d *fileDiff, onPage bool) ui.Element {
-	t := c.Theme()
-	f := d.change
-	head := ui.Row(c).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(t.Surface)
+func (app *app) fileHeader(ctx *ui.Context, diff *fileDiff, onPage bool) ui.Element {
+	theme := ctx.Theme()
+	change := diff.change
+	head := ui.Row(ctx).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(theme.Surface)
 	if onPage {
-		head.BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
+		head.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	}
 	head.Children(func() {
 		if !onPage {
-			a.foldButton(c, f.Path)
+			app.foldButton(ctx, change.Path)
 		}
 		if onPage {
-			ui.Text(c, f.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
-		} else if textLink(c, f.Path, func(e ui.Element) { e.Font("monospace").Bold().TextColor(t.Text) }).Tooltip("Open the file on its own page").Clicked() {
-			a.nav.goTo(page{kindFile, f.Path})
+			ui.Text(ctx, change.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
+		} else if textLink(ctx, change.Path, func(e ui.Element) { e.Font("monospace").Bold().TextColor(theme.Text) }).Tooltip("Open the file on its own page").Clicked() {
+			app.nav.goTo(page{kindFile, change.Path})
 		}
-		ui.Badge(c, statusLabel(f))
-		ui.Text(c, fmt.Sprintf("+%d", f.Additions)).FontSize(12).TextColor(t.Success)
-		ui.Text(c, fmt.Sprintf("−%d", f.Deletions)).FontSize(12).TextColor(t.Danger)
-		if d.state != nil {
-			if _, ok := d.state.SelectedLines(); !ok {
-				ui.Text(c, "Click a line number, then Shift+click another to select a range").FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(1)
+		ui.Badge(ctx, statusLabel(change))
+		ui.Text(ctx, fmt.Sprintf("+%d", change.Additions)).FontSize(12).TextColor(theme.Success)
+		ui.Text(ctx, fmt.Sprintf("−%d", change.Deletions)).FontSize(12).TextColor(theme.Danger)
+		if diff.state != nil {
+			if _, ok := diff.state.SelectedLines(); !ok {
+				ui.Text(ctx, "Click a line number, then Shift+click another to select a range").FontSize(11).TextColor(theme.TextMuted).SingleLine().Shrink(1)
 			}
 		}
-		ui.Spacer(c)
-		if d.state != nil {
-			if r, ok := d.state.SelectedLines(); ok {
-				label := fmt.Sprintf("Comment on line %d", r.Start+1)
-				if r.End > r.Start {
-					label = fmt.Sprintf("Comment on lines %d–%d", r.Start+1, r.End+1)
+		ui.Spacer(ctx)
+		if diff.state != nil {
+			if selection, ok := diff.state.SelectedLines(); ok {
+				label := fmt.Sprintf("Comment on line %d", selection.Start+1)
+				if selection.End > selection.Start {
+					label = fmt.Sprintf("Comment on lines %d–%d", selection.Start+1, selection.End+1)
 				}
-				a.cmdButton(c, "comment-lines", f.Path, label)
+				app.cmdButton(ctx, "comment-lines", change.Path, label)
 			}
 		}
-		a.cmdButton(c, "comment-file", f.Path, "Comment on file")
+		app.cmdButton(ctx, "comment-file", change.Path, "Comment on file")
 		if onPage {
-			a.layoutSwitch(c)
+			app.layoutSwitch(ctx)
 		}
-		a.cmdCheckbox(c, "mark-viewed", "mark-not-viewed", f.Path, "Viewed")
+		app.cmdCheckbox(ctx, "mark-viewed", "mark-not-viewed", change.Path, "Viewed")
 	})
 	return head
 }
 
 // foldButton folds the card of the file to its header, or unfolds it.
-func (a *app) foldButton(c *ui.Context, file string) {
-	t := c.Theme()
-	folded := a.isFolded(file)
+func (app *app) foldButton(ctx *ui.Context, file string) {
+	theme := ctx.Theme()
+	folded := app.isFolded(file)
 	tip, label := "Fold the diff", "Fold"
 	if folded {
 		tip, label = "Unfold the diff", "Unfold"
 	}
-	btn := ui.ButtonBase(c.Key("fold")).Padding(4).Radius(4).Expanded(!folded).Label(label).Tooltip(tip)
+	btn := ui.ButtonBase(ctx.Key("fold")).Padding(4).Radius(4).Expanded(!folded).Label(label).Tooltip(tip)
 	if btn.Hovered() {
-		btn.Background(t.SurfaceHover)
+		btn.Background(theme.SurfaceHover)
 	}
 	btn.Children(func() {
-		arrow := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(t.TextMuted)
+		arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(theme.TextMuted)
 		if folded {
 			arrow.Rotate(-90)
 		}
 	})
 	if btn.Clicked() {
-		a.folded[file] = !folded
+		app.folded[file] = !folded
 	}
 }
 
 // layoutSwitch picks split or unified diffs, for every diff in the app.
-func (a *app) layoutSwitch(c *ui.Context) {
-	a.cmdSegmented(c, []string{"split-diffs", "unified-diffs"}, "Split", "Unified").Label("Diff layout")
+func (app *app) layoutSwitch(ctx *ui.Context) {
+	app.cmdSegmented(ctx, []string{"split-diffs", "unified-diffs"}, "Split", "Unified").Label("Diff layout")
 }
 
-func (a *app) fileThreads(c *ui.Context, file string) {
+func (app *app) fileThreads(ctx *ui.Context, file string) {
 	var threads []*review.Thread
-	for _, th := range a.rev.ThreadsOn(file) {
-		if th.Anchor.Kind == review.AnchorFile && (len(th.Messages) > 0 || th.ID == a.threadID()) {
+	for _, th := range app.rev.ThreadsOn(file) {
+		if th.Anchor.Kind == review.AnchorFile && (len(th.Messages) > 0 || th.ID == app.threadID()) {
 			threads = append(threads, th)
 		}
 	}
 	if len(threads) == 0 {
 		return
 	}
-	ui.Column(c).Gap(6).Padding(8, 12).Children(func() {
+	ui.Column(ctx).Gap(6).Padding(8, 12).Children(func() {
 		for _, th := range threads {
-			a.threadCard(c, th)
+			app.threadCard(ctx, th)
 		}
 	})
 }
 
-func (a *app) lineThread(file string, r editor.DiffLineRange) {
-	side := sideOf(r.Side)
-	start, end := r.Start+1, r.End+1
-	a.newThread(review.Anchor{
+func (app *app) lineThread(file string, lines editor.DiffLineRange) {
+	side := sideOf(lines.Side)
+	start, end := lines.Start+1, lines.End+1
+	app.newThread(review.Anchor{
 		Kind: review.AnchorLines, File: file, Side: side, Start: start, End: end,
-		Quote: a.quoteLines(file, side, start, end),
+		Quote: app.quoteLines(file, side, start, end),
 	})
 }
 
-func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
-	t := c.Theme()
+func (app *app) diffBody(ctx *ui.Context, diff *fileDiff, fit bool) {
+	theme := ctx.Theme()
 	switch {
-	case d.loading:
-		ui.Row(c).Gap(8).Padding(16).Children(func() {
-			ui.Spinner(c).Size(14, 14)
-			ui.Text(c, "Loading…").TextColor(t.TextMuted)
+	case diff.loading:
+		ui.Row(ctx).Gap(8).Padding(16).Children(func() {
+			ui.Spinner(ctx).Size(14, 14)
+			ui.Text(ctx, "Loading…").TextColor(theme.TextMuted)
 		})
 		return
-	case d.err != "":
-		ui.Text(c, d.err).Padding(16).TextColor(t.TextMuted)
+	case diff.err != "":
+		ui.Text(ctx, diff.err).Padding(16).TextColor(theme.TextMuted)
 		return
-	case d.state == nil:
+	case diff.state == nil:
 		return
 	}
-	s := d.state
-	s.FitContent = fit
-	s.Layout = editor.DiffSplit
-	if a.cfg.Unified {
-		s.Layout = editor.DiffUnified
+	diffState := diff.state
+	diffState.FitContent = fit
+	diffState.Layout = editor.DiffSplit
+	if app.cfg.Unified {
+		diffState.Layout = editor.DiffUnified
 	}
-	file := d.change.Path
-	s.OnGutterButton = func(r editor.DiffLineRange) {
-		if sel, ok := s.SelectedLines(); ok && sel.Side == r.Side && sel.Start <= r.Start && r.Start <= sel.End {
+	file := diff.change.Path
+	diffState.OnGutterButton = func(r editor.DiffLineRange) {
+		if sel, ok := diffState.SelectedLines(); ok && sel.Side == r.Side && sel.Start <= r.Start && r.Start <= sel.End {
 			r = sel
 		}
-		a.lineThread(file, r)
-		s.SetSelectedLines(editor.DiffLineRange{}, false)
+		app.lineThread(file, r)
+		diffState.SetSelectedLines(editor.DiffLineRange{}, false)
 	}
-	s.Annotations = s.Annotations[:0]
-	for _, th := range a.rev.ThreadsOn(file) {
-		if th.Anchor.Kind != review.AnchorLines || (len(th.Messages) == 0 && th.ID != a.threadID()) {
+	diffState.Annotations = diffState.Annotations[:0]
+	for _, th := range app.rev.ThreadsOn(file) {
+		if th.Anchor.Kind != review.AnchorLines || (len(th.Messages) == 0 && th.ID != app.threadID()) {
 			continue
 		}
-		s.Annotations = append(s.Annotations, editor.DiffAnnotation{
+		diffState.Annotations = append(diffState.Annotations, editor.DiffAnnotation{
 			Side: diffSide(th.Anchor.Side), Line: th.Anchor.End - 1, Height: threadCardHeight + 8, Key: th.ID,
 		})
 	}
-	s.RenderAnnotation = func(c *ui.Context, an editor.DiffAnnotation) {
-		th := a.rev.Thread(an.Key.(string))
+	diffState.RenderAnnotation = func(c *ui.Context, an editor.DiffAnnotation) {
+		th := app.rev.Thread(an.Key.(string))
 		if th == nil {
 			return
 		}
-		ui.Column(c).Padding(4, 12).Children(func() { a.threadCard(c, th) })
+		ui.Column(c).Padding(4, 12).Children(func() { app.threadCard(c, th) })
 	}
-	s.Theme = a.codeColors
-	view := editor.DiffView(c, s).FillWidth()
+	diffState.Theme = app.codeColors
+	view := editor.DiffView(ctx, diffState).FillWidth()
 	if !fit {
-		a.takeFocus(view, "page")
+		app.takeFocus(view, "page")
 	}
 	if !fit {
 		view.Grow(1)
@@ -396,32 +396,32 @@ func (a *app) diffBody(c *ui.Context, d *fileDiff, fit bool) {
 
 // threadCard is a thread in short, where it is anchored: a click opens it
 // in the panel.
-func (a *app) threadCard(c *ui.Context, th *review.Thread) {
-	t := c.Theme()
-	card := ui.ButtonBase(c.Key("card-"+th.ID)).Height(threadCardHeight).Padding(6, 10).Gap(10).Radius(8).AlignItems(ui.Center).
-		Background(t.Background).Border(1, t.Border)
-	if th.ID == a.threadID() {
-		card.Border(2, t.Accent)
+func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
+	theme := ctx.Theme()
+	card := ui.ButtonBase(ctx.Key("card-"+th.ID)).Height(threadCardHeight).Padding(6, 10).Gap(10).Radius(8).AlignItems(ui.Center).
+		Background(theme.Background).Border(1, theme.Border)
+	if th.ID == app.threadID() {
+		card.Border(2, theme.Accent)
 	} else if card.Hovered() {
-		card.Background(t.SurfaceHover)
+		card.Background(theme.SurfaceHover)
 	}
 	card.Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+		ui.Column(ctx).Grow(1).Shrink(1).Gap(2).Children(func() {
 			first := "New comment"
 			if len(th.Messages) > 0 {
 				first = th.Messages[0].Text
 			}
-			ui.Text(c, excerpt(first, 160)).MaxLines(1)
-			ui.Text(c, a.threadMeta(th)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			ui.Text(ctx, excerpt(first, 160)).MaxLines(1)
+			ui.Text(ctx, app.threadMeta(th)).FontSize(11).TextColor(theme.TextMuted).SingleLine()
 		})
-		targetMark(c, a.state(th.ID))
+		targetMark(ctx, app.state(th.ID))
 	})
 	if card.Clicked() {
-		a.openThread(th.ID)
+		app.openThread(th.ID)
 	}
 }
 
-func (a *app) threadMeta(th *review.Thread) string {
+func (app *app) threadMeta(th *review.Thread) string {
 	var parts []string
 	if th.Anchor.Kind == review.AnchorLines {
 		parts = append(parts, th.Anchor.Label())
@@ -433,7 +433,7 @@ func (a *app) threadMeta(th *review.Thread) string {
 		}
 	}
 	switch {
-	case a.busy(th.ID):
+	case app.busy(th.ID):
 		parts = append(parts, "agent is answering…")
 	case replies > 0:
 		parts = append(parts, fmt.Sprintf("%d agent replies", replies))

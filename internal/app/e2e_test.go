@@ -72,8 +72,8 @@ func TestEndToEnd(t *testing.T) {
 	}
 	checkRefs(t, ctx, repo, scope, ov.Walk)
 
-	w := rev.AddWalk("", 0, "")
-	deeper := review.DeeperExchange(rev, w, cfg, nil, stat)
+	walk := rev.AddWalk("", 0, "")
+	deeper := review.DeeperExchange(rev, walk, cfg, nil, stat)
 	session := ov.Sessions[provider]
 	if deeper.Request.ResumeID != session || !deeper.Request.Fork {
 		t.Errorf("deeper request resumes %q (fork %v), want a fork of %q", deeper.Request.ResumeID, deeper.Request.Fork, session)
@@ -84,22 +84,22 @@ func TestEndToEnd(t *testing.T) {
 	}
 	deeper.Started(forked)
 	deeper.Answered(answer, time.Now())
-	if w.Content == nil {
+	if walk.Content == nil {
 		t.Fatalf("no deeper walkthrough in:\n%s", answer)
 	}
-	logWalk(t, w.Content)
-	checkRefs(t, ctx, repo, scope, w.Content)
+	logWalk(t, walk.Content)
+	checkRefs(t, ctx, repo, scope, walk.Content)
 }
 
-func logWalk(t *testing.T, w *review.Walkthrough) {
-	t.Logf("summary: %s", w.Summary)
-	for i, s := range w.Steps {
+func logWalk(t *testing.T, walkthrough *review.Walkthrough) {
+	t.Logf("summary: %s", walkthrough.Summary)
+	for i, s := range walkthrough.Steps {
 		t.Logf("%d. %s: %s", i+1, s.Title, s.Text)
 		for _, r := range s.Refs {
 			t.Logf("   %s %s", r.Label(), r.Why)
 		}
 	}
-	for _, sec := range w.Sections {
+	for _, sec := range walkthrough.Sections {
 		for _, it := range sec.Items {
 			t.Logf("%s › %s: %s", sec.Title, it.Title, it.Text)
 		}
@@ -107,7 +107,7 @@ func logWalk(t *testing.T, w *review.Walkthrough) {
 }
 
 // checkRefs reports references to lines that do not exist on their side.
-func checkRefs(t *testing.T, ctx context.Context, repo *gitx.Repo, scope gitx.Scope, w *review.Walkthrough) {
+func checkRefs(t *testing.T, ctx context.Context, repo *gitx.Repo, scope gitx.Scope, walkthrough *review.Walkthrough) {
 	t.Helper()
 	snap, err := repo.Snapshot(ctx, scope)
 	if err != nil {
@@ -117,11 +117,11 @@ func checkRefs(t *testing.T, ctx context.Context, repo *gitx.Repo, scope gitx.Sc
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range w.Steps {
+	for _, s := range walkthrough.Steps {
 		for _, r := range s.Refs {
 			var oldText, newText string
-			if i := slices.IndexFunc(changes, func(c gitx.FileChange) bool { return c.Path == r.File }); i >= 0 {
-				oldText, newText, err = snap.Contents(ctx, changes[i])
+			if index := slices.IndexFunc(changes, func(c gitx.FileChange) bool { return c.Path == r.File }); index >= 0 {
+				oldText, newText, err = snap.Contents(ctx, changes[index])
 			} else {
 				newText, err = snap.File(ctx, r.File)
 			}
@@ -129,8 +129,8 @@ func checkRefs(t *testing.T, ctx context.Context, repo *gitx.Repo, scope gitx.Sc
 			if r.Side == review.SideOld {
 				text = oldText
 			}
-			if n := len(strings.Split(strings.TrimSuffix(text, "\n"), "\n")); err != nil || r.End > n {
-				t.Errorf("%s points past the file (%d lines, %v)", r.Label(), n, err)
+			if lineCount := len(strings.Split(strings.TrimSuffix(text, "\n"), "\n")); err != nil || r.End > lineCount {
+				t.Errorf("%s points past the file (%d lines, %v)", r.Label(), lineCount, err)
 			}
 		}
 	}

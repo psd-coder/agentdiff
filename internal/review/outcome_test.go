@@ -59,7 +59,7 @@ func TestOutcome(t *testing.T) {
 }
 
 func TestResolve(t *testing.T) {
-	r := Review{Walks: []*Walk{{ID: "w"}}, Threads: []*Thread{{ID: "t"}}}
+	review := Review{Walks: []*Walk{{ID: "w"}}, Threads: []*Thread{{ID: "t"}}}
 	for _, tc := range []struct {
 		id   string
 		kind Kind
@@ -70,7 +70,7 @@ func TestResolve(t *testing.T) {
 		{"t", KindThread, true},
 		{"gone", 0, false},
 	} {
-		if kind, ok := r.Resolve(tc.id); kind != tc.kind || ok != tc.ok {
+		if kind, ok := review.Resolve(tc.id); kind != tc.kind || ok != tc.ok {
 			t.Errorf("Resolve(%q) = %d, %v; want %d, %v", tc.id, kind, ok, tc.kind, tc.ok)
 		}
 	}

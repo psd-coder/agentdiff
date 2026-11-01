@@ -41,19 +41,19 @@ type revs struct {
 	from, to string
 }
 
-func (v revs) args() []string {
-	if v.to == "" {
-		return []string{v.from}
+func (revs revs) args() []string {
+	if revs.to == "" {
+		return []string{revs.from}
 	}
-	return []string{v.from, v.to}
+	return []string{revs.from, revs.to}
 }
 
-func (v revs) worktree() bool { return v.to == "" }
+func (revs revs) worktree() bool { return revs.to == "" }
 
-func (r *Repo) resolve(ctx context.Context, s Scope) (revs, error) {
-	switch s.Kind {
+func (repo *Repo) resolve(ctx context.Context, scope Scope) (revs, error) {
+	switch scope.Kind {
 	case ScopeUncommitted:
-		head, ok, err := r.optionalLine(ctx, "rev-parse", "-q", "--verify", "HEAD^{commit}")
+		head, ok, err := repo.optionalLine(ctx, "rev-parse", "-q", "--verify", "HEAD^{commit}")
 		if err != nil {
 			return revs{}, err
 		}
@@ -62,33 +62,33 @@ func (r *Repo) resolve(ctx context.Context, s Scope) (revs, error) {
 		}
 		return revs{from: head}, nil
 	case ScopeBranch:
-		return r.resolveBranch(ctx, s.Base, cmp.Or(s.Head, "HEAD"))
+		return repo.resolveBranch(ctx, scope.Base, cmp.Or(scope.Head, "HEAD"))
 	case ScopeCommit:
-		return r.resolveCommitScope(ctx, s.Commit)
+		return repo.resolveCommitScope(ctx, scope.Commit)
 	case ScopeRange:
-		from, err := r.resolveCommit(ctx, s.From)
+		from, err := repo.resolveCommit(ctx, scope.From)
 		if err != nil {
 			return revs{}, err
 		}
-		to, err := r.resolveCommit(ctx, s.To)
+		to, err := repo.resolveCommit(ctx, scope.To)
 		if err != nil {
 			return revs{}, err
 		}
 		return revs{from: from, to: to}, nil
 	default:
-		return revs{}, fmt.Errorf("gitx: unknown scope kind %q", s.Kind)
+		return revs{}, fmt.Errorf("gitx: unknown scope kind %q", scope.Kind)
 	}
 }
 
-func (r *Repo) resolveBranch(ctx context.Context, base, branch string) (revs, error) {
-	if _, err := r.resolveCommit(ctx, base); err != nil {
+func (repo *Repo) resolveBranch(ctx context.Context, base, branch string) (revs, error) {
+	if _, err := repo.resolveCommit(ctx, base); err != nil {
 		return revs{}, err
 	}
-	head, err := r.resolveCommit(ctx, branch)
+	head, err := repo.resolveCommit(ctx, branch)
 	if err != nil {
 		return revs{}, err
 	}
-	mb, ok, err := r.optionalLine(ctx, "merge-base", base, head)
+	mb, ok, err := repo.optionalLine(ctx, "merge-base", base, head)
 	if err != nil {
 		return revs{}, err
 	}
@@ -98,12 +98,12 @@ func (r *Repo) resolveBranch(ctx context.Context, base, branch string) (revs, er
 	return revs{from: mb, to: head}, nil
 }
 
-func (r *Repo) resolveCommitScope(ctx context.Context, commit string) (revs, error) {
-	sha, err := r.resolveCommit(ctx, commit)
+func (repo *Repo) resolveCommitScope(ctx context.Context, commit string) (revs, error) {
+	sha, err := repo.resolveCommit(ctx, commit)
 	if err != nil {
 		return revs{}, err
 	}
-	parent, ok, err := r.optionalLine(ctx, "rev-parse", "-q", "--verify", sha+"^1")
+	parent, ok, err := repo.optionalLine(ctx, "rev-parse", "-q", "--verify", sha+"^1")
 	if err != nil {
 		return revs{}, err
 	}
@@ -119,15 +119,15 @@ var diffFlags = []string{
 	"--no-color", "--no-ext-diff", "--no-textconv", "-M", "--src-prefix=a/", "--dst-prefix=b/",
 }
 
-func (r *Repo) diff(ctx context.Context, v revs, format ...string) ([]byte, error) {
+func (repo *Repo) diff(ctx context.Context, revs revs, format ...string) ([]byte, error) {
 	args := append([]string{"diff"}, diffFlags...)
 	args = append(args, format...)
-	args = append(args, v.args()...)
-	return r.output(ctx, append(args, "--")...)
+	args = append(args, revs.args()...)
+	return repo.output(ctx, append(args, "--")...)
 }
 
-func (r *Repo) trackedChanges(ctx context.Context, v revs) ([]FileChange, error) {
-	names, err := r.diff(ctx, v, "--name-status", "-z")
+func (repo *Repo) trackedChanges(ctx context.Context, revs revs) ([]FileChange, error) {
+	names, err := repo.diff(ctx, revs, "--name-status", "-z")
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (r *Repo) trackedChanges(ctx context.Context, v revs) ([]FileChange, error)
 	if err != nil {
 		return nil, err
 	}
-	nums, err := r.diff(ctx, v, "--numstat", "-z")
+	nums, err := repo.diff(ctx, revs, "--numstat", "-z")
 	if err != nil {
 		return nil, err
 	}
@@ -166,11 +166,11 @@ func parseNameStatus(out []byte) ([]FileChange, error) {
 		if i+paths >= len(fields) {
 			return nil, fmt.Errorf("gitx: truncated name-status output")
 		}
-		c := FileChange{Status: status, Path: fields[i+paths]}
+		change := FileChange{Status: status, Path: fields[i+paths]}
 		if paths == 2 {
-			c.OldPath = fields[i+1]
+			change.OldPath = fields[i+1]
 		}
-		changes = append(changes, c)
+		changes = append(changes, change)
 		i += paths + 1
 	}
 	return changes, nil
@@ -228,19 +228,19 @@ func parseCounts(add, del string) (numstat, error) {
 	if add == "-" && del == "-" {
 		return numstat{binary: true}, nil
 	}
-	a, err := strconv.Atoi(add)
+	additions, err := strconv.Atoi(add)
 	if err != nil {
 		return numstat{}, fmt.Errorf("gitx: numstat additions %q: %w", add, err)
 	}
-	d, err := strconv.Atoi(del)
+	deletions, err := strconv.Atoi(del)
 	if err != nil {
 		return numstat{}, fmt.Errorf("gitx: numstat deletions %q: %w", del, err)
 	}
-	return numstat{add: a, del: d}, nil
+	return numstat{add: additions, del: deletions}, nil
 }
 
-func (r *Repo) untrackedPaths(ctx context.Context) ([]string, error) {
-	out, err := r.output(ctx, "ls-files", "--others", "--exclude-standard", "-z")
+func (repo *Repo) untrackedPaths(ctx context.Context) ([]string, error) {
+	out, err := repo.output(ctx, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil {
 		return nil, err
 	}
@@ -256,11 +256,11 @@ func (r *Repo) untrackedPaths(ctx context.Context) ([]string, error) {
 
 // untrackedChanges counts the lines of the untracked files in paths. A
 // file deleted since paths was listed is left out.
-func (r *Repo) untrackedChanges(paths []string) (changes []FileChange, err error) {
+func (repo *Repo) untrackedChanges(paths []string) (changes []FileChange, err error) {
 	if len(paths) == 0 {
 		return nil, nil
 	}
-	root, err := os.OpenRoot(r.Root)
+	root, err := os.OpenRoot(repo.Root)
 	if err != nil {
 		return nil, err
 	}
@@ -296,12 +296,12 @@ func countWorktreeLines(root *os.Root, path string) (lines int, binary bool, err
 	if info.Mode()&os.ModeSymlink != 0 {
 		return 1, false, nil
 	}
-	f, err := root.Open(name)
+	file, err := root.Open(name)
 	if err != nil {
 		return 0, false, err
 	}
-	defer func() { err = errors.Join(err, f.Close()) }()
-	br := bufio.NewReaderSize(f, binarySniffLen)
+	defer func() { err = errors.Join(err, file.Close()) }()
+	br := bufio.NewReaderSize(file, binarySniffLen)
 	head, err := br.Peek(binarySniffLen)
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
 		return 0, false, err
@@ -314,15 +314,15 @@ func countWorktreeLines(root *os.Root, path string) (lines int, binary bool, err
 }
 
 // countLines matches git: a final line without a newline still counts.
-func countLines(r io.Reader) (int, error) {
+func countLines(reader io.Reader) (int, error) {
 	buf := make([]byte, 32*1024)
 	lines := 0
 	endsWithNewline := true
 	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			lines += bytes.Count(buf[:n], []byte{'\n'})
-			endsWithNewline = buf[n-1] == '\n'
+		count, err := reader.Read(buf)
+		if count > 0 {
+			lines += bytes.Count(buf[:count], []byte{'\n'})
+			endsWithNewline = buf[count-1] == '\n'
 		}
 		if errors.Is(err, io.EOF) {
 			break

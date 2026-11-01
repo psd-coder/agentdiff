@@ -70,12 +70,12 @@ func SumUsage(items []LogItem) *Usage {
 // session, so a run that resumed a session costs the difference to parent,
 // the run that ended in that session. The cost stays unknown, 0, when the
 // run resumed a session and parent is nil.
-func OwnCost(u Usage, resumed bool, parent *Usage) float64 {
+func OwnCost(usage Usage, resumed bool, parent *Usage) float64 {
 	switch {
-	case u.SessionCost == 0 || !resumed:
-		return cmp.Or(u.SessionCost, u.CostUSD)
+	case usage.SessionCost == 0 || !resumed:
+		return cmp.Or(usage.SessionCost, usage.CostUSD)
 	case parent == nil:
 		return 0
 	}
-	return max(0, u.SessionCost-parent.SessionCost)
+	return max(0, usage.SessionCost-parent.SessionCost)
 }

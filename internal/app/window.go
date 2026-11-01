@@ -17,22 +17,22 @@ func Run(repo string) error {
 		if err != nil {
 			log.Fatal(err)
 		}
-		a := newApp(store.Store{Dir: dir})
-		a.watchFiles = watchFiles
-		a.applyTheme()
-		mygo.App.SetMenu(a.menu())
-		a.win = mygo.NewWindow(mygo.WindowOptions{
+		app := newApp(store.Store{Dir: dir})
+		app.watchFiles = watchFiles
+		app.applyTheme()
+		mygo.App.SetMenu(app.menu())
+		app.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "AgentDiff",
 			Width:     1400,
 			Height:    900,
 			MinWidth:  900,
 			MinHeight: 560,
 			StateKey:  "main",
-			Content:   ui.View(a.view),
+			Content:   ui.View(app.view),
 		})
-		a.win.OnFocus(func() { a.win.Update(a.syncBranch) })
+		app.win.OnFocus(func() { app.win.Update(app.syncBranch) })
 		if repo != "" {
-			a.win.Update(func() { a.openRepo(repo) })
+			app.win.Update(func() { app.openRepo(repo) })
 		}
 	})
 	return mygo.App.Run()

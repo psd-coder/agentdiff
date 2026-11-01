@@ -45,7 +45,7 @@ func TestDefaultTemplatesPassTheirCheck(t *testing.T) {
 }
 
 func TestPromptsFallBackToTheDefault(t *testing.T) {
-	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
 	tests := []struct {
 		name  string
 		text  string
@@ -58,24 +58,24 @@ func TestPromptsFallBackToTheDefault(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := Prompts{PromptOverview: tt.text}
-			prompt := OverviewExchange(r, testChanges, agent.Config{Provider: agent.Claude}, p).Request.Prompt
+			prompts := Prompts{PromptOverview: tt.text}
+			prompt := OverviewExchange(review, testChanges, agent.Config{Provider: agent.Claude}, prompts).Request.Prompt
 			checkPrompt(t, prompt, []string{tt.want, overviewSchema, "- a.go\n- b.go\n"}, tt.lacks)
 		})
 	}
 }
 
 func TestRewrittenSystemPromptGoesToEveryRun(t *testing.T) {
-	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	p := Prompts{PromptSystem: "  Answer in Spanish.\n"}
-	w := r.AddWalk("", -1, "Why?")
-	th := r.AddThread(Anchor{Kind: AnchorGeneral})
+	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	prompts := Prompts{PromptSystem: "  Answer in Spanish.\n"}
+	walk := review.AddWalk("", -1, "Why?")
+	th := review.AddThread(Anchor{Kind: AnchorGeneral})
 	cfg := agent.Config{Provider: agent.Claude}
 	for name, req := range map[string]agent.Request{
-		"overview":  OverviewExchange(r, testChanges, cfg, p).Request,
-		"deeper":    DeeperExchange(r, w, cfg, p, "").Request,
-		"follow-up": FollowupExchange(r, w, cfg, p, "", "And?").Request,
-		"thread":    ThreadExchange(r, th, cfg, p, "", "Why?").Request,
+		"overview":  OverviewExchange(review, testChanges, cfg, prompts).Request,
+		"deeper":    DeeperExchange(review, walk, cfg, prompts, "").Request,
+		"follow-up": FollowupExchange(review, walk, cfg, prompts, "", "And?").Request,
+		"thread":    ThreadExchange(review, th, cfg, prompts, "", "Why?").Request,
 	} {
 		if req.SystemPrompt != "Answer in Spanish." {
 			t.Errorf("%s system prompt = %q", name, req.SystemPrompt)
@@ -84,11 +84,11 @@ func TestRewrittenSystemPromptGoesToEveryRun(t *testing.T) {
 }
 
 func TestRenderPutsValuesInOnce(t *testing.T) {
-	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	r.Overview = &Overview{Walk: &Walkthrough{Steps: []Step{{Title: "Keys", Text: "Uses {{format}} literally."}}}, Sessions: Sessions{agent.Claude: "root"}}
-	w := r.AddWalk("", 0, "")
-	p := Prompts{PromptDeeper: "{{context}}\n\n\n\n{{step}}\n\n{{question}}\n\n{{format}}"}
-	prompt := DeeperExchange(r, w, agent.Config{Provider: agent.Claude}, p, "").Request.Prompt
+	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	review.Overview = &Overview{Walk: &Walkthrough{Steps: []Step{{Title: "Keys", Text: "Uses {{format}} literally."}}}, Sessions: Sessions{agent.Claude: "root"}}
+	walk := review.AddWalk("", 0, "")
+	prompts := Prompts{PromptDeeper: "{{context}}\n\n\n\n{{step}}\n\n{{question}}\n\n{{format}}"}
+	prompt := DeeperExchange(review, walk, agent.Config{Provider: agent.Claude}, prompts, "").Request.Prompt
 	if !strings.HasPrefix(prompt, "Go one level deeper into this step") {
 		t.Errorf("the empty context leaves a gap at the start: %q", prompt[:min(len(prompt), 60)])
 	}

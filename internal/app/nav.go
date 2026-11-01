@@ -6,23 +6,23 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-func (a *app) goBack() { a.nav.back(a.pageGone) }
+func (app *app) goBack() { app.nav.back(app.pageGone) }
 
-func (a *app) goForward() { a.nav.forward(a.pageGone) }
+func (app *app) goForward() { app.nav.forward(app.pageGone) }
 
 // pageGone reports whether the target of p is gone: a deleted walk, a
 // file out of the changes, a group that no longer exists or a dropped
 // earlier review.
-func (a *app) pageGone(p page) bool {
-	switch p.kind {
+func (app *app) pageGone(page page) bool {
+	switch page.kind {
 	case kindWalk:
-		return a.rev.Walk(p.key) == nil
+		return app.rev.Walk(page.key) == nil
 	case kindFile:
-		return a.diffs[p.key] == nil
+		return app.diffs[page.key] == nil
 	case kindArchived:
-		return a.reviews.Find(p.key) == nil
+		return app.reviews.Find(page.key) == nil
 	case kindGroup:
-		_, found := a.groupIndex(p.key)
+		_, found := app.groupIndex(page.key)
 		return !found
 	case kindOverview, kindThreads, kindFeedback, kindAll:
 	}
@@ -31,66 +31,66 @@ func (a *app) pageGone(p page) bool {
 
 // leaveGone forgets the gone pages in Back and Forward, and replaces a
 // gone page on screen with the Overview.
-func (a *app) leaveGone() {
-	a.nav.forget(a.pageGone)
-	if a.pageGone(a.nav.page) {
-		a.nav.replace(overview)
+func (app *app) leaveGone() {
+	app.nav.forget(app.pageGone)
+	if app.pageGone(app.nav.page) {
+		app.nav.replace(overview)
 	}
 }
 
 // takeFocus gives e the keyboard focus while a.refocus names it, until it
 // has it: a dialog that closes in the same frame gives the focus back to
 // where it was before, after e asked for it.
-func (a *app) takeFocus(e ui.Element, name string) {
-	if a.refocus != name {
+func (app *app) takeFocus(element ui.Element, name string) {
+	if app.refocus != name {
 		return
 	}
-	if e.Focused() {
-		a.refocus = ""
+	if element.Focused() {
+		app.refocus = ""
 		return
 	}
-	e.Focus()
+	element.Focus()
 }
 
 // openPage goes to the page and puts the keyboard focus on it.
-func (a *app) openPage(p page) {
-	a.nav.goTo(p)
-	a.refocus = "page"
+func (app *app) openPage(page page) {
+	app.nav.goTo(page)
+	app.refocus = "page"
 }
 
 // pageScroll is the scroll of a page, which keeps its place. It takes the
 // keyboard focus that Focus Page and Cmd+1 to Cmd+3 move to the page, so
 // that the arrows and Page Up and Page Down scroll it.
-func (a *app) pageScroll(c *ui.Context, p page) ui.Element {
-	s := ui.Scroll(c.Key("page-" + p.String())).TrackScroll(a.scrollOf(p.String())).Focusable().FocusRing(false)
-	a.takeFocus(s, "page")
-	return s
+func (app *app) pageScroll(ctx *ui.Context, page page) ui.Element {
+	scroll := ui.Scroll(ctx.Key("page-" + page.String())).TrackScroll(app.scrollOf(page.String())).Focusable().FocusRing(false)
+	app.takeFocus(scroll, "page")
+	return scroll
 }
 
 // scrollOf is the scroll place of a page or a panel, by its key, so that
 // a page opened again shows where the reviewer left it.
-func (a *app) scrollOf(key string) *ui.ScrollState {
-	s := a.scrolls[key]
-	if s == nil {
-		s = &ui.ScrollState{}
-		a.scrolls[key] = s
+func (app *app) scrollOf(key string) *ui.ScrollState {
+	scroll := app.scrolls[key]
+	if scroll == nil {
+		scroll = &ui.ScrollState{}
+		app.scrolls[key] = scroll
 	}
-	return s
+	return scroll
 }
 
 // cardsOf is the place of a page of file cards, as scrollOf is of a page
 // that scrolls.
-func (a *app) cardsOf(p page) *cardPage {
-	cards := a.lists[p]
+func (app *app) cardsOf(page page) *cardPage {
+	cards := app.lists[page]
 	if cards == nil {
 		cards = &cardPage{}
-		a.lists[p] = cards
+		app.lists[page] = cards
 	}
 	return cards
 }
 
-func (a *app) pageLabel(p page) string {
-	switch p.kind {
+func (app *app) pageLabel(page page) string {
+	switch page.kind {
 	case kindOverview:
 		return "Overview"
 	case kindThreads:
@@ -102,27 +102,27 @@ func (a *app) pageLabel(p page) string {
 	case kindArchived:
 		return "Earlier review"
 	case kindWalk:
-		if w := a.rev.Walk(p.key); w != nil {
-			return excerpt(a.rev.WalkTitle(w), 48)
+		if walk := app.rev.Walk(page.key); walk != nil {
+			return excerpt(app.rev.WalkTitle(walk), 48)
 		}
 	case kindFile:
-		return path.Base(p.key)
+		return path.Base(page.key)
 	case kindGroup:
-		if i, ok := a.groupIndex(p.key); ok {
-			return a.groups()[i].Title
+		if index, ok := app.groupIndex(page.key); ok {
+			return app.groups()[index].Title
 		}
 	}
 	return "previous page"
 }
 
 // backBar leads back to the page Back opens.
-func (a *app) backBar(c *ui.Context) {
-	t := c.Theme()
-	prev, ok := a.nav.prev(a.pageGone)
+func (app *app) backBar(ctx *ui.Context) {
+	theme := ctx.Theme()
+	prev, ok := app.nav.prev(app.pageGone)
 	if !ok {
 		return
 	}
-	ui.Row(c).Gap(8).Padding(8, pageInset).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		a.cmdButton(c, "back", "", "‹ Back to "+a.pageLabel(prev))
+	ui.Row(ctx).Gap(8).Padding(8, pageInset).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		app.cmdButton(ctx, "back", "", "‹ Back to "+app.pageLabel(prev))
 	})
 }

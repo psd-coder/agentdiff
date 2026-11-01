@@ -56,14 +56,14 @@ func accelerator(mods ui.Modifiers, key ui.Key) string {
 	if name == "" {
 		return ""
 	}
-	var b strings.Builder
+	var prefix strings.Builder
 	for _, m := range modNames {
 		if mods&m.mod != 0 {
-			b.WriteString(m.name)
-			b.WriteString("+")
+			prefix.WriteString(m.name)
+			prefix.WriteString("+")
 		}
 	}
-	return b.String() + name
+	return prefix.String() + name
 }
 
 // parseAccelerator reads an accelerator that accelerator writes, or one
@@ -85,11 +85,11 @@ func parseAccelerator(acc string) (ui.Modifiers, ui.Key, bool) {
 	}
 	name := parts[len(parts)-1]
 	if len(name) == 1 {
-		switch r := strings.ToUpper(name)[0]; {
-		case r >= 'A' && r <= 'Z':
-			return mods, ui.KeyA + ui.Key(r-'A'), true
-		case r >= '0' && r <= '9':
-			return mods, ui.Key0 + ui.Key(r-'0'), true
+		switch char := strings.ToUpper(name)[0]; {
+		case char >= 'A' && char <= 'Z':
+			return mods, ui.KeyA + ui.Key(char-'A'), true
+		case char >= '0' && char <= '9':
+			return mods, ui.Key0 + ui.Key(char-'0'), true
 		}
 	}
 	for k, n := range keyNames {
@@ -107,21 +107,21 @@ func keyLabel(acc string) string {
 		return acc
 	}
 	name := accelerator(0, key)
-	if s, ok := keySigns[name]; ok {
-		name = s
+	if sign, ok := keySigns[name]; ok {
+		name = sign
 	}
 	return modsLabel(mods) + name
 }
 
 // modsLabel writes modifiers the way the menus of macOS show them: ⌃⌥⇧⌘.
 func modsLabel(mods ui.Modifiers) string {
-	var b strings.Builder
+	var signs strings.Builder
 	for _, m := range modNames {
 		if mods&m.mod != 0 {
-			b.WriteString(m.sign)
+			signs.WriteString(m.sign)
 		}
 	}
-	return b.String()
+	return signs.String()
 }
 
 // fixedKeys are keys the app uses in fields and lists, which no command
@@ -136,9 +136,9 @@ var fixedKeys = map[string]string{
 // keys are reserved. Of two commands with the same keys in the config,
 // the one higher in the menu bar keeps them. The config keeps the
 // keymap's overrides from then on.
-func (a *app) keymap() *keymap {
-	if a.km != nil {
-		return a.km
+func (app *app) keymap() *keymap {
+	if app.km != nil {
+		return app.km
 	}
 	reserved := maps.Clone(fixedKeys)
 	var order []*command
@@ -149,55 +149,55 @@ func (a *app) keymap() *keymap {
 				reserved[it.Accelerator] = it.Label
 			}
 			if it.ID != "" {
-				order = append(order, a.cmd(it.ID))
+				order = append(order, app.cmd(it.ID))
 			}
 			walk(it.Submenu)
 		}
 	}
-	walk(a.menuBar(func(string) string { return "" }).Items())
-	for _, cm := range a.cachedCommands() {
+	walk(app.menuBar(func(string) string { return "" }).Items())
+	for _, cm := range app.cachedCommands() {
 		if !slices.Contains(order, cm) {
 			order = append(order, cm)
 		}
 	}
-	a.km = newKeymap(order, reserved, a.cfg.Keys)
-	a.cfg.Keys = a.km.overrides()
-	return a.km
+	app.km = newKeymap(order, reserved, app.cfg.Keys)
+	app.cfg.Keys = app.km.overrides()
+	return app.km
 }
 
 // keysChanged saves the keys, and has the next frame put them in the
 // menu bar: a change can come from a click on the menu bar itself.
-func (a *app) keysChanged() {
-	a.cfg.Keys = a.keymap().overrides()
-	a.saveConfig()
-	a.menuDirty = true
-	if a.win != nil {
-		a.win.Invalidate()
+func (app *app) keysChanged() {
+	app.cfg.Keys = app.keymap().overrides()
+	app.saveConfig()
+	app.menuDirty = true
+	if app.win != nil {
+		app.win.Invalidate()
 	}
 }
 
 // updateMenu puts the keys changed since the last frame in the menu bar.
-func (a *app) updateMenu() {
-	if a.menuDirty && a.win != nil {
-		mygo.App.SetMenu(a.menu())
+func (app *app) updateMenu() {
+	if app.menuDirty && app.win != nil {
+		mygo.App.SetMenu(app.menu())
 	}
-	a.menuDirty = false
+	app.menuDirty = false
 }
 
 // commandKeys runs, by their keys, the commands the menu bar does not
 // hold, while no shortcut is being recorded.
-func (a *app) commandKeys(c *ui.Context) {
-	if a.recording != "" {
+func (app *app) commandKeys(uiContext *ui.Context) {
+	if app.recording != "" {
 		return
 	}
-	inMenu := a.menuIDs()
-	for _, cm := range a.cachedCommands() {
-		keys := a.keymap().of(cm.id)
+	inMenu := app.menuIDs()
+	for _, cm := range app.cachedCommands() {
+		keys := app.keymap().of(cm.id)
 		if keys == "" || inMenu[cm.id] {
 			continue
 		}
-		if mods, key, ok := parseAccelerator(keys); ok && c.Shortcut(mods, key) {
-			a.runHere(c, cm.id)
+		if mods, key, ok := parseAccelerator(keys); ok && uiContext.Shortcut(mods, key) {
+			app.runHere(uiContext, cm.id)
 		}
 	}
 }

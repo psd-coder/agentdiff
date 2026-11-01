@@ -7,22 +7,22 @@ import (
 
 // Label names an anchor as revdiff does: path:43 (+), path:43-67 (-),
 // path (file-level).
-func (a Anchor) Label() string {
-	switch a.Kind {
+func (anchor Anchor) Label() string {
+	switch anchor.Kind {
 	case AnchorLines:
-		lines := fmt.Sprint(a.Start)
-		if a.End > a.Start {
-			lines = fmt.Sprintf("%d-%d", a.Start, a.End)
+		lines := fmt.Sprint(anchor.Start)
+		if anchor.End > anchor.Start {
+			lines = fmt.Sprintf("%d-%d", anchor.Start, anchor.End)
 		}
 		mark := "+"
-		if a.Side == SideOld {
+		if anchor.Side == SideOld {
 			mark = "-"
 		}
-		return fmt.Sprintf("%s:%s (%s)", a.File, lines, mark)
+		return fmt.Sprintf("%s:%s (%s)", anchor.File, lines, mark)
 	case AnchorFile:
-		return a.File + " (file-level)"
+		return anchor.File + " (file-level)"
 	case AnchorSection:
-		return "Overview: " + a.Section
+		return "Overview: " + anchor.Section
 	default:
 		return "General"
 	}
@@ -36,29 +36,29 @@ type ExportOptions struct {
 // Export writes the threads of a review as Markdown for the coding agent
 // to act on: one heading per thread, the reviewer's words, and what the
 // review agent answered when Agent is set.
-func Export(r *Review, scope string, opt ExportOptions) string {
-	threads := ExportedThreads(r, opt)
-	var b strings.Builder
-	b.WriteString("# Code review feedback\n\n")
-	fmt.Fprintf(&b, "Scope: %s\n\n", scope)
+func Export(review *Review, scope string, opt ExportOptions) string {
+	threads := ExportedThreads(review, opt)
+	var builder strings.Builder
+	builder.WriteString("# Code review feedback\n\n")
+	fmt.Fprintf(&builder, "Scope: %s\n\n", scope)
 	if len(threads) == 0 {
-		b.WriteString("No comments.\n")
-		return b.String()
+		builder.WriteString("No comments.\n")
+		return builder.String()
 	}
-	b.WriteString("Lines are 1-based. (+) marks lines of the new version, (-) lines of the old version. Address each item, or explain why not.\n")
+	builder.WriteString("Lines are 1-based. (+) marks lines of the new version, (-) lines of the old version. Address each item, or explain why not.\n")
 	for _, t := range threads {
-		fmt.Fprintf(&b, "\n## %s\n", t.Anchor.Label())
+		fmt.Fprintf(&builder, "\n## %s\n", t.Anchor.Label())
 		if t.Anchor.Kind == AnchorLines && t.Anchor.Quote != "" {
-			fmt.Fprintf(&b, "```\n%s\n```\n", strings.TrimRight(t.Anchor.Quote, "\n"))
+			fmt.Fprintf(&builder, "```\n%s\n```\n", strings.TrimRight(t.Anchor.Quote, "\n"))
 		}
-		writeMessages(&b, t, opt.Agent)
+		writeMessages(&builder, t, opt.Agent)
 	}
-	return b.String()
+	return builder.String()
 }
 
-func ExportedThreads(r *Review, opt ExportOptions) []*Thread {
+func ExportedThreads(review *Review, opt ExportOptions) []*Thread {
 	var out []*Thread
-	for _, t := range r.Threads {
+	for _, t := range review.Threads {
 		if t.Excluded || (t.Resolved && !opt.Resolved) || !hasUserText(t) {
 			continue
 		}
@@ -67,8 +67,8 @@ func ExportedThreads(r *Review, opt ExportOptions) []*Thread {
 	return out
 }
 
-func hasUserText(t *Thread) bool {
-	for _, m := range t.Messages {
+func hasUserText(thread *Thread) bool {
+	for _, m := range thread.Messages {
 		if m.Role == RoleUser && strings.TrimSpace(m.Text) != "" {
 			return true
 		}
@@ -76,16 +76,16 @@ func hasUserText(t *Thread) bool {
 	return false
 }
 
-func writeMessages(b *strings.Builder, t *Thread, withAgent bool) {
-	if !withAgent || !t.Discussed() {
-		for _, m := range t.Messages {
+func writeMessages(builder *strings.Builder, thread *Thread, withAgent bool) {
+	if !withAgent || !thread.Discussed() {
+		for _, m := range thread.Messages {
 			if m.Role == RoleUser {
-				fmt.Fprintf(b, "%s\n", strings.TrimSpace(m.Text))
+				fmt.Fprintf(builder, "%s\n", strings.TrimSpace(m.Text))
 			}
 		}
 		return
 	}
-	for _, m := range t.Messages {
+	for _, m := range thread.Messages {
 		if m.Role == RoleAgent && m.Text == "" {
 			continue
 		}
@@ -93,6 +93,6 @@ func writeMessages(b *strings.Builder, t *Thread, withAgent bool) {
 		if m.Role == RoleAgent {
 			who = "Review agent"
 		}
-		fmt.Fprintf(b, "\n**%s:**\n%s\n", who, strings.TrimSpace(m.Text))
+		fmt.Fprintf(builder, "\n**%s:**\n%s\n", who, strings.TrimSpace(m.Text))
 	}
 }

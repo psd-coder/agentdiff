@@ -11,11 +11,11 @@ import (
 // starts a new session, and a switch back continues the earlier one.
 type Sessions map[agent.Provider]string
 
-func (s *Sessions) Set(p agent.Provider, id string) {
-	if *s == nil {
-		*s = Sessions{}
+func (sessions *Sessions) Set(provider agent.Provider, id string) {
+	if *sessions == nil {
+		*sessions = Sessions{}
 	}
-	(*s)[p] = id
+	(*sessions)[provider] = id
 }
 
 // legacySession is the one session that review files kept before they
@@ -24,47 +24,47 @@ type legacySession struct {
 	SessionID string `json:"sessionId"`
 }
 
-func (l legacySession) into(s *Sessions, p agent.Provider) {
-	if l.SessionID != "" && p != "" {
-		s.Set(p, l.SessionID)
+func (legacy legacySession) into(sessions *Sessions, provider agent.Provider) {
+	if legacy.SessionID != "" && provider != "" {
+		sessions.Set(provider, legacy.SessionID)
 	}
 }
 
-func (o *Overview) UnmarshalJSON(b []byte) error {
+func (overview *Overview) UnmarshalJSON(data []byte) error {
 	type plain Overview
 	var old legacySession
-	if err := json.Unmarshal(b, (*plain)(o)); err != nil {
+	if err := json.Unmarshal(data, (*plain)(overview)); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(b, &old); err != nil {
+	if err := json.Unmarshal(data, &old); err != nil {
 		return err
 	}
-	old.into(&o.Sessions, o.Agent)
+	old.into(&overview.Sessions, overview.Agent)
 	return nil
 }
 
-func (w *Walk) UnmarshalJSON(b []byte) error {
+func (walk *Walk) UnmarshalJSON(data []byte) error {
 	type plain Walk
 	var old legacySession
-	if err := json.Unmarshal(b, (*plain)(w)); err != nil {
+	if err := json.Unmarshal(data, (*plain)(walk)); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(b, &old); err != nil {
+	if err := json.Unmarshal(data, &old); err != nil {
 		return err
 	}
-	old.into(&w.Sessions, w.Agent)
+	old.into(&walk.Sessions, walk.Agent)
 	return nil
 }
 
-func (t *Thread) UnmarshalJSON(b []byte) error {
+func (thread *Thread) UnmarshalJSON(data []byte) error {
 	type plain Thread
 	var old legacySession
-	if err := json.Unmarshal(b, (*plain)(t)); err != nil {
+	if err := json.Unmarshal(data, (*plain)(thread)); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(b, &old); err != nil {
+	if err := json.Unmarshal(data, &old); err != nil {
 		return err
 	}
-	old.into(&t.Sessions, t.Agent)
+	old.into(&thread.Sessions, thread.Agent)
 	return nil
 }

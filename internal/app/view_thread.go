@@ -10,14 +10,14 @@ import (
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
-func (a *app) threadPanel(c *ui.Context) {
-	t := c.Theme()
-	th := a.rev.Thread(a.threadID())
+func (app *app) threadPanel(ctx *ui.Context) {
+	theme := ctx.Theme()
+	th := app.rev.Thread(app.threadID())
 	if th == nil {
 		return
 	}
-	ui.Column(c).Fill().Background(t.Background).BorderWidth(0, 0, 0, 1).BorderColor(t.Border).Children(func() {
-		ui.Row(c).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+	ui.Column(ctx).Fill().Background(theme.Background).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).Children(func() {
+		ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			target, linked := overview, true
 			switch {
 			case th.Anchor.File != "":
@@ -26,180 +26,180 @@ func (a *app) threadPanel(c *ui.Context) {
 				linked = false
 			}
 			if !linked {
-				ui.Text(c, th.Anchor.Label()).Bold().SingleLine().Shrink(1).Grow(1)
+				ui.Text(ctx, th.Anchor.Label()).Bold().SingleLine().Shrink(1).Grow(1)
 			} else {
-				title := textLink(c, th.Anchor.Label(), func(e ui.Element) { e.Bold().TextColor(t.Text) }).Grow(1).Justify(ui.Start).Tooltip("Go to it")
+				title := textLink(ctx, th.Anchor.Label(), func(e ui.Element) { e.Bold().TextColor(theme.Text) }).Grow(1).Justify(ui.Start).Tooltip("Go to it")
 				if title.Clicked() {
-					a.nav.goTo(target)
+					app.nav.goTo(target)
 				}
 			}
-			a.cmdButton(c, "thread-log", th.ID, "Log")
-			a.cmdButton(c, "close-thread", th.ID, "Close")
+			app.cmdButton(ctx, "thread-log", th.ID, "Log")
+			app.cmdButton(ctx, "close-thread", th.ID, "Close")
 		})
 		if th.Anchor.Quote != "" && th.Anchor.Kind == review.AnchorLines {
-			ui.Text(c, strings.TrimRight(th.Anchor.Quote, "\n")).Font("monospace").FontSize(12).MaxLines(8).
-				Padding(8, 12).Background(t.Surface).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Selectable()
+			ui.Text(ctx, strings.TrimRight(th.Anchor.Quote, "\n")).Font("monospace").FontSize(12).MaxLines(8).
+				Padding(8, 12).Background(theme.Surface).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Selectable()
 		}
-		ui.Scroll(c).Grow(1).FillWidth().Children(func() {
-			ui.Column(c).Gap(12).Padding(12).Children(func() {
+		ui.Scroll(ctx).Grow(1).FillWidth().Children(func() {
+			ui.Column(ctx).Gap(12).Padding(12).Children(func() {
 				if len(th.Messages) == 0 {
-					ui.Text(c, "Write a comment for the coding agent, or ask the review agent a question. Each thread is a separate conversation.").TextColor(t.TextMuted)
+					ui.Text(ctx, "Write a comment for the coding agent, or ask the review agent a question. Each thread is a separate conversation.").TextColor(theme.TextMuted)
 				}
-				run := a.runner.run(a.rev, th.ID)
+				run := app.runner.run(app.rev, th.ID)
 				for i := range th.Messages {
 					if run != nil && run.ex.Reply() == i {
-						a.pendingReply(c, th, run)
+						app.pendingReply(ctx, th, run)
 					}
-					a.message(c, th, i)
+					app.message(ctx, th, i)
 				}
 				if run != nil && run.ex.Reply() == len(th.Messages) {
-					a.pendingReply(c, th, run)
+					app.pendingReply(ctx, th, run)
 				}
 			})
 		})
-		a.composer(c, th)
-		ui.Row(c).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-			a.cmdCheckbox(c, "include-thread", "exclude-thread", th.ID, "In feedback")
-			a.cmdCheckbox(c, "resolve-thread", "reopen-thread", th.ID, "Resolved")
-			ui.Spacer(c)
-			a.cmdButton(c, "delete-thread", th.ID, "Delete")
+		app.composer(ctx, th)
+		ui.Row(ctx).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+			app.cmdCheckbox(ctx, "include-thread", "exclude-thread", th.ID, "In feedback")
+			app.cmdCheckbox(ctx, "resolve-thread", "reopen-thread", th.ID, "Resolved")
+			ui.Spacer(ctx)
+			app.cmdButton(ctx, "delete-thread", th.ID, "Delete")
 		})
 	})
 }
 
-func (a *app) closeThread() {
-	a.closeEmptyThread("")
-	a.panel = nil
+func (app *app) closeThread() {
+	app.closeEmptyThread("")
+	app.panel = nil
 }
 
-func messageHeader(c *ui.Context, who string, at time.Time) {
-	t := c.Theme()
-	ui.Row(c).Gap(6).Children(func() {
-		ui.Text(c, who).FontSize(11).Bold().TextColor(t.TextMuted)
+func messageHeader(ctx *ui.Context, who string, at time.Time) {
+	theme := ctx.Theme()
+	ui.Row(ctx).Gap(6).Children(func() {
+		ui.Text(ctx, who).FontSize(11).Bold().TextColor(theme.TextMuted)
 		if !at.IsZero() {
-			ui.Text(c, at.Format("15:04")).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(ctx, at.Format("15:04")).FontSize(11).TextColor(theme.TextMuted)
 		}
 	})
 }
 
 // pendingReply is the answer the agent writes in the thread now.
-func (a *app) pendingReply(c *ui.Context, th *review.Thread, run *agentRun) {
-	t := c.Theme()
-	ui.Column(c.Key("pending")).Gap(4).Children(func() {
-		messageHeader(c, th.Agent.Name(), run.started)
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Spinner(c).Size(12, 12)
-			ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
+func (app *app) pendingReply(ctx *ui.Context, th *review.Thread, run *agentRun) {
+	theme := ctx.Theme()
+	ui.Column(ctx.Key("pending")).Gap(4).Children(func() {
+		messageHeader(ctx, th.Agent.Name(), run.started)
+		ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Spinner(ctx).Size(12, 12)
+			ui.Text(ctx, run.activity).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1)
 		})
 		if run.text != "" {
-			markdown.Stream(c, run.text, &a.md)
+			markdown.Stream(ctx, run.text, &app.md)
 		}
 	})
 }
 
-func (a *app) message(c *ui.Context, th *review.Thread, i int) {
-	t := c.Theme()
-	m := th.Messages[i]
-	ui.Column(c.Key(i)).Gap(4).Children(func() {
+func (app *app) message(ctx *ui.Context, th *review.Thread, index int) {
+	theme := ctx.Theme()
+	message := th.Messages[index]
+	ui.Column(ctx.Key(index)).Gap(4).Children(func() {
 		who := "You"
-		if m.Role == review.RoleAgent {
+		if message.Role == review.RoleAgent {
 			who = th.Agent.Name()
 		}
-		messageHeader(c, who, m.Time)
-		if m.Role == review.RoleUser {
-			ui.Text(c, m.Text).Selectable().Padding(8, 10).Radius(8).Background(t.Surface)
+		messageHeader(ctx, who, message.Time)
+		if message.Role == review.RoleUser {
+			ui.Text(ctx, message.Text).Selectable().Padding(8, 10).Radius(8).Background(theme.Surface)
 			return
 		}
-		if m.Text != "" {
-			markdown.View(c, m.Text, &a.md)
+		if message.Text != "" {
+			markdown.View(ctx, message.Text, &app.md)
 		}
-		if m.Err != "" {
-			errorText(c, m.Err)
+		if message.Err != "" {
+			errorText(ctx, message.Err)
 		}
 	})
 }
 
-func (a *app) composer(c *ui.Context, th *review.Thread) {
-	t := c.Theme()
-	draft := a.drafts[th.ID]
-	busy := a.busy(th.ID)
-	ui.Column(c).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
+func (app *app) composer(ctx *ui.Context, th *review.Thread) {
+	theme := ctx.Theme()
+	draft := app.drafts[th.ID]
+	busy := app.busy(th.ID)
+	ui.Column(ctx).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
 		placeholder := "Comment, or question for the agent"
 		if len(th.Messages) > 0 {
 			placeholder = "Reply"
 		}
-		in := ui.TextArea(c.Key("draft-"+th.ID), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
+		in := ui.TextArea(ctx.Key("draft-"+th.ID), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
 			OnTextKey(func(k ui.TextKey) bool {
-				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !a.busy(th.ID) {
-					a.ask(a.rev, th, k.Text())
+				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !app.busy(th.ID) {
+					app.ask(app.rev, th, k.Text())
 					k.SetText("")
-					a.drafts[th.ID] = ""
+					app.drafts[th.ID] = ""
 					return true
 				}
 				return false
 			})
 		if in.Changed() {
-			a.drafts[th.ID] = draft
+			app.drafts[th.ID] = draft
 		}
 		empty := strings.TrimSpace(draft) == ""
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Cmd+Enter asks the agent").FontSize(11).TextColor(t.TextMuted).Grow(1)
-			a.cmdButton(c, "stop-thread", th.ID, "Stop")
-			ui.Button(c, "Comment").Disabled(empty).Tooltip("Add to the feedback without asking the agent").OnClick(func() {
-				a.comment(th, draft)
-				a.drafts[th.ID] = ""
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(ctx, "Cmd+Enter asks the agent").FontSize(11).TextColor(theme.TextMuted).Grow(1)
+			app.cmdButton(ctx, "stop-thread", th.ID, "Stop")
+			ui.Button(ctx, "Comment").Disabled(empty).Tooltip("Add to the feedback without asking the agent").OnClick(func() {
+				app.comment(th, draft)
+				app.drafts[th.ID] = ""
 			})
-			ui.PrimaryButton(c, "Ask agent").Disabled(empty || busy).OnClick(func() {
-				a.ask(a.rev, th, draft)
-				a.drafts[th.ID] = ""
+			ui.PrimaryButton(ctx, "Ask agent").Disabled(empty || busy).OnClick(func() {
+				app.ask(app.rev, th, draft)
+				app.drafts[th.ID] = ""
 			})
 		})
 	})
 }
 
-func (a *app) threadsPage(c *ui.Context) {
-	t := c.Theme()
-	a.pageScroll(c, page{kind: kindThreads}).Grow(1).FillWidth().Children(func() {
-		ui.Column(c).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
-			ui.Text(c, "Questions").FontSize(22).Bold()
-			a.questionsList(c)
-			ui.Text(c, "Comments").FontSize(22).Bold().Margin(16, 0, 0, 0)
-			n := 0
-			for _, th := range a.rev.Threads {
+func (app *app) threadsPage(ctx *ui.Context) {
+	theme := ctx.Theme()
+	app.pageScroll(ctx, page{kind: kindThreads}).Grow(1).FillWidth().Children(func() {
+		ui.Column(ctx).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
+			ui.Text(ctx, "Questions").FontSize(22).Bold()
+			app.questionsList(ctx)
+			ui.Text(ctx, "Comments").FontSize(22).Bold().Margin(16, 0, 0, 0)
+			threadCount := 0
+			for _, th := range app.rev.Threads {
 				if len(th.Messages) > 0 {
-					a.threadRow(c, th)
-					n++
+					app.threadRow(ctx, th)
+					threadCount++
 				}
 			}
-			if n == 0 {
-				ui.Text(c, "No comments yet. Click + next to a line in a diff, select line numbers, or use Discuss on the overview.").TextColor(t.TextMuted)
+			if threadCount == 0 {
+				ui.Text(ctx, "No comments yet. Click + next to a line in a diff, select line numbers, or use Discuss on the overview.").TextColor(theme.TextMuted)
 			}
 		})
 	})
 }
 
-func (a *app) threadRow(c *ui.Context, th *review.Thread) {
-	t := c.Theme()
-	row := ui.ButtonBase(c.Key("row-"+th.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, t.Border).Column().AlignItems(ui.Stretch)
+func (app *app) threadRow(ctx *ui.Context, th *review.Thread) {
+	theme := ctx.Theme()
+	row := ui.ButtonBase(ctx.Key("row-"+th.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, theme.Border).Column().AlignItems(ui.Stretch)
 	if row.Hovered() {
-		row.Background(t.SurfaceHover)
+		row.Background(theme.SurfaceHover)
 	}
 	row.Children(func() {
-		ui.Text(c, th.Anchor.Label()).Font("monospace").FontSize(12).TextColor(t.Accent).SingleLine()
+		ui.Text(ctx, th.Anchor.Label()).Font("monospace").FontSize(12).TextColor(theme.Accent).SingleLine()
 		first := ""
 		if len(th.Messages) > 0 {
 			first = th.Messages[0].Text
 		}
-		ui.Text(c, excerpt(first, 300)).MaxLines(2)
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, a.threadMeta(th)).FontSize(11).TextColor(t.TextMuted)
-			targetMark(c, a.state(th.ID))
+		ui.Text(ctx, excerpt(first, 300)).MaxLines(2)
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(ctx, app.threadMeta(th)).FontSize(11).TextColor(theme.TextMuted)
+			targetMark(ctx, app.state(th.ID))
 		})
 	})
 	if row.Clicked() {
-		a.openThread(th.ID)
+		app.openThread(th.ID)
 		if th.Anchor.File != "" {
-			a.nav.goTo(page{kindFile, th.Anchor.File})
+			app.nav.goTo(page{kindFile, th.Anchor.File})
 		}
 	}
 }

@@ -14,24 +14,24 @@ import (
 const sessionsAnswer = "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}, {"title": "B", "text": "b"}], "groups": []}` + "\n```"
 
 // useAgent makes the next runs go to provider, in a new session id.
-func useAgent(a *app, f *fakeAgent, p agent.Provider, id string) {
-	a.cfg.Agent = agent.Config{Provider: p}
-	f.answer(id, sessionsAnswer)
+func useAgent(app *app, fake *fakeAgent, provider agent.Provider, id string) {
+	app.cfg.Agent = agent.Config{Provider: provider}
+	fake.answer(id, sessionsAnswer)
 }
 
 func sessionsApp(t *testing.T) (*app, *fakeAgent) {
 	t.Helper()
-	a := newTestApp(t)
-	a.cfg.DeeperAhead = false
-	a.queue = make(chan func(), 256)
-	return a, newFakeAgent(t, a)
+	app := newTestApp(t)
+	app.cfg.DeeperAhead = false
+	app.queue = make(chan func(), 256)
+	return app, newFakeAgent(t, app)
 }
 
 // idle waits until no run of the review is left.
-func idle(t *testing.T, a *app, what string) {
+func idle(t *testing.T, app *app, what string) {
 	t.Helper()
-	pump(t, a, what, func() bool {
-		for _, r := range a.logsOf(a.rev) {
+	pump(t, app, what, func() bool {
+		for _, r := range app.logsOf(app.rev) {
 			if r.running {
 				return false
 			}
@@ -42,15 +42,15 @@ func idle(t *testing.T, a *app, what string) {
 
 // lastResumed is the session the latest run resumed or forked, empty for a
 // new session.
-func lastResumed(a *app) string { return a.logsOf(a.rev)[0].info.Resumed }
+func lastResumed(app *app) string { return app.logsOf(app.rev)[0].info.Resumed }
 
 // goDeeper starts the walkthrough of a step as Go deeper does.
-func goDeeper(a *app, parent string, step int) {
-	a.runWalk(a.rev, a.rev.AddWalk(parent, step, ""))
+func goDeeper(app *app, parent string, step int) {
+	app.runWalk(app.rev, app.rev.AddWalk(parent, step, ""))
 }
 
-func withRootOverview(a *app) {
-	a.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
+func withRootOverview(app *app) {
+	app.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "s", Steps: []review.Step{{Title: "A", Text: "a"}},
 	}}
 }
@@ -60,94 +60,94 @@ func withRootOverview(a *app) {
 // continues the first claude session.
 func TestSessionsPerProvider(t *testing.T) {
 	t.Run("overview", func(t *testing.T) {
-		a, f := sessionsApp(t)
-		useAgent(a, f, agent.Claude, "c1")
-		a.generateOverview()
-		idle(t, a, "the claude overview")
-		useAgent(a, f, agent.Codex, "x1")
-		a.generateOverview()
-		idle(t, a, "the codex overview")
-		if got := lastResumed(a); got != "" {
+		app, fake := sessionsApp(t)
+		useAgent(app, fake, agent.Claude, "c1")
+		app.generateOverview()
+		idle(t, app, "the claude overview")
+		useAgent(app, fake, agent.Codex, "x1")
+		app.generateOverview()
+		idle(t, app, "the codex overview")
+		if got := lastResumed(app); got != "" {
 			t.Errorf("codex overview resumed %q", got)
 		}
-		useAgent(a, f, agent.Claude, "c2")
-		goDeeper(a, "", 0)
-		idle(t, a, "the deeper walkthrough")
-		if got := lastResumed(a); got != "c1" {
+		useAgent(app, fake, agent.Claude, "c2")
+		goDeeper(app, "", 0)
+		idle(t, app, "the deeper walkthrough")
+		if got := lastResumed(app); got != "c1" {
 			t.Errorf("claude walkthrough of the overview forked %q, want c1", got)
 		}
 	})
 
 	t.Run("deeper walk", func(t *testing.T) {
-		a, f := sessionsApp(t)
-		withRootOverview(a)
-		useAgent(a, f, agent.Claude, "c1")
-		goDeeper(a, "", 0)
-		idle(t, a, "the first walkthrough")
-		parent := a.rev.Walks[0]
-		useAgent(a, f, agent.Codex, "x1")
-		goDeeper(a, parent.ID, 0)
-		idle(t, a, "the codex walkthrough")
-		if got := lastResumed(a); got != "" {
+		app, fake := sessionsApp(t)
+		withRootOverview(app)
+		useAgent(app, fake, agent.Claude, "c1")
+		goDeeper(app, "", 0)
+		idle(t, app, "the first walkthrough")
+		parent := app.rev.Walks[0]
+		useAgent(app, fake, agent.Codex, "x1")
+		goDeeper(app, parent.ID, 0)
+		idle(t, app, "the codex walkthrough")
+		if got := lastResumed(app); got != "" {
 			t.Errorf("codex walkthrough forked %q", got)
 		}
-		useAgent(a, f, agent.Claude, "c2")
-		goDeeper(a, parent.ID, 1)
-		idle(t, a, "the claude walkthrough")
-		if got := lastResumed(a); got != "c1" {
+		useAgent(app, fake, agent.Claude, "c2")
+		goDeeper(app, parent.ID, 1)
+		idle(t, app, "the claude walkthrough")
+		if got := lastResumed(app); got != "c1" {
 			t.Errorf("claude walkthrough forked %q, want c1", got)
 		}
 	})
 
 	t.Run("follow-up question", func(t *testing.T) {
-		a, f := sessionsApp(t)
-		useAgent(a, f, agent.Claude, "c1")
-		a.askQuestion("", -1, "Why?")
-		idle(t, a, "the question")
-		w := a.rev.Walks[0]
-		useAgent(a, f, agent.Codex, "x1")
-		a.askMore(a.rev, w, "And codex?")
-		idle(t, a, "the codex follow-up")
-		if got := lastResumed(a); got != "" {
+		app, fake := sessionsApp(t)
+		useAgent(app, fake, agent.Claude, "c1")
+		app.askQuestion("", -1, "Why?")
+		idle(t, app, "the question")
+		walk := app.rev.Walks[0]
+		useAgent(app, fake, agent.Codex, "x1")
+		app.askMore(app.rev, walk, "And codex?")
+		idle(t, app, "the codex follow-up")
+		if got := lastResumed(app); got != "" {
 			t.Errorf("codex follow-up resumed %q", got)
 		}
-		if w.Agent != agent.Claude {
-			t.Errorf("written by %q after a codex follow-up, want claude, which wrote the first answer", w.Agent)
+		if walk.Agent != agent.Claude {
+			t.Errorf("written by %q after a codex follow-up, want claude, which wrote the first answer", walk.Agent)
 		}
-		useAgent(a, f, agent.Claude, "c2")
-		a.askMore(a.rev, w, "And claude?")
-		idle(t, a, "the claude follow-up")
-		if got := lastResumed(a); got != "c1" {
+		useAgent(app, fake, agent.Claude, "c2")
+		app.askMore(app.rev, walk, "And claude?")
+		idle(t, app, "the claude follow-up")
+		if got := lastResumed(app); got != "c1" {
 			t.Errorf("claude follow-up resumed %q, want c1", got)
 		}
-		useAgent(a, f, agent.Codex, "x2")
-		a.askMore(a.rev, w, "And codex again?")
-		idle(t, a, "the second codex follow-up")
-		if got := lastResumed(a); got != "x1" {
+		useAgent(app, fake, agent.Codex, "x2")
+		app.askMore(app.rev, walk, "And codex again?")
+		idle(t, app, "the second codex follow-up")
+		if got := lastResumed(app); got != "x1" {
 			t.Errorf("second codex follow-up resumed %q, want x1", got)
 		}
 	})
 
 	t.Run("thread", func(t *testing.T) {
-		a, f := sessionsApp(t)
-		withRootOverview(a)
-		th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-		useAgent(a, f, agent.Claude, "c1")
-		a.ask(a.rev, th, "Why?")
-		idle(t, a, "the first answer")
-		if got := lastResumed(a); got != "root" {
+		app, fake := sessionsApp(t)
+		withRootOverview(app)
+		th := app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+		useAgent(app, fake, agent.Claude, "c1")
+		app.ask(app.rev, th, "Why?")
+		idle(t, app, "the first answer")
+		if got := lastResumed(app); got != "root" {
 			t.Errorf("first question forked %q, want the overview session", got)
 		}
-		useAgent(a, f, agent.Codex, "x1")
-		a.ask(a.rev, th, "And codex?")
-		idle(t, a, "the codex answer")
-		if got := lastResumed(a); got != "" {
+		useAgent(app, fake, agent.Codex, "x1")
+		app.ask(app.rev, th, "And codex?")
+		idle(t, app, "the codex answer")
+		if got := lastResumed(app); got != "" {
 			t.Errorf("codex question resumed %q", got)
 		}
-		useAgent(a, f, agent.Claude, "c2")
-		a.ask(a.rev, th, "And claude?")
-		idle(t, a, "the claude answer")
-		if got := lastResumed(a); got != "c1" {
+		useAgent(app, fake, agent.Claude, "c2")
+		app.ask(app.rev, th, "And claude?")
+		idle(t, app, "the claude answer")
+		if got := lastResumed(app); got != "c1" {
 			t.Errorf("claude question resumed %q, want c1", got)
 		}
 	})
@@ -157,46 +157,46 @@ func TestSessionsPerProvider(t *testing.T) {
 // claude run. The failed run stores no session, so the next codex run
 // starts a new session, and the overview keeps its claude label.
 func TestFailedStartKeepsSessions(t *testing.T) {
-	a, f := sessionsApp(t)
-	useAgent(a, f, agent.Claude, "c1")
-	a.generateOverview()
-	th := a.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
-	a.ask(a.rev, th, "Why?")
-	a.askQuestion("", -1, "What?")
-	idle(t, a, "the claude runs")
-	w := a.rev.Walks[0]
+	app, fake := sessionsApp(t)
+	useAgent(app, fake, agent.Claude, "c1")
+	app.generateOverview()
+	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
+	app.ask(app.rev, th, "Why?")
+	app.askQuestion("", -1, "What?")
+	idle(t, app, "the claude runs")
+	walk := app.rev.Walks[0]
 
-	a.cfg.Agent = agent.Config{Provider: agent.Codex}
-	f.fail(errors.New("codex: executable file not found in $PATH"))
-	a.generateOverview()
-	a.ask(a.rev, th, "And codex?")
-	a.askMore(a.rev, w, "And codex?")
-	idle(t, a, "the failed codex runs")
-	ov := a.rev.Overview
-	if ov.Err == "" || ov.Sessions[agent.Codex] != "" || th.Sessions[agent.Codex] != "" || w.Sessions[agent.Codex] != "" {
-		t.Fatalf("after the failed runs: overview %+v, thread %v, walk %v", ov.Sessions, th.Sessions, w.Sessions)
+	app.cfg.Agent = agent.Config{Provider: agent.Codex}
+	fake.fail(errors.New("codex: executable file not found in $PATH"))
+	app.generateOverview()
+	app.ask(app.rev, th, "And codex?")
+	app.askMore(app.rev, walk, "And codex?")
+	idle(t, app, "the failed codex runs")
+	ov := app.rev.Overview
+	if ov.Err == "" || ov.Sessions[agent.Codex] != "" || th.Sessions[agent.Codex] != "" || walk.Sessions[agent.Codex] != "" {
+		t.Fatalf("after the failed runs: overview %+v, thread %v, walk %v", ov.Sessions, th.Sessions, walk.Sessions)
 	}
 	if ov.Walk == nil || ov.Walk.Summary != "s" {
 		t.Errorf("the failed overview lost its walkthrough: %+v", ov.Walk)
 	}
-	if ov.Agent != agent.Claude || w.Agent != agent.Claude {
-		t.Errorf("written by: overview %q, walk %q, want claude", ov.Agent, w.Agent)
+	if ov.Agent != agent.Claude || walk.Agent != agent.Claude {
+		t.Errorf("written by: overview %q, walk %q, want claude", ov.Agent, walk.Agent)
 	}
-	tt := ui.NewTester(a.view, 1300, 900)
+	tt := ui.NewTester(app.view, 1300, 900)
 	tt.Frame()
 	if label := "By Claude Code, " + ov.Generated.Format("Jan 2 15:04"); !tt.HasText(label) {
 		t.Errorf("overview lacks %q", label)
 	}
 
-	useAgent(a, f, agent.Codex, "x1")
-	a.ask(a.rev, th, "And now?")
-	idle(t, a, "the codex answer")
-	if got := lastResumed(a); got != "" {
+	useAgent(app, fake, agent.Codex, "x1")
+	app.ask(app.rev, th, "And now?")
+	idle(t, app, "the codex answer")
+	if got := lastResumed(app); got != "" {
 		t.Errorf("codex question resumed %q", got)
 	}
-	a.askMore(a.rev, w, "And now?")
-	idle(t, a, "the codex follow-up")
-	if got := lastResumed(a); got != "" {
+	app.askMore(app.rev, walk, "And now?")
+	idle(t, app, "the codex follow-up")
+	if got := lastResumed(app); got != "" {
 		t.Errorf("codex follow-up resumed %q", got)
 	}
 }
