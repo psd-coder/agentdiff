@@ -55,7 +55,7 @@ func TestEndToEnd(t *testing.T) {
 		names[i] = f.Path
 	}
 	rev := review.New(repo.Root, scope)
-	ex := review.OverviewExchange(rev, review.ChangeSet{Diffstat: stat, Files: names}, cfg, review.DefaultQuestions)
+	ex := review.OverviewExchange(rev, review.ChangeSet{Diffstat: stat, Files: names}, cfg, nil)
 	final, started := runAgent(t, ctx, cfg, ex.Request)
 	ex.Started(started)
 	ex.Answered(final, time.Now())
@@ -67,13 +67,13 @@ func TestEndToEnd(t *testing.T) {
 	for _, g := range ov.Groups {
 		t.Logf("group %q (%s): %v", g.Title, g.Summary, g.Files)
 	}
-	if len(ov.Walk.Steps) < 2 || len(ov.Walk.Checklist) == 0 || len(ov.Groups) == 0 {
-		t.Errorf("walkthrough has %d steps, %d checklist answers, %d groups", len(ov.Walk.Steps), len(ov.Walk.Checklist), len(ov.Groups))
+	if len(ov.Walk.Steps) < 2 || len(ov.Walk.Sections) == 0 || len(ov.Groups) == 0 {
+		t.Errorf("walkthrough has %d steps, %d sections, %d groups", len(ov.Walk.Steps), len(ov.Walk.Sections), len(ov.Groups))
 	}
 	checkRefs(t, ctx, repo, scope, ov.Walk)
 
 	w := rev.AddWalk("", 0, "")
-	deeper := review.DeeperExchange(rev, w, cfg, stat)
+	deeper := review.DeeperExchange(rev, w, cfg, nil, stat)
 	session := ov.Sessions[provider]
 	if deeper.Request.ResumeID != session || !deeper.Request.Fork {
 		t.Errorf("deeper request resumes %q (fork %v), want a fork of %q", deeper.Request.ResumeID, deeper.Request.Fork, session)
@@ -99,8 +99,10 @@ func logWalk(t *testing.T, w *review.Walkthrough) {
 			t.Logf("   %s %s", r.Label(), r.Why)
 		}
 	}
-	for _, c := range w.Checklist {
-		t.Logf("? %s %s", c.Question, c.Answer)
+	for _, sec := range w.Sections {
+		for _, it := range sec.Items {
+			t.Logf("%s › %s: %s", sec.Title, it.Title, it.Text)
+		}
 	}
 }
 

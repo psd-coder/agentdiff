@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -26,14 +27,34 @@ type reveal struct {
 	hunk int
 }
 
-// walkthrough shows a summary and its steps. parent is the walk the steps
-// belong to, empty for the overview.
+// walkthrough shows a summary, its steps and its sections. parent is the
+// walk they belong to, empty for the overview.
 func (a *app) walkthrough(c *ui.Context, parent string, w *review.Walkthrough) {
 	if w.Summary != "" {
 		ui.Text(c, w.Summary).FontSize(15).Selectable()
 	}
 	for i, s := range w.Steps {
 		a.stepCard(c.Key(fmt.Sprintf("step-%s-%d", parent, i)), parent, i, s)
+	}
+	t := c.Theme()
+	for si, sec := range w.Sections {
+		if sec.Title != "" {
+			ui.Text(c.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title).FontSize(18).Bold().Margin(8, 0, 0, 0)
+		}
+		for i, it := range sec.Items {
+			ui.Column(c.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, t.Border).Children(func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, it.Title).Bold().Grow(1)
+					a.sectionThreads(c, a.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1))), it.Text)
+				})
+				if it.Text != "" {
+					markdown.View(c, it.Text, &a.md)
+				}
+				for ri, r := range it.Refs {
+					a.refView(c.Key(fmt.Sprintf("ref-%d", ri)), r)
+				}
+			})
+		}
 	}
 }
 
@@ -42,7 +63,7 @@ func (a *app) stepCard(c *ui.Context, parent string, i int, s review.Step) {
 	ui.Column(c).Gap(10).Padding(16, 20).Radius(10).Background(t.Surface).Border(1, t.Border).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, fmt.Sprintf("%d. %s", i+1, s.Title)).FontSize(16).Bold().Grow(1)
-			a.sectionThreads(c, a.stepLabel(parent, s), s.Text)
+			a.sectionThreads(c, a.pathLabel(parent, s.Title), s.Text)
 		})
 		if s.Text != "" {
 			markdown.View(c, s.Text, &a.md)
@@ -97,34 +118,15 @@ func (a *app) walkRow(c *ui.Context, w *review.Walk) {
 	}
 }
 
-// stepLabel names a step for the threads about it: the titles of the
-// walks above it and its own.
-func (a *app) stepLabel(parent string, s review.Step) string {
+// pathLabel names a step or an item of a section for the threads about
+// it: the titles of the walks above it, then its own titles. For an item
+// of the overview, this is the section title and the item title.
+func (a *app) pathLabel(parent string, titles ...string) string {
 	var parts []string
 	for _, w := range a.rev.WalkPath(parent) {
 		parts = append(parts, a.rev.WalkTitle(w))
 	}
-	return strings.Join(append(parts, s.Title), " › ")
-}
-
-func (a *app) checklist(c *ui.Context, items []review.CheckItem) {
-	t := c.Theme()
-	if len(items) == 0 {
-		return
-	}
-	ui.Text(c, "Checklist").FontSize(18).Bold().Margin(8, 0, 0, 0)
-	for i, it := range items {
-		ui.Column(c.Key(fmt.Sprintf("check-%d", i))).Gap(6).Padding(12, 16).Radius(10).Border(1, t.Border).Children(func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, it.Question).Bold().Grow(1)
-				a.sectionThreads(c, "Checklist › "+it.Question, it.Answer)
-			})
-			markdown.View(c, it.Answer, &a.md)
-			for ri, r := range it.Refs {
-				a.refView(c.Key(fmt.Sprintf("ref-%d", ri)), r)
-			}
-		})
-	}
+	return strings.Join(append(parts, titles...), " › ")
 }
 
 // snippet is the lines a reference shows, with the ones the change

@@ -39,7 +39,8 @@ open -n /Applications/AgentDiff.app --args "$PWD"
 - **Walkthrough by your own agent**: Claude Code or Codex reads the changes through its CLI on your subscription. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
 - **Go deeper into any step**: Go deeper opens a new walkthrough of the step, one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down. When the overview is done, the app writes the deeper walkthrough of every step, 3 at a time, so Go deeper usually opens at once. Your questions and a click on Go deeper start at once and do not wait for these walkthroughs. Settings can turn this off.
 - **Questions in the side panel**: a question about a step or a page opens a conversation next to the walkthrough, so you keep your place. The answers are short walkthroughs with snippets, follow-up questions go on in the same agent session, and every conversation stays listed under its step and on the Questions & comments page.
-- **Checklist**: the walkthrough also answers your checklist in a sentence or two per question: data changes, UI changes, API changes, and the changes that are not beautiful and why.
+- **Checklist**: by default the overview also answers a checklist in a sentence or two per question: data changes, UI changes, API changes, and the changes that are not beautiful and why.
+- **Your own prompts**: rewrite any prompt the app sends, in Settings or in `.agentdiff/prompts/` of a repository. Ask for your own sections, as a list of risks, next to the steps. The app still reads the answer, so snippets, Go deeper and threads keep working.
 - **Files grouped by intent**: the agent puts every changed file into a group, in the order you should read them. Without an explanation, files are grouped by directory.
 - **Any scope**: uncommitted changes (untracked files included), any branch against any base without a checkout, a single commit of that branch, or a custom `from..to` range. The branch picker also opens other worktrees of the repository.
 - **Comments anywhere**: click `+` in the gutter, select line numbers, comment on a whole file or on one part of the explanation.
@@ -47,7 +48,7 @@ open -n /Applications/AgentDiff.app --args "$PWD"
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
 - **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, and how the run ended. Each run shows its context size, the tokens in its last request, as Claude Code does. Codex does not report the context size, so a Codex run shows the tokens it processed. Every request reads the whole conversation again, so this number is much larger. The run details list the processed tokens (input, cache read, cache write, output) and the cost at API prices that Claude reports. The panel shows the context its runs built up. A run that resumes or forks an earlier session, as a deeper walkthrough or a follow-up question does, starts with that session's context, so it counts only the context it added. When no run reports a context size, the panel shows the processed total. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
 - **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused.
-- **Settings**: agent, model, effort, a model and effort for automatic runs, binary path, extra CLI arguments, checklist questions.
+- **Settings**: agent, model, effort, a model and effort for automatic runs, binary path, extra CLI arguments, prompts.
 - **Your own shortcuts**: any command can get a shortcut in Settings, also the ones outside the menu bar, as Mark File as Viewed.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
 
@@ -73,7 +74,7 @@ During development, `go run . /path/to/repo` starts the app on a repository. Wit
 
 An agent changes 40 files in ten minutes. A pull request lists them in path order, which scatters related changes across the list. You lose track of why each one exists. `agentdiff` asks the agent for a walkthrough first: the idea of the change in a few steps, each with the lines that show it. You go deeper only into the steps you doubt, and every level down is closer to the code. Then you read the files group by group and leave comments where you disagree.
 
-The walkthrough also answers a checklist, by default these questions:
+The default overview prompt also asks for a checklist section with these questions:
 
 1. What data changes: schemas, storage, formats?
 2. What UI changes, and how do I see them?
@@ -151,7 +152,7 @@ The command palette lists the commands that apply where you are: the menu bar's 
 
 ## Configuration
 
-Settings has three tabs: Appearance, Agent and Shortcuts. Every change is saved as you make it, and Done or Escape closes the dialog.
+Settings has four tabs: Appearance, Agent, Prompts and Shortcuts. Every change is saved as you make it, and Done or Escape closes the dialog.
 
 Shortcuts lists every command with its shortcut. Click a shortcut and press the new keys, which must include Command or Control. Escape cancels. When another command has those keys, they move to the command you record, and the tab says which command lost them. The standard shortcuts of macOS, as Copy and Quit, and Cmd+Return and Cmd+Backspace stay as they are. A command outside the menu bar runs by its shortcut where it applies, also while you type in a field. A field keeps the keys it edits with: Command with A, C, X, V, Z or Y, with or without Shift, and Control with the letters that move the caret, as A, E and K. Reset gives one command its default back, and Reset all shortcuts gives all of them theirs. `config.json` keeps only the shortcuts you changed, so new defaults still reach you.
 
@@ -164,11 +165,10 @@ Shortcuts lists every command with its shortcut. Click a shortcut and press the 
 | Effort for automatic runs | `low` | Used by the overview and the deeper walkthroughs written ahead |
 | Binary | found on the login shell's `PATH` | Full path to the CLI, `~/` allowed |
 | Extra arguments | none | Added to the CLI call, split at spaces |
-| Checklist questions | the five questions above | What the overview answers under its walkthrough |
 
 Automatic runs are the runs the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions, follow-ups, threads and a click on Go deeper use Model and Effort. Each run in the agent log shows the effort it ran at.
 
-The app wraps your questions in the scope, the diffstat, the list of changed files, the walkthrough format and the grouping request, because it parses the answer. Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. The overview, each walkthrough and each thread keep one session for each agent. After you switch agents, the next question goes on in the earlier session of the new agent. That session does not hold what the other agent answered in between. When the new agent has no session yet, the question starts a new one, with the thread's anchor and its earlier messages. Regenerate on a deeper walkthrough drops its sessions of every agent, because they hold the conversation about the old walkthrough.
+Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. The overview, each walkthrough and each thread keep one session for each agent. After you switch agents, the next question goes on in the earlier session of the new agent. That session does not hold what the other agent answered in between. When the new agent has no session yet, the question starts a new one, with the thread's anchor and its earlier messages. Regenerate on a deeper walkthrough drops its sessions of every agent, because they hold the conversation about the old walkthrough.
 
 Appearance sets the theme: System follows the light or dark appearance of macOS, and Light or Dark keeps the app in one of them.
 
@@ -178,11 +178,46 @@ The app saves everything under `~/Library/Application Support/AgentDiff/`.
 
 | File | Holds |
 | --- | --- |
-| `config.json` | global settings, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette, the shortcuts you changed, the theme and the code theme |
+| `config.json` | global settings, the prompts you changed, recent repositories, split or unified diff, flat or grouped file list, hidden viewed files, the commands you ran last from the command palette, the shortcuts you changed, the theme and the code theme |
 | `reviews/<repo hash>/<scope>.json` | explanation, groups, threads, and viewed files of one scope. The hash is of the repository path, so a moved repository starts with empty reviews |
 | `reviews/<repo hash>/<scope>.runs/<run>.jsonl` | the raw log of one agent run: the run's details on the first line, then one line per command, prompt, output line, stderr line and exit. `<run>.usage.json` next to it holds the tokens the run spent. Each review keeps its last 50 runs. The logs hold the file contents the agent read |
 
-An overview remembers which changes it was written for, as a `git patch-id` of the diff. Line numbers and whitespace do not count in it, so the same changes have the same ID as uncommitted changes, as a commit, after an amend or after a rebase. When a scope opens without a review, it takes over a saved review written for the same changes. A review of uncommitted changes moves, so after you commit them the review is on the commit. A review of a commit or a branch is copied. A file is viewed in the review it takes over when you marked it viewed in either review. While an agent writes into the review of the scope or into the saved review, the scope keeps its review, and the next load after the run takes it over. An overview also keeps an ID for the changes of each file. When the changes of a scope differ from the ones its overview was written for, the overview and the deeper walkthroughs show a warning, because their code snippets can show the wrong lines. The warning counts the files that changed since, the ones that are no longer in the changes and the new ones. An overview written before file IDs compares the changed files with its groups instead. When none of the files of the uncommitted changes' overview is changed any more, as after a commit, a stash or a switch to other work, the review goes to an archive and the scope starts empty. The overview of the uncommitted changes lists the archived reviews under Earlier reviews, also while the current changes have a review of their own. A click opens an earlier review on its own page, read-only: its walkthroughs with the deeper ones and the answers to questions, its checklist, its groups and its comments. The page has Delete, Restore while the current changes have no review (a restored review stays, also after a relaunch, even when none of its files is changed), and Open commit when a commit now holds the changes of the review. While an agent still writes into the earlier review, Restore says so and changes nothing. When a commit holds them together with other changes, the patch IDs differ, so the page names a recent commit that changes all the files of the review and offers to move the review there, while that commit has no review of its own. An archived review comes back by itself when the same changes return to the working tree, as after `git stash pop`. The archive keeps the 20 latest reviews of a repository. While a review is written for the current changes, the app saves the lines of each code snippet into it, so the page of an archived review shows the code as it was. A review saved by an earlier version of the app shows only the file and the line numbers of its snippets. Start over deletes the review of the current scope and its run logs, after you confirm. Until you quit the app, that scope takes no saved review over.
+An overview remembers which changes it was written for, as a `git patch-id` of the diff. Line numbers and whitespace do not count in it, so the same changes have the same ID as uncommitted changes, as a commit, after an amend or after a rebase. When a scope opens without a review, it takes over a saved review written for the same changes. A review of uncommitted changes moves, so after you commit them the review is on the commit. A review of a commit or a branch is copied. A file is viewed in the review it takes over when you marked it viewed in either review. While an agent writes into the review of the scope or into the saved review, the scope keeps its review, and the next load after the run takes it over. An overview also keeps an ID for the changes of each file. When the changes of a scope differ from the ones its overview was written for, the overview and the deeper walkthroughs show a warning, because their code snippets can show the wrong lines. The warning counts the files that changed since, the ones that are no longer in the changes and the new ones. An overview written before file IDs compares the changed files with its groups instead. When none of the files of the uncommitted changes' overview is changed any more, as after a commit, a stash or a switch to other work, the review goes to an archive and the scope starts empty. The overview of the uncommitted changes lists the archived reviews under Earlier reviews, also while the current changes have a review of their own. A click opens an earlier review on its own page, read-only: its walkthroughs with the deeper ones and the answers to questions, their sections, its groups and its comments. The page has Delete, Restore while the current changes have no review (a restored review stays, also after a relaunch, even when none of its files is changed), and Open commit when a commit now holds the changes of the review. While an agent still writes into the earlier review, Restore says so and changes nothing. When a commit holds them together with other changes, the patch IDs differ, so the page names a recent commit that changes all the files of the review and offers to move the review there, while that commit has no review of its own. An archived review comes back by itself when the same changes return to the working tree, as after `git stash pop`. The archive keeps the 20 latest reviews of a repository. While a review is written for the current changes, the app saves the lines of each code snippet into it, so the page of an archived review shows the code as it was. A review saved by an earlier version of the app shows only the file and the line numbers of its snippets. Start over deletes the review of the current scope and its run logs, after you confirm. Until you quit the app, that scope takes no saved review over.
+
+### Prompts
+
+The Prompts tab holds the five prompts that the app sends to the agent:
+
+| Prompt | File | Sent | Required blocks | Optional blocks |
+| --- | --- | --- | --- | --- |
+| System | `system.md` | as the system prompt of every run | none | none |
+| Overview | `overview.md` | for the overview | `{{format}}`, `{{files}}` | `{{scope}}`, `{{diffstat}}` |
+| Deeper walkthrough | `deeper.md` | for Go deeper, and for a question about a step or a page | `{{format}}`, `{{step}}` | `{{question}}`, `{{context}}` |
+| Follow-up question | `followup.md` | for a follow-up question in the conversation of a question | `{{format}}`, `{{question}}` | `{{context}}` |
+| Thread | `thread.md` | for the first message of a thread in a new or forked agent session | `{{question}}` | `{{anchor}}`, `{{history}}`, `{{context}}` |
+
+A block is a part of a prompt that the app writes. `{{format}}` asks the agent for one JSON block with a summary, the steps with their code references, and the sections. In the overview it also asks for the file groups. The app reads this JSON, so a prompt cannot leave `{{format}}` out. `{{context}}` gives the changes and the earlier walkthroughs or messages to an agent session that starts without them. It is empty when the session already knows them. `{{step}}` is empty for a question about a page as a whole. In the tab, each block can show the exact text that the app puts in its place, with the values of the review on screen.
+
+A section is a part of the answer next to the steps, as the checklist of the default overview prompt. To get a section, ask for it by name. This overview prompt asks for a list of risks in place of the checklist:
+
+```
+Review {{scope}}.
+
+Write 3 to 5 steps in reading order. Then add a section "Risks" with one item for each change that can break existing users, with one reference each.
+
+Group the changed files by layer: storage, then API, then UI, then tests.
+
+{{format}}
+
+The changed files are:
+{{files}}
+```
+
+The app shows the sections after the steps, and each item has a Discuss button. Go deeper only works on steps.
+
+The tab saves a prompt while it has every required block and only the blocks of its table row. Otherwise the tab shows the problem and keeps the last saved text. An empty prompt sends the default one, and Reset puts the default text back. Copy default copies the default text, as a start for a prompt file of a repository.
+
+A repository can give its own prompts in `.agentdiff/prompts/`, with the file names from the table. The app reads them from the working tree at the start of each run, so an edit counts from the next run. Commit the prompt files, because an uncommitted file is one of the changes in the review of uncommitted changes. For each prompt, the app takes the file of the repository, then the text in Settings, then the default. It skips a file that is missing or empty. It also skips a file with a problem, and the overview page names the file and the problem. A prompt does not change what the agent may do: the CLI flags under Read-only agents keep it read-only.
 
 ## Commands
 
@@ -202,7 +237,7 @@ internal/app              window, app state, agent runs and streaming
 internal/app/view*.go     one file per screen: overview, files, thread panel, feedback, settings
 internal/gitx             git CLI wrapper: scopes, changed files, file contents, commits
 internal/agent            claude and codex CLI runner: arguments, stream parsing, login-shell PATH
-internal/review           review model, explanation prompt and parsing, feedback export
+internal/review           review model, prompt templates and parsing, feedback export
 internal/store            JSON files for settings and reviews
 ```
 

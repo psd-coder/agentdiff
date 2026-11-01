@@ -33,12 +33,12 @@ func checkPrompt(t *testing.T, prompt string, want, lacks []string) {
 
 func TestOverviewExchangeRequest(t *testing.T) {
 	tests := []struct {
-		name      string
-		provider  agent.Provider
-		scope     gitx.Scope
-		questions string
-		want      []string
-		lacks     []string
+		name     string
+		provider agent.Provider
+		scope    gitx.Scope
+		prompts  Prompts
+		want     []string
+		lacks    []string
 	}{
 		{
 			name:     "claude on the working tree with the default questions",
@@ -49,16 +49,17 @@ func TestOverviewExchangeRequest(t *testing.T) {
 				"Diffstat:\n```\na.go | 1 +\n b.go | 2 +-\n```",
 				"read of the file in the working tree",
 				"What data changes",
-				"\"groups\"", "\"checklist\"", "\"refs\"",
+				"Add a section \"Checklist\"",
+				"\"groups\"", "\"sections\"", "\"refs\"",
 				"The changed files are:\n- a.go\n- b.go\n",
 			},
 			lacks: []string{"git show"},
 		},
 		{
-			name:      "codex on a commit with its own questions",
-			provider:  agent.Codex,
-			scope:     gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"},
-			questions: "Is it fast?",
+			name:     "codex on a commit with its own questions",
+			provider: agent.Codex,
+			scope:    gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"},
+			prompts:  Prompts{PromptOverview: DefaultOverview("Is it fast?")},
 			want: []string{
 				"commit abc123",
 				"git show abc123:<path>",
@@ -71,7 +72,7 @@ func TestOverviewExchangeRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := New("/repo", tt.scope)
 			r.Overview = &Overview{Walk: &Walkthrough{Summary: "old"}, Sessions: Sessions{agent.Claude: "c0", agent.Codex: "x0"}}
-			req := OverviewExchange(r, testChanges, agent.Config{Provider: tt.provider}, tt.questions).Request
+			req := OverviewExchange(r, testChanges, agent.Config{Provider: tt.provider}, tt.prompts).Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
@@ -193,7 +194,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
 			r.Overview = tt.old
-			e := OverviewExchange(r, testChanges, agent.Config{Provider: agent.Codex, Model: "gpt"}, "")
+			e := OverviewExchange(r, testChanges, agent.Config{Provider: agent.Codex, Model: "gpt"}, nil)
 			if tt.session != "" {
 				e.Started(tt.session)
 			}
@@ -282,7 +283,7 @@ func TestDeeperExchangeRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r, inner, question := walkReview(tt.scope)
-			req := DeeperExchange(r, tt.walk(r, inner, question), agent.Config{Provider: tt.provider}, testChanges.Diffstat).Request
+			req := DeeperExchange(r, tt.walk(r, inner, question), agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat).Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
@@ -299,7 +300,7 @@ func TestDeeperExchangeClearsTheWalkAndItsSessions(t *testing.T) {
 	inner.Sessions.Set(agent.Codex, "x0")
 	inner.Markdown, inner.Err, inner.Agent, inner.Model = "old", "boom", agent.Claude, "opus"
 	inner.More = []Turn{{Question: "And then?"}}
-	DeeperExchange(r, inner, agent.Config{Provider: agent.Claude}, "")
+	DeeperExchange(r, inner, agent.Config{Provider: agent.Claude}, nil, "")
 	want := Walk{ID: inner.ID, Step: 0, Generated: inner.Generated}
 	if !reflect.DeepEqual(*inner, want) {
 		t.Errorf("walk = %+v\nwant   %+v", *inner, want)
@@ -338,7 +339,7 @@ func TestFollowupExchangeRequest(t *testing.T) {
 			w.Content = &Walkthrough{Summary: "Because."}
 			w.Sessions = Sessions{agent.Claude: "q1"}
 			w.More = []Turn{{Question: "How?", Err: "boom"}}
-			req := FollowupExchange(r, w, agent.Config{Provider: tt.provider}, testChanges.Diffstat, "And then?").Request
+			req := FollowupExchange(r, w, agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat, "And then?").Request
 			if req.ResumeID != tt.resume || req.Fork {
 				t.Errorf("resumes %q (fork %v), want %q without a fork", req.ResumeID, req.Fork, tt.resume)
 			}
@@ -356,13 +357,13 @@ func TestWalkExchangeResults(t *testing.T) {
 	cfg := agent.Config{Provider: agent.Codex, Model: "gpt"}
 	first := func(r *Review) (*Walk, *Exchange) {
 		w := r.AddWalk("", -1, "Why?")
-		return w, DeeperExchange(r, w, cfg, "")
+		return w, DeeperExchange(r, w, cfg, nil, "")
 	}
 	followup := func(r *Review) (*Walk, *Exchange) {
 		w := r.AddWalk("", -1, "Why?")
 		w.Content, w.Agent, w.Model = &Walkthrough{Summary: "Because."}, agent.Claude, "opus"
 		w.Sessions = Sessions{agent.Claude: "c0"}
-		return w, FollowupExchange(r, w, cfg, "", "And then?")
+		return w, FollowupExchange(r, w, cfg, nil, "", "And then?")
 	}
 	tests := []struct {
 		name  string
@@ -498,7 +499,7 @@ func TestThreadExchangeRequest(t *testing.T) {
 			th := r.AddThread(lines)
 			th.Sessions = tt.thread
 			th.Messages = append([]Message(nil), tt.messages...)
-			req := ThreadExchange(r, th, agent.Config{Provider: tt.provider}, testChanges.Diffstat, "And then?").Request
+			req := ThreadExchange(r, th, agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat, "And then?").Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
@@ -520,7 +521,7 @@ func TestThreadExchangeRequest(t *testing.T) {
 func TestThreadExchangeWithoutOverview(t *testing.T) {
 	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
 	th := r.AddThread(Anchor{Kind: AnchorGeneral})
-	req := ThreadExchange(r, th, agent.Config{Provider: agent.Claude}, "", "Why?").Request
+	req := ThreadExchange(r, th, agent.Config{Provider: agent.Claude}, nil, "", "Why?").Request
 	if req.ResumeID != "" || req.Fork {
 		t.Errorf("resumes %q (fork %v), want a new session", req.ResumeID, req.Fork)
 	}
@@ -572,7 +573,7 @@ func TestThreadExchangeResults(t *testing.T) {
 			r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
 			th := r.AddThread(Anchor{Kind: AnchorGeneral})
 			th.Sessions = Sessions{agent.Claude: "c1"}
-			e := ThreadExchange(r, th, agent.Config{Provider: agent.Codex}, "", "Why?")
+			e := ThreadExchange(r, th, agent.Config{Provider: agent.Codex}, nil, "", "Why?")
 			th.Messages[0].Time = time.Time{}
 			tt.apply(e, th)
 			if !reflect.DeepEqual(th.Messages, tt.want) {
@@ -599,10 +600,10 @@ func TestExchangeTargetAndKind(t *testing.T) {
 		target string
 		kind   Kind
 	}{
-		{"overview", OverviewExchange(r, testChanges, cfg, ""), "overview", KindOverview},
-		{"deeper", DeeperExchange(r, w, cfg, ""), w.ID, KindWalk},
-		{"follow-up", FollowupExchange(r, w, cfg, "", "And?"), w.ID, KindWalk},
-		{"thread", ThreadExchange(r, th, cfg, "", "Why?"), th.ID, KindThread},
+		{"overview", OverviewExchange(r, testChanges, cfg, nil), "overview", KindOverview},
+		{"deeper", DeeperExchange(r, w, cfg, nil, ""), w.ID, KindWalk},
+		{"follow-up", FollowupExchange(r, w, cfg, nil, "", "And?"), w.ID, KindWalk},
+		{"thread", ThreadExchange(r, th, cfg, nil, "", "Why?"), th.ID, KindThread},
 	}
 	for _, tc := range tests {
 		if got := tc.ex.Target(); got != tc.target {

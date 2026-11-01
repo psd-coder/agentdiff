@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
@@ -19,9 +20,10 @@ import (
 const maxRecent = 10
 
 type Config struct {
-	Agent     agent.Config `json:"agent"`
-	Questions string       `json:"questions"`
-	Unified   bool         `json:"unified,omitempty"`
+	Agent agent.Config `json:"agent"`
+	// Prompts are the prompts the user rewrote in the settings.
+	Prompts review.Prompts `json:"prompts,omitempty"`
+	Unified bool           `json:"unified,omitempty"`
 	// FlatFiles lists the files in the sidebar by path instead of in
 	// their review groups.
 	FlatFiles bool `json:"flatFiles,omitempty"`
@@ -45,7 +47,7 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return Config{Agent: agent.Config{Provider: agent.Claude, AutoEffort: "low"}, Questions: review.DefaultQuestions, DeeperAhead: true}
+	return Config{Agent: agent.Config{Provider: agent.Claude, AutoEffort: "low"}, DeeperAhead: true}
 }
 
 func (c *Config) AddRecent(repo string) {
@@ -66,19 +68,45 @@ type Store struct{ Dir string }
 // it cannot read is moved to config.json.bad.
 func (s Store) LoadConfig() Config {
 	path := filepath.Join(s.Dir, "config.json")
-	cfg := DefaultConfig()
-	if err := readJSON(path, &cfg); err != nil {
+	file := struct {
+		Config
+		Questions string `json:"questions"`
+	}{Config: DefaultConfig()}
+	if err := readJSON(path, &file); err != nil {
 		setAside(path, err)
 		return DefaultConfig()
 	}
+	cfg := file.Config
 	if cfg.Agent.Provider == "" {
 		cfg.Agent.Provider = agent.Claude
 	}
-	if cfg.Questions == review.LegacyQuestions {
-		cfg.Questions = review.DefaultQuestions
+	if q := strings.TrimSpace(file.Questions); q != "" && q != oldDefaultQuestions && q != legacyQuestions && cfg.Prompts[review.PromptOverview] == "" {
+		if cfg.Prompts == nil {
+			cfg.Prompts = review.Prompts{}
+		}
+		cfg.Prompts[review.PromptOverview] = review.DefaultOverview(q)
 	}
 	return cfg
 }
+
+// oldDefaultQuestions and legacyQuestions were the default checklist
+// questions, which a config held before the overview prompt took them.
+// A config that still holds one of them keeps the default prompt.
+const (
+	oldDefaultQuestions = `1. What data changes: schemas, storage, formats?
+2. What UI changes, and how do I see them?
+3. What architecture and API changes?
+4. Which changes are not beautiful?
+5. Which assumptions and rules force the non-beautiful changes?`
+	legacyQuestions = `Explain the changes:
+
+1. Explain on high level.
+2. Explain data changes.
+3. Explain UI changes and how to see them.
+4. Explain architecture and API changes.
+5. Explain non-beautiful changes.
+6. Tell about assumptions and rules which force non-beautiful changes.`
+)
 
 func (s Store) SaveConfig(cfg Config) error {
 	return writeJSON(filepath.Join(s.Dir, "config.json"), cfg)

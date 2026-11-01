@@ -55,3 +55,19 @@ _Avoid_: bindings, key config
 **Reserved keys**:
 Shortcuts that no command can take: those of the standard items of the menu bar, as Copy, and the keys the app uses in fields and lists.
 _Avoid_: system keys, fixed keys
+
+**Prompt template**:
+The text of a prompt with blocks in it: the default text, the text in the settings, or a prompt file of the repository. The app sends it with the blocks filled in.
+_Avoid_: prompt preset, prompt config
+
+**Block**:
+A part of a prompt template that the app writes, as `{{diffstat}}`. A template must keep its required blocks.
+_Avoid_: placeholder, variable
+
+**Output contract**:
+The JSON that the app reads from an answer, which the `{{format}}` block asks for: the summary, the steps, the sections and, in the overview, the groups.
+_Avoid_: schema, answer format
+
+**Section**:
+A part of a walkthrough next to its steps, which the prompt asks for by name, as the checklist. Its items get threads, and the reviewer cannot go deeper into them.
+_Avoid_: part, extra block

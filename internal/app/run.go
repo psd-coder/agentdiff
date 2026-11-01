@@ -89,7 +89,7 @@ func (a *app) generateOverview() {
 	rev := a.rev
 	cfg := a.cfg.Agent.Auto()
 	changes := review.ChangeSet{Diffstat: a.diffstatOf(rev), Files: a.fileNames(), PatchID: a.fp.Patch, FileIDs: a.fp.Files}
-	ex := review.OverviewExchange(rev, changes, cfg, a.cfg.Questions)
+	ex := review.OverviewExchange(rev, changes, cfg, a.prompts(rev.Repo))
 	a.runner.start(ex, "Overview", "", func(answered bool) {
 		if rev == a.rev {
 			a.leaveGone()
@@ -212,7 +212,7 @@ func (a *app) walkExchange(rev *review.Review, w *review.Walk, auto bool) (*revi
 	if w.Question != "" {
 		title = "Question: " + w.Question
 	}
-	return review.DeeperExchange(rev, w, cfg, a.diffstatOf(rev)), title
+	return review.DeeperExchange(rev, w, cfg, a.prompts(rev.Repo), a.diffstatOf(rev)), title
 }
 
 // askMore asks a follow-up question in a question's conversation.
@@ -222,7 +222,7 @@ func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
 		return
 	}
 	cfg := a.cfg.Agent
-	ex := review.FollowupExchange(rev, w, cfg, a.diffstatOf(rev), q)
+	ex := review.FollowupExchange(rev, w, cfg, a.prompts(rev.Repo), a.diffstatOf(rev), q)
 	a.runner.start(ex, "Follow-up: "+q, "", nil)
 }
 
@@ -273,7 +273,7 @@ func (a *app) ask(rev *review.Review, t *review.Thread, text string) {
 		return
 	}
 	cfg := a.cfg.Agent
-	ex := review.ThreadExchange(rev, t, cfg, a.diffstatOf(rev), text)
+	ex := review.ThreadExchange(rev, t, cfg, a.prompts(rev.Repo), a.diffstatOf(rev), text)
 	a.runner.start(ex, t.Anchor.Label(), excerpt(text, 160), nil)
 }
 
