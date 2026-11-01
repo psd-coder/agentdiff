@@ -75,3 +75,53 @@ func TestComparisonCheckedOut(t *testing.T) {
 		}
 	})
 }
+
+func TestComparisonBranchRows(t *testing.T) {
+	c := comparison{
+		branch:   "main",
+		head:     "Feature-x",
+		branches: []string{"main", "Feature-x", "feature-y", "docs"},
+		worktrees: []gitx.Worktree{
+			{Path: "/repo", Branch: "main"},
+			{Path: "/trees/y", Branch: "feature-y"},
+			{Path: "/trees/detached"},
+		},
+	}
+	rows := c.branchRows("FEATURE", "/repo")
+	want := []branchRow{
+		{name: "Feature-x", chosen: true},
+		{name: "feature-y", tree: "/trees/y"},
+	}
+	if len(rows) != len(want) || rows[0] != want[0] || rows[1] != want[1] {
+		t.Fatalf("rows %+v", rows)
+	}
+
+	all := c.branchRows("", "/repo")
+	if len(all) != 4 || all[0] != (branchRow{name: "main", checkedOut: true}) {
+		t.Errorf("rows without a filter %+v", all)
+	}
+
+	rng := gitx.Scope{Kind: gitx.ScopeRange, From: "a", To: "b"}
+	c.rng = &rng
+	for _, r := range c.branchRows("", "/repo") {
+		if r.chosen {
+			t.Errorf("%s is chosen while a range is under review", r.name)
+		}
+	}
+}
+
+func TestBranchRowLabel(t *testing.T) {
+	cases := []struct {
+		row  branchRow
+		want string
+	}{
+		{branchRow{name: "docs"}, "docs"},
+		{branchRow{name: "main", checkedOut: true, chosen: true}, "main, checked out, selected"},
+		{branchRow{name: "y", tree: "/trees/y"}, "y, worktree"},
+	}
+	for _, tc := range cases {
+		if got := tc.row.label(); got != tc.want {
+			t.Errorf("label of %+v = %q, want %q", tc.row, got, tc.want)
+		}
+	}
+}

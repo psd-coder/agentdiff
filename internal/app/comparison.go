@@ -135,3 +135,62 @@ func (c *comparison) checkedOut(branch string, branches []string, cur gitx.Scope
 	}
 	return c.branchScopeOf(name, cur.Base), true
 }
+
+// branchRow is a branch in the branch list.
+type branchRow struct {
+	name string
+	// tree is the path of another worktree that has the branch checked
+	// out.
+	tree       string
+	checkedOut bool
+	// chosen is set on the branch under review.
+	chosen bool
+}
+
+// branchRows are the branches whose name holds query, ignoring case. root
+// is the worktree of the open repository.
+func (c *comparison) branchRows(query, root string) []branchRow {
+	trees := map[string]string{}
+	for _, w := range c.worktrees {
+		if w.Path != root {
+			trees[w.Branch] = w.Path
+		}
+	}
+	q := strings.ToLower(query)
+	var rows []branchRow
+	for _, b := range c.branches {
+		if !strings.Contains(strings.ToLower(b), q) {
+			continue
+		}
+		rows = append(rows, branchRow{
+			name:       b,
+			tree:       trees[b],
+			checkedOut: b == c.branch,
+			chosen:     c.rng == nil && b == c.headBranch(),
+		})
+	}
+	return rows
+}
+
+// tag is the note next to the name of the branch.
+func (r branchRow) tag() string {
+	switch {
+	case r.checkedOut:
+		return "checked out"
+	case r.tree != "":
+		return "worktree"
+	}
+	return ""
+}
+
+// label is what a screen reader says for the row.
+func (r branchRow) label() string {
+	label := r.name
+	if tag := r.tag(); tag != "" {
+		label += ", " + tag
+	}
+	if r.chosen {
+		label += ", selected"
+	}
+	return label
+}
