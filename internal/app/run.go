@@ -2,10 +2,8 @@ package app
 
 import (
 	"context"
-	"log"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
@@ -24,53 +22,21 @@ type agentFunc func(context.Context, agent.Config, agent.Request) <-chan agent.E
 // the log of rev, in memory and in the run's file.
 func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, rev *review.Review, info store.RunInfo, fn func(agent.Event)) {
 	info.Resumed = req.ResumeID
-	run := a.startRun(rev, info)
-	file := &runFile{}
-	var mu sync.Mutex
-	var logged []logItem
-	req.Log = func(e agent.LogEntry) {
-		file.write(e)
-		items := logItems(cfg.Provider, e)
-		mu.Lock()
-		logged = append(logged, items...)
-		mu.Unlock()
-	}
+	rec := &runRecorder{run: a.startRun(rev, info), provider: cfg.Provider}
+	req.Log = rec.entry
 	events := a.startAgent(ctx, cfg, req)
 	repo, scope := rev.Repo, rev.Scope
 	a.streams.Go(func() {
-		w, err := a.store.CreateRun(repo, scope, info)
-		file.opened(w)
-		a.update(func() {
-			if err != nil {
-				run.err = err.Error()
-			}
-			// A Start Over or an archive that came while the file was
-			// created leaves it in the folder of the review that took the
-			// place of rev.
-			if w != nil && a.reviews.Obsolete(rev) {
-				a.async(func() {
-					file.close()
-					if err := a.store.RemoveRun(repo, scope, info.ID); err != nil && !store.IsNotExist(err) {
-						log.Printf("run log: %v", err)
-					}
-				})
-			}
-		})
-		var pending strings.Builder
-		last := time.Now()
+		a.createRunFile(rec, rev, repo, scope, info)
+		batch := textBatch{last: time.Now()}
 		flush := func() {
-			mu.Lock()
-			items := logged
-			logged = nil
-			mu.Unlock()
-			if pending.Len() == 0 && len(items) == 0 {
+			items := rec.take()
+			if batch.empty() && len(items) == 0 {
 				return
 			}
-			text := pending.String()
-			pending.Reset()
-			last = time.Now()
+			text := batch.take(time.Now())
 			a.update(func() {
-				run.info.Usage = run.add(items)
+				rec.run.info.Usage = rec.run.add(items)
 				if text != "" {
 					fn(agent.Event{Kind: agent.EventText, Text: text})
 				}
@@ -78,8 +44,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 		}
 		for ev := range events {
 			if ev.Kind == agent.EventText {
-				pending.WriteString(ev.Text)
-				if time.Since(last) >= streamFlush {
+				if batch.add(ev.Text, time.Now()) {
 					flush()
 				}
 				continue
@@ -88,17 +53,33 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 			a.update(func() { fn(ev) })
 		}
 		flush()
-		file.close()
-		a.update(func() {
-			run.running = false
-			if u := run.info.Usage; u != nil && !a.reviews.Obsolete(rev) {
-				u.CostUSD = runCost(a.logsOf(rev), run)
-				if err := a.store.SaveRunUsage(rev.Repo, rev.Scope, info.ID, *u); err != nil {
-					log.Printf("run usage: %v", err)
-				}
-			}
-		})
+		rec.file.close()
+		a.update(func() { a.endRun(rec, rev) })
 	})
+}
+
+// textBatch joins the text deltas of a run, so that streamed text reaches
+// the view at most once per streamFlush.
+type textBatch struct {
+	text strings.Builder
+	last time.Time
+}
+
+// add appends text and reports whether streamFlush passed since the last
+// take.
+func (b *textBatch) add(text string, now time.Time) bool {
+	b.text.WriteString(text)
+	return now.Sub(b.last) >= streamFlush
+}
+
+func (b *textBatch) empty() bool { return b.text.Len() == 0 }
+
+// take returns the joined text and starts the next batch at now.
+func (b *textBatch) take(now time.Time) string {
+	text := b.text.String()
+	b.text.Reset()
+	b.last = now
+	return text
 }
 
 func (a *app) generateOverview() {

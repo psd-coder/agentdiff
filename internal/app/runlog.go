@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/psd-coder/agentdiff/internal/agent"
+	"github.com/psd-coder/agentdiff/internal/gitx"
 	"github.com/psd-coder/agentdiff/internal/review"
 	"github.com/psd-coder/agentdiff/internal/store"
 )
@@ -168,6 +169,71 @@ func (a *app) startRun(rev *review.Review, info store.RunInfo) *logRun {
 	runs := append([]*logRun{run}, a.logsOf(rev)...)
 	a.logs[rev] = runs[:min(len(runs), store.MaxRuns)]
 	return run
+}
+
+// runRecorder records an agent run in the log of its review: in memory,
+// where the log panel reads it, and in the run's file.
+type runRecorder struct {
+	run      *logRun
+	provider agent.Provider
+	file     runFile
+	mu       sync.Mutex
+	// items are the log items recorded since the last take.
+	items []logItem
+}
+
+// entry records a log entry of the run. The agent calls it on its own
+// goroutine.
+func (r *runRecorder) entry(e agent.LogEntry) {
+	r.file.write(e)
+	items := logItems(r.provider, e)
+	r.mu.Lock()
+	r.items = append(r.items, items...)
+	r.mu.Unlock()
+}
+
+// take returns the log items recorded since the last take.
+func (r *runRecorder) take() []logItem {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	items := r.items
+	r.items = nil
+	return items
+}
+
+// createRunFile creates the file of the run, away from the main thread.
+// repo, scope and info are those of rev and the run when it started. A Start Over or an
+// archive that came while the file was created leaves it in the folder of
+// the review that took the place of rev, so the file is removed again.
+func (a *app) createRunFile(rec *runRecorder, rev *review.Review, repo string, scope gitx.Scope, info store.RunInfo) {
+	w, err := a.store.CreateRun(repo, scope, info)
+	rec.file.opened(w)
+	a.update(func() {
+		if err != nil {
+			rec.run.err = err.Error()
+		}
+		if w != nil && a.reviews.Obsolete(rev) {
+			a.async(func() {
+				rec.file.close()
+				if err := a.store.RemoveRun(repo, scope, info.ID); err != nil && !store.IsNotExist(err) {
+					log.Printf("run log: %v", err)
+				}
+			})
+		}
+	})
+}
+
+// endRun marks the run as ended and saves what it spent, unless its review
+// was replaced.
+func (a *app) endRun(rec *runRecorder, rev *review.Review) {
+	run := rec.run
+	run.running = false
+	if u := run.info.Usage; u != nil && !a.reviews.Obsolete(rev) {
+		u.CostUSD = runCost(a.logsOf(rev), run)
+		if err := a.store.SaveRunUsage(rev.Repo, rev.Scope, run.info.ID, *u); err != nil {
+			log.Printf("run usage: %v", err)
+		}
+	}
 }
 
 // runFile writes the log entries of a run to its file. The file is
