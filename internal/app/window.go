@@ -28,7 +28,14 @@ func Run(repo string) error {
 			MinWidth:  900,
 			MinHeight: 560,
 			StateKey:  "main",
-			Content:   ui.View(app.view),
+			// The traffic lights sit over the sidebar, and the toolbar
+			// shares the title bar.
+			TitleBarStyle:  mygo.TitleBarHiddenInset,
+			TitleBarHeight: titleBarHeight,
+			// macOS keeps its own title bar height for the traffic lights;
+			// this centers the 14 points of their height in the toolbar.
+			TrafficLightPosition: &mygo.Point{X: 20, Y: (titleBarHeight - 14) / 2},
+			Content:              ui.View(app.view),
 		})
 		app.win.OnFocus(func() { app.win.Update(app.syncBranch) })
 		if repo != "" {

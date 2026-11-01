@@ -339,7 +339,8 @@ func (app *app) chooseRepo() {
 
 func (app *app) welcome(ctx *ui.Context) {
 	theme := ctx.Theme()
-	ui.Column(ctx).Fill().Center().Gap(16).Padding(32).Background(theme.Background).Children(func() {
+	ui.Box(ctx).Height(titleBarHeight).Shrink(0).FillWidth().Background(theme.Background).DragWindow()
+	ui.Column(ctx).Grow(1).FillWidth().Center().Gap(16).Padding(32).Background(theme.Background).Children(func() {
 		ui.Text(ctx, "AgentDiff").FontSize(30).Bold()
 		ui.Text(ctx, "Review what your coding agent changed: an explanation first, then the diff, grouped, with comments you send back.").TextColor(theme.TextMuted).MaxWidth(480).TextAlign(ui.Center)
 		ui.PrimaryButton(ctx, "Open repository…").OnClick(app.chooseRepo)

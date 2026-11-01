@@ -11,9 +11,17 @@ import (
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
+// titleBarHeight is the height of the toolbar, which the window's title
+// bar shares, as in Mac apps with a unified toolbar.
+const titleBarHeight = 52
+
+// toolbar is the title bar of the window, over the page. It drags the
+// window, as a title bar does.
 func (app *app) toolbar(ctx *ui.Context) {
 	theme := ctx.Theme()
-	ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+	bar := ctx.TitleBar()
+	ui.Row(ctx).Height(titleBarHeight).Shrink(0).Gap(8).Padding(0, bar.Right+12, 0, 12).AlignItems(ui.Center).
+		BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).DragWindow().Children(func() {
 		app.projectPicker(ctx)
 		app.branchPicker(ctx)
 		ui.Spacer(ctx)

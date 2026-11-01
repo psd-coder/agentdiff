@@ -24,10 +24,10 @@ func (app *app) view(ctx *ui.Context) {
 	theme := ctx.Theme()
 	app.markSeen()
 	app.keys(ctx)
-	ui.Column(ctx).Fill().Children(func() {
+	ui.Split(ctx, &app.sidebarW, func() { app.sidebar(ctx) }, func() {
 		app.toolbar(ctx)
 		app.saveNotice(ctx)
-		ui.Split(ctx, &app.sidebarW, func() { app.sidebar(ctx) }, func() {
+		ui.Column(ctx).Grow(1).FillWidth().Children(func() {
 			var panel func()
 			switch id := app.threadID(); {
 			case id != "" && app.rev.Thread(id) != nil:
@@ -50,8 +50,8 @@ func (app *app) view(ctx *ui.Context) {
 				return
 			}
 			ui.SplitPercent(ctx, &app.mainPct, func() { app.main(ctx) }, side).Fill()
-		}).Grow(1).FillWidth()
-	}).Background(theme.Background)
+		})
+	}).Fill().Background(theme.Background)
 	app.settingsModal(ctx)
 	app.compareModal(ctx)
 	app.shortcutsModal(ctx)
@@ -60,6 +60,7 @@ func (app *app) view(ctx *ui.Context) {
 
 func (app *app) sidebar(ctx *ui.Context) {
 	theme := ctx.Theme()
+	ui.Box(ctx).Height(titleBarHeight).Shrink(0).FillWidth().Background(theme.Surface).DragWindow()
 	ui.SplitVerticalPercent(ctx, &app.scopePct, func() {
 		ui.Column(ctx).Fill().Background(theme.Surface).Children(func() {
 			app.scopeList(ctx)
@@ -70,7 +71,7 @@ func (app *app) sidebar(ctx *ui.Context) {
 			app.reviewNav(ctx)
 			app.fileNav(ctx)
 		})
-	}).Fill()
+	}).Grow(1).FillWidth()
 }
 
 // sidebarHeading names a part of a sidebar, above its sections, with the
