@@ -25,48 +25,76 @@ func (app *app) view(ctx *ui.Context) {
 	app.markSeen()
 	app.keys(ctx)
 	ui.Split(ctx, &app.sidebarW, func() { app.sidebar(ctx) }, func() {
-		app.toolbar(ctx)
-		app.saveNotice(ctx)
-		ui.Column(ctx).Grow(1).FillWidth().Children(func() {
-			var panel func()
-			switch id := app.threadID(); {
-			case id != "" && app.rev.Thread(id) != nil:
-				panel = func() { app.threadPanel(ctx) }
-			case app.questionOpen():
-				panel = func() { app.questionPanel(ctx) }
-			}
-			var side func()
-			switch {
-			case panel != nil && app.logOpen:
-				side = func() {
-					ui.SplitVerticalPercent(ctx, &app.logPct, panel, func() { app.logPanel(ctx) }).Fill()
-				}
-			case panel != nil:
-				side = panel
-			case app.logOpen:
-				side = func() { app.logPanel(ctx) }
-			default:
-				app.main(ctx)
-				return
-			}
-			ui.SplitPercent(ctx, &app.mainPct, func() { app.main(ctx) }, side).Fill()
+		ui.Column(ctx).Fill().Background(theme.Background).Children(func() {
+			app.toolbar(ctx)
+			app.saveNotice(ctx)
+			ui.Column(ctx).Grow(1).FillWidth().Children(func() { app.content(ctx) })
 		})
-	}).Fill().Background(theme.Background)
+	}).Fill()
+	if ctx.Vibrancy() {
+		ctx.Root().Background(ui.Transparent)
+	}
 	app.settingsModal(ctx)
 	app.compareModal(ctx)
 	app.shortcutsModal(ctx)
 	app.paletteModal(ctx)
 }
 
+// content builds the page, with the thread, question or log panel beside
+// it when one is open.
+func (app *app) content(ctx *ui.Context) {
+	var panel func()
+	switch id := app.threadID(); {
+	case id != "" && app.rev.Thread(id) != nil:
+		panel = func() { app.threadPanel(ctx) }
+	case app.questionOpen():
+		panel = func() { app.questionPanel(ctx) }
+	}
+	var side func()
+	switch {
+	case panel != nil && app.logOpen:
+		side = func() {
+			ui.SplitVerticalPercent(ctx, &app.logPct, panel, func() { app.logPanel(ctx) }).Fill()
+		}
+	case panel != nil:
+		side = panel
+	case app.logOpen:
+		side = func() { app.logPanel(ctx) }
+	default:
+		app.main(ctx)
+		return
+	}
+	ui.SplitPercent(ctx, &app.mainPct, func() { app.main(ctx) }, side).Fill()
+}
+
+// sidebarBackground is the background of the sidebar: none where the
+// window shows its material, which then shows through.
+func sidebarBackground(ctx *ui.Context) ui.Color {
+	if ctx.Vibrancy() {
+		return ui.Transparent
+	}
+	return ctx.Theme().Surface
+}
+
 func (app *app) sidebar(ctx *ui.Context) {
+	if ctx.Vibrancy() {
+		// The opaque grays of hovered and chosen rows match the material
+		// and do not show on it, so the sidebar darkens it instead.
+		base := ctx.Theme()
+		over := *base
+		over.SurfaceHover, over.SurfacePressed = base.Text.Alpha(0.06), base.Text.Alpha(0.1)
+		ctx.SetTheme(&over)
+		defer ctx.SetTheme(base)
+	}
 	theme := ctx.Theme()
-	ui.Box(ctx).Height(titleBarHeight).Shrink(0).FillWidth().Background(theme.Surface).DragWindow()
+	background := sidebarBackground(ctx)
+	ui.Box(ctx).Height(titleBarHeight).Shrink(0).FillWidth().Background(background).DragWindow()
 	ui.SplitVerticalPercent(ctx, &app.scopePct, func() {
-		ui.Column(ctx).Fill().Background(theme.Surface).Children(func() {
+		ui.Column(ctx).Fill().Background(background).Children(func() {
 			app.scopeList(ctx)
 		})
 	}, func() {
-		ui.Column(ctx).Fill().Background(theme.Surface).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+		ui.Column(ctx).Fill().Background(background).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
 			app.scopeHeader(ctx)
 			app.reviewNav(ctx)
 			app.fileNav(ctx)
@@ -117,9 +145,15 @@ func (app *app) scopeList(ctx *ui.Context) {
 	changeList.Selected = &sel
 	changeList.Key = rows.key
 	changeList.Label = rows.label
+	// A header that stays on top needs a background to hide the rows
+	// that scroll under it, so over the material the headers scroll away
+	// with their rows, as in the sidebars of Finder and Mail.
 	changeList.Header = rows.header
+	if ctx.Vibrancy() {
+		changeList.Header = nil
+	}
 	list := ui.List(ctx.Key("changes"), changeList, rows.len()).Fill().Padding(theme.Space(2.5), theme.Space(2.5)).Gap(theme.Space(0.5)).
-		Background(theme.Surface).FocusRing(false).Label("Changes")
+		Background(sidebarBackground(ctx)).FocusRing(false).Label("Changes")
 	ring := list.FocusVisible()
 	list.Rows(func(lr ui.ListRow) {
 		index := lr.Index
@@ -134,9 +168,9 @@ func (app *app) scopeList(ctx *ui.Context) {
 		}
 		switch kind := rows.kind(index); {
 		case kind == headingRow:
-			ui.Column(ctx).Background(theme.Surface).Children(func() { sidebarHeading(ctx, rows.label(index), nil) })
+			ui.Column(ctx).Background(sidebarBackground(ctx)).Children(func() { sidebarHeading(ctx, rows.label(index), nil) })
 		case kind == sectionRow:
-			ui.Row(ctx).Padding(theme.Space(4), theme.Space(2), theme.Space(1), theme.Space(2)).Background(theme.Surface).Children(func() {
+			ui.Row(ctx).Padding(theme.Space(4), theme.Space(2), theme.Space(1), theme.Space(2)).Background(sidebarBackground(ctx)).Children(func() {
 				ui.Text(ctx, rows.label(index)).FontSize(theme.FontSize - 1).FontWeight(600).TextColor(theme.TextMuted).Grow(1).SingleLine()
 			})
 		case kind == noteRow && app.commits.err != "" && len(rows.commits) > 0:
@@ -479,7 +513,7 @@ func (app *app) reviewNav(ctx *ui.Context) {
 				ui.Badge(ctx, fmt.Sprint(feedback))
 			}
 		})
-	}).Shrink(0).Label("Review")
+	}).Shrink(0).Background(sidebarBackground(ctx)).Label("Review")
 	if nav.Changed() {
 		app.nav.goTo(parsePage(chosen))
 	}
@@ -540,7 +574,7 @@ func (app *app) fileNav(ctx *ui.Context) {
 				ui.Text(ctx, "Reading changes…").FontSize(12).TextColor(theme.TextMuted)
 			})
 		}
-	}).Grow(1).Shrink(1).MinHeight(0).Label("Files")
+	}).Grow(1).Shrink(1).MinHeight(0).Background(sidebarBackground(ctx)).Label("Files")
 	app.takeFocus(nav, "files")
 	// Left and Right close and open the group chosen, as in a tree.
 	if chosenPage := parsePage(chosen); chosenPage.kind == kindGroup {

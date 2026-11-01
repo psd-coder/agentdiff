@@ -99,6 +99,26 @@ func TestOpensRepoWithChanges(t *testing.T) {
 	snapshot(t, tt, "overview-empty")
 }
 
+// Over the window's material, the sidebar draws no background, so the
+// material shows through, and the page stays opaque. Without a material,
+// the sidebar draws its own.
+func TestSidebarShowsMaterial(t *testing.T) {
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
+	alpha := func(x, y int) uint8 {
+		img := tt.Image()
+		return img.Pix[img.PixOffset(x, y)+3]
+	}
+	tt.SetVibrancy(true)
+	if alpha(140, 780) != 0 || alpha(700, 780) != 255 {
+		t.Errorf("over the material, the sidebar's alpha is %d and the page's %d; want 0 and 255", alpha(140, 780), alpha(700, 780))
+	}
+	tt.SetVibrancy(false)
+	if alpha(140, 780) != 255 {
+		t.Errorf("without a material, the sidebar's alpha is %d; want 255", alpha(140, 780))
+	}
+}
+
 func TestOverviewAndGroups(t *testing.T) {
 	app := newTestApp(t)
 	md := "## 1. High level\n- Keys are lower-cased in `cache/cache.go:6`.\n\n## 2. Data changes\nNone.\n\n```json\n{\"groups\":[{\"title\":\"Cache keys\",\"summary\":\"Lower-case keys.\",\"files\":[\"cache/cache.go\"]},{\"title\":\"API\",\"summary\":\"New handler.\",\"files\":[\"api/handler.go\"]}]}\n```"
