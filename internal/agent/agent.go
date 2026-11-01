@@ -26,6 +26,10 @@ type Config struct {
 	AutoEffort string   `json:"autoEffort"`
 	Binary     string   `json:"binary,omitempty"`
 	ExtraArgs  []string `json:"extraArgs,omitempty"`
+	// UserSetup lets the CLI load the user's own setup: instructions,
+	// skills, hooks, plugins and MCP servers. Without it, a run gets only
+	// the prompts of the app.
+	UserSetup bool `json:"userSetup,omitempty"`
 }
 
 // Auto is the config for the runs the app starts on its own: the

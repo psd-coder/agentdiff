@@ -21,29 +21,34 @@ type spec struct {
 	// command.
 	resumed  func(words []string) string
 	logItems func(raw []byte) []LogItem
+	// withoutSetup says what a run leaves out when the user's own setup
+	// is off.
+	withoutSetup string
 }
 
 // specs are the providers, in the order the settings show them.
 var specs = []spec{
 	{
-		id:       Claude,
-		name:     "Claude Code",
-		efforts:  []string{"low", "medium", "high", "xhigh", "max"},
-		args:     claudeArgs,
-		stdin:    claudePrompt,
-		parser:   func(dir string) lineParser { return &claudeParser{dir: dir} },
-		resumed:  claudeResumed,
-		logItems: claudeItems,
+		id:           Claude,
+		name:         "Claude Code",
+		efforts:      []string{"low", "medium", "high", "xhigh", "max"},
+		args:         claudeArgs,
+		stdin:        claudePrompt,
+		parser:       func(dir string) lineParser { return &claudeParser{dir: dir} },
+		resumed:      claudeResumed,
+		logItems:     claudeItems,
+		withoutSetup: "Claude Code runs in safe mode: without your CLAUDE.md files, skills, plugins, hooks and MCP servers.",
 	},
 	{
-		id:       Codex,
-		name:     "Codex",
-		efforts:  []string{"minimal", "low", "medium", "high", "xhigh"},
-		args:     codexArgs,
-		stdin:    codexPrompt,
-		parser:   func(string) lineParser { return &codexParser{} },
-		resumed:  codexResumed,
-		logItems: codexItems,
+		id:           Codex,
+		name:         "Codex",
+		efforts:      []string{"minimal", "low", "medium", "high", "xhigh"},
+		args:         codexArgs,
+		stdin:        codexPrompt,
+		parser:       func(string) lineParser { return &codexParser{} },
+		resumed:      codexResumed,
+		logItems:     codexItems,
+		withoutSetup: "Codex runs without your config.toml, hooks, plugins, apps and the AGENTS.md files of the repository, so a model set in config.toml does not apply. Codex still reads ~/.codex/AGENTS.md and your skills, because the CLI has no option to leave them out.",
 	},
 }
 
@@ -79,3 +84,7 @@ func (p Provider) Name() string { return specOf(p).name }
 
 // Efforts lists the effort levels the CLI of the provider takes.
 func (p Provider) Efforts() []string { return specOf(p).efforts }
+
+// WithoutUserSetup says what a run of the provider leaves out when the
+// user's own setup is off.
+func (p Provider) WithoutUserSetup() string { return specOf(p).withoutSetup }

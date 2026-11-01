@@ -71,3 +71,7 @@ _Avoid_: schema, answer format
 **Section**:
 A part of a walkthrough next to its steps, which the prompt asks for by name, as the checklist. Its items get threads, and the reviewer cannot go deeper into them.
 _Avoid_: part, extra block
+
+**User setup**:
+What the user gave their own agent CLI: instructions such as `CLAUDE.md`, skills, hooks, plugins and MCP servers. A run leaves it out unless the settings let it in.
+_Avoid_: user config, customizations

@@ -30,14 +30,18 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-var claudeBase = append([]string{
+var claudeShared = append([]string{
 	"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
 	"--tools", "Read,Grep,Glob,Bash",
 	"--permission-mode", "dontAsk",
 	"--allowedTools",
 }, readOnlyRules()...)
 
-var codexBase = []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check"}
+var claudeBase = with(claudeShared, "--safe-mode")
+
+var codexShared = []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check"}
+
+var codexBase = with(codexShared, "--ignore-user-config", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "-c", "project_doc_max_bytes=0")
 
 func with(base []string, extra ...string) []string {
 	return append(append([]string{}, base...), extra...)
@@ -58,6 +62,7 @@ func TestArgs(t *testing.T) {
 			with(claudeBase, "--model", "haiku", "--append-system-prompt", "be brief"),
 		},
 		{"claude effort", Config{Provider: Claude, Effort: "low"}, Request{}, with(claudeBase, "--effort", "low")},
+		{"claude with the user's setup", Config{Provider: Claude, UserSetup: true, Model: "haiku"}, Request{}, with(claudeShared, "--model", "haiku")},
 		{"claude resume", Config{Provider: Claude}, Request{ResumeID: "s1"}, with(claudeBase, "--resume", "s1")},
 		{
 			"claude fork",
@@ -74,6 +79,7 @@ func TestArgs(t *testing.T) {
 		},
 		{"codex new", Config{Provider: Codex}, Request{Dir: "/r", Prompt: "p"}, with(codexBase, "-C", "/r", "-")},
 		{"codex without dir", Config{Provider: Codex}, Request{}, with(codexBase, "-")},
+		{"codex with the user's setup", Config{Provider: Codex, UserSetup: true}, Request{Dir: "/r"}, with(codexShared, "-C", "/r", "-")},
 		{
 			"codex model",
 			Config{Provider: Codex, Model: "gpt-5"},

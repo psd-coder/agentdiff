@@ -159,8 +159,15 @@ func unescapeDouble(s string) string {
 	return b.String()
 }
 
+// codexArgs keeps Codex in its read-only sandbox. Without the user's
+// setup, a run skips config.toml, hooks, plugins, apps and the AGENTS.md
+// files of the repository. The CLI has no option to skip
+// ~/.codex/AGENTS.md or the skills.
 func codexArgs(cfg Config, req Request) []string {
 	args := []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check"}
+	if !cfg.UserSetup {
+		args = append(args, "--ignore-user-config", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "-c", "project_doc_max_bytes=0")
+	}
 	if req.Dir != "" {
 		args = append(args, "-C", req.Dir)
 	}
