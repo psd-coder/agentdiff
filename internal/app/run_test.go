@@ -129,3 +129,24 @@ func TestStreamingRunsShowProgress(t *testing.T) {
 	a.openThread(th.ID)
 	streaming("thread-streaming", "The tests cover upper-case keys.", "Running go test", func() { a.ask(a.rev, th, "And the tests?") }, "The tests cover upper-case keys.")
 }
+
+func TestTextBatchJoinsDeltasUntilFlushTime(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	b := textBatch{last: start}
+	if !b.empty() {
+		t.Fatal("new batch is not empty")
+	}
+	if b.add("Hel", start.Add(10*time.Millisecond)) || b.add("lo", start.Add(39*time.Millisecond)) {
+		t.Fatal("asked to flush before 40ms passed")
+	}
+	if !b.add("!", start.Add(40*time.Millisecond)) {
+		t.Fatal("did not ask to flush once 40ms passed")
+	}
+	taken := start.Add(41 * time.Millisecond)
+	if got := b.take(taken); got != "Hello!" || !b.empty() {
+		t.Fatalf("take = %q, empty after take %v", got, b.empty())
+	}
+	if b.add("next", taken.Add(39*time.Millisecond)) {
+		t.Error("the next batch did not start at the take")
+	}
+}
