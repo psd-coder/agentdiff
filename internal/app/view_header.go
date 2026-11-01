@@ -161,27 +161,8 @@ func (a *app) toggleBranches() {
 	a.branchNav.open(slices.Index(a.cmpr.branches, a.cmpr.headBranch()))
 }
 
-// filteredBranches are the branches whose name holds the filter.
-func (a *app) filteredBranches() []string {
-	q := strings.ToLower(a.branchQuery)
-	var out []string
-	for _, b := range a.cmpr.branches {
-		if strings.Contains(strings.ToLower(b), q) {
-			out = append(out, b)
-		}
-	}
-	return out
-}
-
 func (a *app) branchList(c *ui.Context) {
-	t := c.Theme()
-	trees := map[string]string{}
-	for _, w := range a.cmpr.worktrees {
-		if w.Branch != "" && w.Path != a.repo.Root {
-			trees[w.Branch] = w.Path
-		}
-	}
-	branches := a.filteredBranches()
+	rows := a.cmpr.branchRows(a.branchQuery, a.repo.Root)
 	nav := &a.branchNav
 	choose := func(b string) {
 		a.branchesOpen, a.refocus = false, "branch"
@@ -194,14 +175,14 @@ func (a *app) branchList(c *ui.Context) {
 	ui.Column(c).MinWidth(340).MaxWidth(560).FillWidth().Gap(4).Children(func() {
 		in := searchField(c, &a.branchQuery, "Filter branches", func(k ui.TextKey) bool {
 			switch {
-			case k.Mods == 0 && nav.key(k.Key, len(branches)):
+			case k.Mods == 0 && nav.key(k.Key, len(rows)):
 				return true
-			case k.Key == ui.KeyEnter && nav.hi < len(branches):
-				b := branches[nav.hi]
-				if tree := trees[b]; k.Mods == ui.Cmd && tree != "" {
-					openTree(tree)
+			case k.Key == ui.KeyEnter && nav.hi < len(rows):
+				r := rows[nav.hi]
+				if k.Mods == ui.Cmd && r.tree != "" {
+					openTree(r.tree)
 				} else if k.Mods == 0 {
-					choose(b)
+					choose(r.name)
 				}
 				return true
 			}
@@ -211,54 +192,56 @@ func (a *app) branchList(c *ui.Context) {
 		if in.Changed() {
 			nav.open(0)
 		}
-		var rows []ui.Element
+		var items []ui.Element
 		ui.Scroll(c).MaxHeight(380).Children(func() {
-			_, rows = nav.list(c, "Branches", func(addRow pickRow) {
-				for _, b := range branches {
-					chosen := a.cmpr.rng == nil && b == a.cmpr.headBranch()
-					tree := trees[b]
-					var actions func()
-					if tree != "" {
-						actions = func() {
-							iconButton(c, worktreeIcon, "Open the worktree "+tree, "Open the worktree "+tree+" (Cmd+Enter)").OnClick(func() { openTree(tree) })
-						}
-					}
-					label := b
-					row := addRow(c.Key(b), func() {
-						check := ui.Icon(c, checkIcon).Size(menuIcon, menuIcon).TextColor(t.Accent)
-						if !chosen {
-							check.Invisible()
-						}
-						ui.Text(c, b).SingleLine().Shrink(1).Grow(1)
-						switch {
-						case b == a.cmpr.branch:
-							label += ", checked out"
-							ui.Text(c, "checked out").FontSize(11).TextColor(t.TextMuted)
-						case tree != "":
-							label += ", worktree"
-							ui.Text(c, "worktree").FontSize(11).TextColor(t.TextMuted).Tooltip(tree)
-						}
-						if chosen {
-							label += ", selected"
-						}
-					}, actions)
-					row.Label(label)
-					if row.Clicked() {
-						choose(b)
+			_, items = nav.list(c, "Branches", func(addRow pickRow) {
+				for _, r := range rows {
+					if branchItem(c, addRow, r, openTree).Clicked() {
+						choose(r.name)
 					}
 				}
 			})
-			switch {
-			case a.cmpr.err != "":
-				ui.Text(c, "Could not list the branches: "+a.cmpr.err).FontSize(12).TextColor(t.Danger).Padding(6, 8).Selectable()
-			case len(branches) == 0:
-				ui.Text(c, "No branches match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
-			}
+			a.branchListNote(c, len(rows))
 		})
-		if row, ok := nav.active(rows); ok && len(branches) > 0 {
-			in.ActiveDescendant(row)
+		if item, ok := nav.active(items); ok && len(rows) > 0 {
+			in.ActiveDescendant(item)
 		}
 	})
+}
+
+func branchItem(c *ui.Context, addRow pickRow, r branchRow, openTree func(string)) ui.Element {
+	t := c.Theme()
+	var actions func()
+	if r.tree != "" {
+		actions = func() {
+			iconButton(c, worktreeIcon, "Open the worktree "+r.tree, "Open the worktree "+r.tree+" (Cmd+Enter)").OnClick(func() { openTree(r.tree) })
+		}
+	}
+	return addRow(c.Key(r.name), func() {
+		check := ui.Icon(c, checkIcon).Size(menuIcon, menuIcon).TextColor(t.Accent)
+		if !r.chosen {
+			check.Invisible()
+		}
+		ui.Text(c, r.name).SingleLine().Shrink(1).Grow(1)
+		if tag := r.tag(); tag != "" {
+			text := ui.Text(c, tag).FontSize(11).TextColor(t.TextMuted)
+			if !r.checkedOut {
+				text.Tooltip(r.tree)
+			}
+		}
+	}, actions).Label(r.label())
+}
+
+// branchListNote tells why the branch list shows no branches, or that git
+// could not list them.
+func (a *app) branchListNote(c *ui.Context, shown int) {
+	t := c.Theme()
+	switch {
+	case a.cmpr.err != "":
+		ui.Text(c, "Could not list the branches: "+a.cmpr.err).FontSize(12).TextColor(t.Danger).Padding(6, 8).Selectable()
+	case shown == 0:
+		ui.Text(c, "No branches match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
+	}
 }
 
 type compareForm struct {
