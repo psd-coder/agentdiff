@@ -35,7 +35,9 @@ func Run(repo string) error {
 			// macOS keeps its own title bar height for the traffic lights;
 			// this centers the 14 points of their height in the toolbar.
 			TrafficLightPosition: &mygo.Point{X: 20, Y: (titleBarHeight - 14) / 2},
-			Content:              ui.View(app.view),
+			// The sidebar draws no background, and the material shows.
+			Vibrancy: mygo.VibrancySidebar,
+			Content:  ui.View(app.view),
 		})
 		app.win.OnFocus(func() { app.win.Update(app.syncBranch) })
 		if repo != "" {
