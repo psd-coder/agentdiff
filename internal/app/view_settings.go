@@ -15,7 +15,7 @@ import (
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
-var providers = []agent.Provider{agent.Claude, agent.Codex}
+var providers = agent.Providers()
 
 const (
 	defaultEffort = "CLI default"
@@ -38,9 +38,7 @@ func newAgentForm(cfg agent.Config, questions string) agentForm {
 		model: cfg.Model, effort: cmp.Or(cfg.Effort, defaultEffort),
 		autoModel: cfg.AutoModel, autoEffort: cmp.Or(cfg.AutoEffort, sameEffort),
 		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), questions: questions,
-	}
-	if cfg.Provider == agent.Codex {
-		f.provider = 1
+		provider: max(slices.Index(providers, cfg.Provider), 0),
 	}
 	return f
 }
@@ -61,7 +59,7 @@ func (f agentForm) config() agent.Config {
 // effortOf is the effort picked in the form, empty when it is the
 // default choice or a level the provider's CLI does not take.
 func effortOf(p agent.Provider, picked string) string {
-	if slices.Contains(agent.Efforts(p), picked) {
+	if slices.Contains(p.Efforts(), picked) {
 		return picked
 	}
 	return ""
@@ -234,10 +232,14 @@ func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider
 		})
 	}
 	field("Agent", func() {
-		ui.Segmented(c, &f.provider, "Claude Code", "Codex").Label("Agent")
+		names := make([]string, len(providers))
+		for i, p := range providers {
+			names[i] = p.Name()
+		}
+		ui.Segmented(c, &f.provider, names...).Label("Agent")
 		ui.Text(c, status[providers[f.provider]]).FontSize(11).TextColor(t.TextMuted).SingleLine()
 	})
-	efforts := agent.Efforts(providers[f.provider])
+	efforts := providers[f.provider].Efforts()
 	pair := func(left, right func()) {
 		ui.Row(c).Gap(12).Children(func() {
 			ui.Column(c).Grow(1).Basis(0).Children(left)

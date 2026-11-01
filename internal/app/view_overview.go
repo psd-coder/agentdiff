@@ -173,7 +173,7 @@ func (a *app) overviewPage(c *ui.Context) {
 			case run != nil:
 				a.streamingOverview(c, run)
 			case !ov.Done():
-				a.overviewIntro(c, providerName(cfg.Provider))
+				a.overviewIntro(c, cfg.Provider.Name())
 			case ov.Walk != nil:
 				ui.Text(c, writtenBy(ov.Agent, ov.Model, ov.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(t.TextMuted)
 				a.walkthrough(c, "", ov.Walk)
@@ -263,7 +263,7 @@ func (a *app) streamingOverview(c *ui.Context, run *agentRun) {
 
 func (a *app) overviewSections(c *ui.Context, ov *review.Overview) {
 	t := c.Theme()
-	meta := fmt.Sprintf("By %s", providerName(ov.Agent))
+	meta := fmt.Sprintf("By %s", ov.Agent.Name())
 	if ov.Model != "" {
 		meta += " (" + ov.Model + ")"
 	}

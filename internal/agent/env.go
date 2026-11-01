@@ -109,7 +109,7 @@ func fallbackDirs() []string {
 }
 
 func resolveBinary(cfg Config, env []string) (string, error) {
-	if cfg.Provider != Claude && cfg.Provider != Codex {
+	if _, ok := lookup(cfg.Provider); !ok {
 		return "", fmt.Errorf("unknown provider %q", cfg.Provider)
 	}
 	name := cfg.Binary

@@ -396,7 +396,7 @@ func (a *app) walkPage(c *ui.Context, id string) {
 }
 
 func writtenBy(p agent.Provider, model, when string) string {
-	s := "By " + providerName(p)
+	s := "By " + p.Name()
 	if model != "" {
 		s += " (" + model + ")"
 	}

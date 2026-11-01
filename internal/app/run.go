@@ -277,13 +277,6 @@ func (a *app) ask(rev *review.Review, t *review.Thread, text string) {
 	a.runner.start(ex, t.Anchor.Label(), excerpt(text, 160), nil)
 }
 
-func providerName(p agent.Provider) string {
-	if p == agent.Codex {
-		return "Codex"
-	}
-	return "Claude Code"
-}
-
 // release forgets rev: it stops every run of rev and the walks queued
 // for it without writing into rev, and drops its run log from memory.
 func (a *app) release(rev *review.Review) {

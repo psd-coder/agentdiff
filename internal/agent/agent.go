@@ -8,18 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-)
-
-type Provider string
-
-const (
-	Claude Provider = "claude"
-	Codex  Provider = "codex"
 )
 
 // Config is how to run an agent. AutoModel and AutoEffort replace Model
@@ -41,14 +33,6 @@ type Config struct {
 func (c Config) Auto() Config {
 	c.Model, c.Effort = cmp.Or(c.AutoModel, c.Model), cmp.Or(c.AutoEffort, c.Effort)
 	return c
-}
-
-// Efforts lists the effort levels the CLI of a provider takes.
-func Efforts(p Provider) []string {
-	if p == Codex {
-		return []string{"minimal", "low", "medium", "high", "xhigh"}
-	}
-	return []string{"low", "medium", "high", "xhigh", "max"}
 }
 
 type Request struct {
@@ -95,12 +79,7 @@ type lineParser interface {
 	streamError() error
 }
 
-func newParser(p Provider, dir string) lineParser {
-	if p == Codex {
-		return &codexParser{}
-	}
-	return &claudeParser{dir: dir}
-}
+func newParser(p Provider, dir string) lineParser { return specOf(p).parser(dir) }
 
 func Run(ctx context.Context, cfg Config, req Request) <-chan Event {
 	ch := make(chan Event, 16)
@@ -252,87 +231,17 @@ func Available(ctx context.Context, cfg Config) (path, version string, err error
 	return path, version, nil
 }
 
+// Args are the arguments of the CLI for a request, nil for an unknown
+// provider.
 func Args(cfg Config, req Request) []string {
-	switch cfg.Provider {
-	case Claude:
-		return claudeArgs(cfg, req)
-	case Codex:
-		return codexArgs(cfg, req)
+	sp, ok := lookup(cfg.Provider)
+	if !ok {
+		return nil
 	}
-	return nil
+	return sp.args(cfg, req)
 }
 
-var readOnlyCommands = []string{
-	"git diff", "git show", "git log", "git status", "git blame", "git ls-files", "git rev-parse",
-	"grep", "rg", "ls", "cat", "head", "tail", "wc",
-}
-
-// readOnlyRules allows each command also with an rtk prefix: rtk's hook
-// rewrites commands before Claude checks its rules.
-func readOnlyRules() []string {
-	rules := make([]string, 0, 2*len(readOnlyCommands))
-	for _, c := range readOnlyCommands {
-		rules = append(rules, "Bash("+c+":*)", "Bash(rtk "+c+":*)")
-	}
-	return rules
-}
-
-// claudeArgs keeps Claude read-only: in dontAsk mode a tool call that no
-// allow rule matches is refused instead of asked about, so the allow list
-// below, plus the user's own rules, is all that Bash may run.
-func claudeArgs(cfg Config, req Request) []string {
-	args := []string{
-		"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-		"--tools", "Read,Grep,Glob,Bash",
-		"--permission-mode", "dontAsk",
-		"--allowedTools",
-	}
-	args = append(args, readOnlyRules()...)
-	if cfg.Model != "" {
-		args = append(args, "--model", cfg.Model)
-	}
-	if cfg.Effort != "" {
-		args = append(args, "--effort", cfg.Effort)
-	}
-	if req.SystemPrompt != "" {
-		args = append(args, "--append-system-prompt", req.SystemPrompt)
-	}
-	if req.ResumeID != "" {
-		args = append(args, "--resume", req.ResumeID)
-		if req.Fork {
-			args = append(args, "--fork-session")
-		}
-	}
-	return append(args, cfg.ExtraArgs...)
-}
-
-func codexArgs(cfg Config, req Request) []string {
-	args := []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check"}
-	if req.Dir != "" {
-		args = append(args, "-C", req.Dir)
-	}
-	if cfg.Model != "" {
-		args = append(args, "-m", cfg.Model)
-	}
-	if cfg.Effort != "" {
-		args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(cfg.Effort))
-	}
-	args = append(args, cfg.ExtraArgs...)
-	switch {
-	case req.ResumeID != "" && req.Fork:
-		args = append(args, "fork", req.ResumeID)
-	case req.ResumeID != "":
-		args = append(args, "resume", req.ResumeID)
-	}
-	return append(args, "-")
-}
-
-func stdinText(cfg Config, req Request) string {
-	if cfg.Provider != Codex || req.SystemPrompt == "" {
-		return req.Prompt
-	}
-	return "<instructions>\n" + req.SystemPrompt + "\n</instructions>\n\n" + req.Prompt
-}
+func stdinText(cfg Config, req Request) string { return specOf(cfg.Provider).stdin(req) }
 
 type tailBuffer struct {
 	mu  sync.Mutex

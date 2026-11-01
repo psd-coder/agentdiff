@@ -164,7 +164,7 @@ func (r *runner) launch(run *agentRun, title, note string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	run.cancel = cancel
 	run.started = time.Now()
-	run.activity = "Starting " + providerName(cfg.Provider) + "…"
+	run.activity = "Starting " + cfg.Provider.Name() + "…"
 	if run.ex.Kind() == review.KindThread {
 		run.activity = "Thinking…"
 	}

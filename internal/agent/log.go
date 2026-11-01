@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -121,20 +120,9 @@ func shellQuote(s string) string {
 }
 
 // ResumedSession is the session that a command logged by commandLine
-// resumed or forked, empty for a new session. Claude takes it after
-// --resume, Codex after resume or fork near the end, before "-".
+// resumed or forked, empty for a new session.
 func ResumedSession(p Provider, command string) string {
-	words := shellWords(command)
-	if p == Codex {
-		if n := len(words); n >= 3 && words[n-1] == "-" && (words[n-3] == "resume" || words[n-3] == "fork") {
-			return words[n-2]
-		}
-		return ""
-	}
-	if i := slices.Index(words, "--resume"); i >= 0 && i+1 < len(words) {
-		return words[i+1]
-	}
-	return ""
+	return specOf(p).resumed(shellWords(command))
 }
 
 // shellWords splits a command line that shellQuote wrote back into words.
@@ -278,10 +266,7 @@ func Summarize(p Provider, e LogEntry) []LogItem {
 		if !json.Valid([]byte(e.Text)) {
 			return []LogItem{{Title: "Output", Detail: e.Text}}
 		}
-		if p == Codex {
-			return codexItems([]byte(e.Text))
-		}
-		return claudeItems([]byte(e.Text))
+		return specOf(p).logItems([]byte(e.Text))
 	}
 	return nil
 }
