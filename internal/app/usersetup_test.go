@@ -6,7 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-func TestUserSetupSwitch(t *testing.T) {
+func TestUserSetupCheckbox(t *testing.T) {
 	app := newTestApp(t)
 	tt := ui.NewTester(app.view, 1300, 1000)
 	app.openSettings()
@@ -31,7 +31,7 @@ func TestUserSetupSwitch(t *testing.T) {
 	}
 	tt.Frame()
 	if !app.store.LoadConfig().Agent.UserSetup {
-		t.Error("the switch was not saved")
+		t.Error("the check box was not saved")
 	}
 	if !tt.HasText("The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app.") {
 		t.Errorf("the tab does not warn about the user's hooks: %q", tt.Texts())
