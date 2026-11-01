@@ -224,7 +224,7 @@ func TestSettings(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "settings")
-	title, _ := tt.Find("Shortcuts")
+	tab, _ := tt.Find("Agent")
 	if tt.HasText("This review") {
 		t.Errorf("per-review tab: %q", tt.Texts())
 	}
@@ -245,8 +245,8 @@ func TestSettings(t *testing.T) {
 	}
 	tt.Frame()
 	snapshot(t, tt, "settings-shortcuts")
-	if tabs, _ := tt.Find("Shortcuts"); tabs.Y != title.Y {
-		t.Errorf("the top moved with the tab: %v, then %v", title, tabs)
+	if moved, _ := tt.Find("Agent"); moved.Y != tab.Y {
+		t.Errorf("the top moved with the tab: %v, then %v", tab, moved)
 	}
 	app.keysFilter = "refresh"
 	tt.Frame()
@@ -2590,11 +2590,11 @@ func TestSettingsRoom(t *testing.T) {
 	app.settings.tab = shortcutsTab
 	tt.Frame()
 	snapshot(t, tt, "settings-room")
-	// 15% of the window above the dialog, and Done about 26 points
-	// inside it: the padding of the dialog and of the button.
+	// 15% of the window above the dialog, and Done about 18 points
+	// inside it: the padding of the footer and of the button.
 	done, _ := tt.Find("Done")
-	if below := 800 - (done.Y + done.H); below < 140 || below > 152 {
-		t.Errorf("room under Done %v, want about 146", below)
+	if below := 800 - (done.Y + done.H); below < 132 || below > 144 {
+		t.Errorf("room under Done %v, want about 138", below)
 	}
 }
 
@@ -3149,5 +3149,26 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 	pump(t, app, "the failed overview", func() bool { return !overviewOf().busy() })
 	if got := overviewOf(); got != (targetState{status: targetFailed, unseen: true}) {
 		t.Errorf("state after a failed overview = %+v, want failed and unseen", got)
+	}
+}
+
+// TestSettingsTabsLineUpControls keeps the controls of every tab at the
+// same place, as the labels of each tab have other widths.
+func TestSettingsTabsLineUpControls(t *testing.T) {
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 1000)
+	app.openSettings()
+	left := map[string]float32{}
+	for tab, control := range map[int]string{appearanceTab: "Theme", agentTab: "Model", promptsTab: "Prompt"} {
+		app.settings.tab = tab
+		tt.Frame()
+		box, ok := tt.Find(control)
+		if !ok {
+			t.Fatalf("no %q control: %q", control, tt.Texts())
+		}
+		left[control] = box.X
+	}
+	if left["Theme"] != left["Model"] || left["Model"] != left["Prompt"] {
+		t.Errorf("controls start at %v", left)
 	}
 }

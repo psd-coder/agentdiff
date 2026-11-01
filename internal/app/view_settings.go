@@ -152,35 +152,44 @@ func (app *app) saveSettings() {
 	}
 }
 
+// settingsTabs are the names and icons of the tabs, in the order of
+// their constants.
+var settingsTabs = []struct {
+	name string
+	icon *ui.SVG
+}{
+	{"Appearance", paletteIcon},
+	{"Agent", botIcon},
+	{"Prompts", textIcon},
+	{"Shortcuts", keyboardIcon},
+}
+
 func (app *app) settingsModal(ctx *ui.Context) {
 	form := app.settings
 	if form == nil {
 		return
 	}
 	theme := ctx.Theme()
+	const radius float32 = 10
 	ui.DialogBase(ctx, &form.open, func(back, panel ui.Element) {
 		// The top stays in place as the tab changes, and the dialog is as
 		// tall as the tab needs, leaving as much room under it as above.
 		_, height := ctx.Size()
 		gap := max(48, height*0.15)
 		back.Background(ui.RGBA(0, 0, 0, 0.4)).Justify(ui.Start).Padding(gap, 16, gap, 16)
-		panel.Width(640).Shrink(1).MinHeight(0).Padding(20).Radius(10).Background(theme.Background).
+		panel.Width(720).Shrink(1).MinHeight(0).Radius(radius).Background(theme.Background).
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
-		ui.Column(ctx).Gap(14).Padding(0, 0, 14, 0).Children(func() {
-			ui.Text(ctx, "Settings").FontSize(18).Bold()
-			app.takeFocus(ui.Tabs(ctx, &form.tab, "Appearance", "Agent", "Prompts", "Shortcuts").Label("Settings"), "settings")
+		ui.Column(ctx).AlignItems(ui.Center).Gap(6).Padding(10, 16, 8, 16).Radius(radius, radius, 0, 0).Background(theme.Surface).Children(func() {
+			ui.Text(ctx, settingsTabs[form.tab].name).Bold()
+			app.settingsToolbar(ctx, form)
 		})
-		ui.Column(ctx).Gap(14).Shrink(1).MinHeight(0).Children(func() {
+		ui.Divider(ctx)
+		ui.Column(ctx).Gap(14).Padding(20, 24).Shrink(1).MinHeight(0).Children(func() {
 			switch form.tab {
 			case agentTab:
 				ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-					ui.Column(ctx).Gap(14).PaddingEnd(4).Children(func() {
-						app.agentFields(ctx, &form.agent, form.status)
-						ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Switch(ctx, &form.ahead).Label("Write the deeper walkthrough of every step with the overview")
-							ui.Text(ctx, "Write the deeper walkthrough of every step with the overview")
-						})
-						ui.Text(ctx, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(theme.TextMuted)
+					ui.Column(ctx).PaddingEnd(4).Children(func() {
+						app.agentFields(ctx, &form.agent, form.status, &form.ahead)
 					})
 				})
 			case promptsTab:
@@ -191,7 +200,8 @@ func (app *app) settingsModal(ctx *ui.Context) {
 				app.appearanceTab(ctx, form)
 			}
 		})
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
+		ui.Divider(ctx)
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(12, 20).Children(func() {
 			ui.Text(ctx, "Changes are saved as you make them.").FontSize(11).TextColor(theme.TextMuted).Grow(1)
 			ui.PrimaryButton(ctx, "Done").Tooltip("Escape").OnClick(func() { form.open = false })
 		})
@@ -209,84 +219,111 @@ func (app *app) settingsModal(ctx *ui.Context) {
 	}
 }
 
+// settingsToolbar shows the tabs as the toolbar of a macOS settings
+// window: an icon over each name, the chosen one in the accent color.
+func (app *app) settingsToolbar(ctx *ui.Context, form *settingsForm) {
+	theme := ctx.Theme()
+	tabs := ui.TabsBase(ctx, &form.tab, len(settingsTabs))
+	app.takeFocus(tabs.List.Gap(2).Label("Settings"), "settings")
+	tabs.List.Children(func() {
+		for i, tab := range settingsTabs {
+			button := tabs.Tab(i).Padding(5, 10, 4, 10).Radius(6).TextColor(theme.TextMuted)
+			switch {
+			case i == form.tab:
+				button.TextColor(theme.Accent).Background(theme.Text.Alpha(0.08))
+			case button.Hovered():
+				button.TextColor(theme.Text)
+			}
+			button.Children(func() {
+				ui.Column(ctx).AlignItems(ui.Center).Gap(3).Children(func() {
+					ui.Icon(ctx, tab.icon).FontSize(22)
+					ui.Text(ctx, tab.name).SingleLine()
+				})
+			})
+		}
+	})
+}
+
+// settingsLabels are the labels of the fields of every tab.
+var settingsLabels = []string{
+	"Theme:", "Code theme:",
+	"Agent:", "Model:", "Effort:", "Automatic model:", "Automatic effort:", "Write ahead:", "Binary:", "Extra arguments:", "Your setup:",
+	"Prompt:", "Text:", "Blocks:",
+}
+
+// labeledForm is a form whose labels are as wide as the widest label of
+// every tab, so the controls stay in place as the tab changes.
+func labeledForm(ctx *ui.Context, fields func()) {
+	ui.Form(ctx, func() {
+		// A form makes its labels as wide as its widest, and these fields
+		// show nothing but give their labels.
+		ui.Box(ctx).Absolute().Invisible().Children(func() {
+			for _, label := range settingsLabels {
+				ui.Field(ctx.Key("width "+label), label, func() {})
+			}
+		})
+		fields()
+	})
+}
+
 // codePreview is the code the Appearance tab shows in the chosen code
 // theme.
 const codePreview = "```go\n// greet says hello to each name.\nfunc greet(names []string) int {\n\tfor i, n := range names {\n\t\tfmt.Printf(\"%d: hello, %s\\n\", i, n)\n\t}\n\treturn len(names)\n}\n```"
 
 func (app *app) appearanceTab(ctx *ui.Context, form *settingsForm) {
 	theme := ctx.Theme()
-	ui.Column(ctx).Gap(14).Children(func() {
-		ui.Column(ctx).Gap(4).Children(func() {
-			ui.Text(ctx, "Theme").FontSize(12).Bold()
-			ui.Segmented(ctx, &form.theme, "System", "Light", "Dark").Label("Theme")
+	labeledForm(ctx, func() {
+		ui.Field(ctx, "Theme:", func() {
+			ui.Segmented(ctx, &form.theme, "System", "Light", "Dark").Label("Theme").AlignSelf(ui.Start)
 		})
-		ui.Column(ctx).Gap(4).Children(func() {
-			ui.Text(ctx, "Code theme").FontSize(12).Bold()
-			ui.Select(ctx, &form.codeTheme, codeThemeNames()).Label("Code theme")
-			ui.Text(ctx, "Colors code in diffs and in answers. A theme with only dark colors, as Dracula, also brings its own background.").FontSize(11).TextColor(theme.TextMuted)
+		ui.Field(ctx, "Code theme:", func() {
+			ui.Select(ctx, &form.codeTheme, codeThemeNames()).Label("Code theme").AlignSelf(ui.Start).MinWidth(200)
+			ui.Text(ctx, "Colors code in diffs and in answers. A theme with only dark colors, as Dracula, also brings its own background.").FontSize(theme.FontSize - 1).TextColor(theme.TextMuted)
 			markdown.View(ctx, codePreview, &app.md)
 		})
 	})
 }
 
-func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.Provider]string) {
-	theme := ctx.Theme()
-	field := func(label string, build func()) {
-		ui.Column(ctx).Gap(4).Children(func() {
-			ui.Text(ctx, label).FontSize(12).Bold()
-			build()
-		})
+func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.Provider]string, ahead *bool) {
+	names := make([]string, len(providers))
+	for i, p := range providers {
+		names[i] = p.Name()
 	}
-	field("Agent", func() {
-		names := make([]string, len(providers))
-		for i, p := range providers {
-			names[i] = p.Name()
-		}
-		ui.Segmented(ctx, &form.provider, names...).Label("Agent")
-		ui.Text(ctx, status[providers[form.provider]]).FontSize(11).TextColor(theme.TextMuted).SingleLine()
-	})
 	efforts := providers[form.provider].Efforts()
-	pair := func(left, right func()) {
-		ui.Row(ctx).Gap(12).Children(func() {
-			ui.Column(ctx).Grow(1).Basis(0).Children(left)
-			ui.Column(ctx).Grow(1).Basis(0).Children(right)
-		})
+	setup := "The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app."
+	if !form.userSetup {
+		setup = providers[form.provider].WithoutUserSetup() + " The Prompts tab holds the instructions it gets."
 	}
-	pair(func() {
-		field("Model", func() {
+	labeledForm(ctx, func() {
+		ui.Field(ctx, "Agent:", func() {
+			ui.Segmented(ctx, &form.provider, names...).Label("Agent").AlignSelf(ui.Start)
+		}).Description(status[providers[form.provider]])
+		ui.Field(ctx, "Model:", func() {
 			ui.TextInput(ctx, &form.model).Placeholder("CLI default").Label("Model")
 		})
-	}, func() {
-		field("Effort", func() {
-			ui.Select(ctx, &form.effort, append([]string{defaultEffort}, efforts...)).Label("Effort")
+		ui.Field(ctx, "Effort:", func() {
+			ui.Select(ctx, &form.effort, append([]string{defaultEffort}, efforts...)).Label("Effort").AlignSelf(ui.Start).MinWidth(200)
 		})
-	})
-	pair(func() {
-		field("Model for automatic runs", func() {
+		ui.Divider(ctx)
+		ui.Field(ctx, "Automatic model:", func() {
 			ui.TextInput(ctx, &form.autoModel).Placeholder("Same as above").Label("Model for automatic runs")
 		})
-	}, func() {
-		field("Effort for automatic runs", func() {
-			ui.Select(ctx, &form.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs")
+		ui.Field(ctx, "Automatic effort:", func() {
+			ui.Select(ctx, &form.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs").AlignSelf(ui.Start).MinWidth(200)
+		}).Description("Automatic runs are the ones the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions and Go deeper use the model and effort above.")
+		ui.Field(ctx, "Write ahead:", func() {
+			ui.Checkbox(ctx, ahead, "Write the deeper walkthrough of every step with the overview")
+		}).Description(fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead))
+		ui.Divider(ctx)
+		ui.Field(ctx, "Binary:", func() {
+			ui.TextInput(ctx, &form.binary).Placeholder("Found on your shell's PATH").Label("Binary")
 		})
-	})
-	ui.Text(ctx, "Automatic runs are the ones the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions and Go deeper use the model and effort above.").FontSize(11).TextColor(theme.TextMuted)
-	field("Binary", func() {
-		ui.TextInput(ctx, &form.binary).Placeholder("Found on your shell's PATH").Label("Binary")
-	})
-	field("Extra arguments", func() {
-		ui.TextInput(ctx, &form.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
-	})
-	ui.Column(ctx).Gap(4).Children(func() {
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Switch(ctx, &form.userSetup).Label("Load my own instructions, skills, hooks and MCP servers")
-			ui.Text(ctx, "Load my own instructions, skills, hooks and MCP servers")
+		ui.Field(ctx, "Extra arguments:", func() {
+			ui.TextInput(ctx, &form.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
 		})
-		note := "The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app."
-		if !form.userSetup {
-			note = providers[form.provider].WithoutUserSetup() + " The Prompts tab holds the instructions it gets."
-		}
-		ui.Text(ctx, note).FontSize(11).TextColor(theme.TextMuted)
+		ui.Field(ctx, "Your setup:", func() {
+			ui.Checkbox(ctx, &form.userSetup, "Load my own instructions, skills, hooks and MCP servers")
+		}).Description(setup)
 	})
 }
 
