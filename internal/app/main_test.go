@@ -897,12 +897,12 @@ func TestCompareBranches(t *testing.T) {
 	if a.scope.Kind != gitx.ScopeBranch || a.scope.Base != "origin/main" {
 		t.Errorf("picked base is forgotten: scope = %+v", a.scope)
 	}
-	a.base, a.baseSet = "main", false
+	a.cmpr.base, a.cmpr.baseSet = "main", false
 	a.pickBranch("main")
 	if a.scope.Kind != gitx.ScopeUncommitted {
 		t.Errorf("main against itself: scope = %+v", a.scope)
 	}
-	a.base = "agent"
+	a.cmpr.base = "agent"
 	a.pickBranch("agent")
 	if a.scope.Kind != gitx.ScopeCommit || len(a.commits.rows) == 0 || a.scope.Commit != a.commits.rows[0].SHA {
 		t.Errorf("other branch against itself: scope = %+v", a.scope)
@@ -932,7 +932,7 @@ func TestCustomRange(t *testing.T) {
 		t.Errorf("texts = %q", tt.Texts())
 	}
 	a.pickBranch("main")
-	if a.rng != nil || a.scope.Kind != gitx.ScopeUncommitted {
+	if a.cmpr.rng != nil || a.scope.Kind != gitx.ScopeUncommitted {
 		t.Errorf("picking a branch kept the range: scope = %+v", a.scope)
 	}
 }
@@ -1052,8 +1052,8 @@ func TestReviewFollowsBranch(t *testing.T) {
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-qm", "Add feature")
 	a.openRepo(dir)
-	a.base = "main"
-	s, ok := a.branchScope()
+	a.cmpr.base = "main"
+	s, ok := a.cmpr.branchScope()
 	if !ok {
 		t.Fatal("no branch scope")
 	}
@@ -1062,8 +1062,8 @@ func TestReviewFollowsBranch(t *testing.T) {
 
 	git(t, dir, "checkout", "-q", "main")
 	a.refresh()
-	if a.branch != "main" || a.scope.Head != "agent" || a.rev != rev {
-		t.Fatalf("after checkout of main: branch %q, scope %+v, same review %v", a.branch, a.scope, a.rev == rev)
+	if a.cmpr.branch != "main" || a.scope.Head != "agent" || a.rev != rev {
+		t.Fatalf("after checkout of main: branch %q, scope %+v, same review %v", a.cmpr.branch, a.scope, a.rev == rev)
 	}
 	if len(a.files) != 1 || a.files[0].Path != "feature.go" {
 		t.Errorf("files = %+v", a.files)
@@ -1803,8 +1803,8 @@ func TestPickersFromKeyboard(t *testing.T) {
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.branchesOpen || a.head != "agent-two" {
-		t.Fatalf("open %v, head %q", a.branchesOpen, a.head)
+	if a.branchesOpen || a.cmpr.head != "agent-two" {
+		t.Fatalf("open %v, head %q", a.branchesOpen, a.cmpr.head)
 	}
 	if !tt.Focused("Branch") {
 		t.Error("the focus did not go back to the branch button")
@@ -1812,7 +1812,7 @@ func TestPickersFromKeyboard(t *testing.T) {
 
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if !a.branchesOpen || a.branchNav.hi != slices.Index(a.branches, "agent-two") {
+	if !a.branchesOpen || a.branchNav.hi != slices.Index(a.cmpr.branches, "agent-two") {
 		t.Fatalf("Down on the button: open %v, highlight %d", a.branchesOpen, a.branchNav.hi)
 	}
 	tt.Key(0, ui.KeyEscape)
@@ -1854,14 +1854,14 @@ func TestPickListScrollKeepsHighlight(t *testing.T) {
 	}
 	tt.Move(r.X+r.W/2, r.Y+r.H/2)
 	tt.Frame()
-	if got := a.branches[a.branchNav.hi]; got != "b25" {
+	if got := a.cmpr.branches[a.branchNav.hi]; got != "b25" {
 		t.Fatalf("the pointer left the highlight on %q", got)
 	}
 	for range 20 {
 		tt.Key(0, ui.KeyUp)
 		tt.Frame()
 	}
-	if got := a.branches[a.branchNav.hi]; got != "b05" {
+	if got := a.cmpr.branches[a.branchNav.hi]; got != "b05" {
 		t.Errorf("highlight on %q, want b05", got)
 	}
 }
@@ -2171,8 +2171,8 @@ func TestPickerShortcuts(t *testing.T) {
 	tt.Frame()
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.branchesOpen || a.head != "docs" {
-		t.Errorf("open = %v, branch = %q", a.branchesOpen, a.head)
+	if a.branchesOpen || a.cmpr.head != "docs" {
+		t.Errorf("open = %v, branch = %q", a.branchesOpen, a.cmpr.head)
 	}
 
 	click("Switch Project…")

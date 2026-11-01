@@ -56,21 +56,8 @@ type app struct {
 
 	repo    *gitx.Repo
 	repoErr string
-	branch  string
-	// head is the branch picked to compare with base; empty means the
-	// checked-out one.
-	head string
-	base string
-	// baseSet is true once the user picked the base, which then counts
-	// even as the upstream of the branch.
-	baseSet bool
-	// rng is the custom range under review instead of a branch.
-	rng       *gitx.Scope
-	branches  []string
-	worktrees []gitx.Worktree
-	// branchesErr is why git could not list the branches or worktrees.
-	branchesErr string
-	commits     commitList
+	cmpr    comparison
+	commits commitList
 	// changeList is the place of the list of changes in the sidebar.
 	changeList ui.ListState
 
@@ -284,10 +271,9 @@ func (a *app) openRepo(path string) {
 	a.watch(r)
 	a.cfg.AddRecent(r.Root)
 	a.saveConfig()
-	a.branch, a.head, a.base, a.branches = "", "", "", nil
+	a.cmpr = comparison{}
 	a.commits.reset()
 	a.loader.reset()
-	a.baseSet, a.rng, a.worktrees = false, nil, nil
 	if a.win != nil {
 		a.win.SetTitle("AgentDiff: " + r.Name())
 	}
@@ -301,8 +287,8 @@ func (a *app) openRepo(path string) {
 			if a.repo != r {
 				return
 			}
-			a.branch, a.base, a.branches, a.worktrees = branch, base, branches, trees
-			a.branchesErr = errText(err)
+			a.cmpr.branch, a.cmpr.base, a.cmpr.branches, a.cmpr.worktrees = branch, base, branches, trees
+			a.cmpr.err = errText(err)
 			a.loadCommits()
 		})
 	})
@@ -322,90 +308,36 @@ func (a *app) closeRepo() {
 	}
 }
 
-// headBranch is the branch under review: the picked one, or the one
-// checked out.
-func (a *app) headBranch() string { return cmp.Or(a.head, a.branch) }
-
-// commitBase is the base the commit list is relative to: on a feature
-// branch the commits not on the base yet, else the latest commits.
-func (a *app) commitBase() string {
-	head := a.headBranch()
-	if a.base == "" || head == "" || a.base == head || !a.baseSet && strings.HasSuffix(a.base, "/"+head) {
-		return ""
-	}
-	return a.base
-}
-
-// listRange is the base and the head of the commit list.
-func (a *app) listRange() (string, string) {
-	if a.rng != nil {
-		return a.rng.From, a.rng.To
-	}
-	return a.commitBase(), a.head
-}
-
-// allScope is every change of the commit list at once: the custom range,
-// or the branch since its base.
-func (a *app) allScope() (gitx.Scope, bool) {
-	if a.rng != nil {
-		return *a.rng, true
-	}
-	return a.branchScope()
-}
-
-// uncommittedShown reports whether the sidebar lists the uncommitted
-// changes, which belong to the checked-out branch.
-func (a *app) uncommittedShown() bool { return a.rng == nil && a.head == "" }
-
 // compare reviews branch against base, as picked in the Compare dialog.
 func (a *app) compare(branch, base string) {
-	a.base, a.baseSet = base, true
-	a.pickBranch(branch)
+	s, all := a.cmpr.compare(branch, base)
+	a.showComparison(s, all)
 }
 
 // pickBranch lists the commits of branch and opens all its changes.
 // Without a base to compare with, it opens the uncommitted changes of
 // the checked-out branch, or the newest commit of another one.
 func (a *app) pickBranch(branch string) {
-	a.head, a.rng = branch, nil
-	if branch == a.branch {
-		a.head = ""
-	}
-	s, all := a.allScope()
-	a.commits.newest = !all && a.head != ""
+	s, all := a.cmpr.pick(branch)
+	a.showComparison(s, all)
+}
+
+func (a *app) showComparison(s gitx.Scope, all bool) {
+	a.commits.newest = !all && a.cmpr.head != ""
 	a.loadCommits()
 	switch {
 	case all:
 		a.setScope(s)
-	case a.head == "":
+	case a.cmpr.head == "":
 		a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	}
 }
 
 // setRange reviews the changes between two revisions.
 func (a *app) setRange(from, to string) {
-	s := gitx.Scope{Kind: gitx.ScopeRange, From: from, To: to}
-	a.rng = &s
+	s := a.cmpr.setRange(from, to)
 	a.loadCommits()
 	a.setScope(s)
-}
-
-// branchScope is the changes of the branch under review since its base.
-func (a *app) branchScope() (gitx.Scope, bool) {
-	base := a.commitBase()
-	if base == "" {
-		return gitx.Scope{}, false
-	}
-	return a.branchScopeOf(a.headBranch(), base), true
-}
-
-// branchScopeOf is the changes of a branch since base. The checked-out
-// branch is read from HEAD, any other one by its name.
-func (a *app) branchScopeOf(branch, base string) gitx.Scope {
-	if branch == a.branch {
-		return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Branch: branch}
-	}
-	return gitx.Scope{Kind: gitx.ScopeBranch, Base: base, Head: branch}
 }
 
 // syncBranch reads the checked-out branch again, to follow a checkout
@@ -421,7 +353,7 @@ func (a *app) syncBranch() {
 		if err != nil {
 			a.update(func() {
 				if a.repo == r {
-					a.branchesErr = err.Error()
+					a.cmpr.err = err.Error()
 				}
 			})
 			return
@@ -431,12 +363,12 @@ func (a *app) syncBranch() {
 			if a.repo != r {
 				return
 			}
-			a.branchesErr = errText(err)
-			a.worktrees = trees
-			if branch != a.branch {
+			a.cmpr.err = errText(err)
+			a.cmpr.worktrees = trees
+			if branch != a.cmpr.branch {
 				a.checkedOut(branch, branches)
 			} else {
-				a.branches = branches
+				a.cmpr.branches = branches
 			}
 		})
 	})
@@ -461,18 +393,8 @@ func errText(err error) string {
 // checkedOut moves the app to a newly checked-out branch. A branch scope
 // keeps reviewing the same branch, so its review stays.
 func (a *app) checkedOut(branch string, branches []string) {
-	a.branch, a.branches = branch, branches
-	if s := a.scope; s.Kind == gitx.ScopeBranch && (s.Head != "" || s.Branch != "") {
-		name := cmp.Or(s.Head, s.Branch)
-		a.head = name
-		if name == branch {
-			a.head = ""
-		}
-		if to := a.branchScopeOf(name, s.Base); a.reviews.Rescope(a.rev, to) {
-			a.scope = to
-		}
-	} else if a.head == branch {
-		a.head = ""
+	if to, ok := a.cmpr.checkedOut(branch, branches, a.scope); ok && a.reviews.Rescope(a.rev, to) {
+		a.scope = to
 	}
 	a.loadCommits()
 	a.reload()
@@ -490,8 +412,8 @@ func (a *app) refresh() {
 // loadCommits reads the commit list again, for the range in view.
 func (a *app) loadCommits() {
 	r := a.repo
-	base, head := a.listRange()
-	gen, limit := a.commits.read(r.Root + "\x00" + base + ".." + cmp.Or(head, a.branch))
+	base, head := a.cmpr.listRange()
+	gen, limit := a.commits.read(r.Root + "\x00" + base + ".." + cmp.Or(head, a.cmpr.branch))
 	a.async(func() {
 		ctx := context.Background()
 		cl, err := r.CommitLog(ctx, base, head)
