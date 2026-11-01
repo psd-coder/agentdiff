@@ -257,6 +257,11 @@ func TestRunPassesPromptOnStdin(t *testing.T) {
 }
 
 func TestRunErrors(t *testing.T) {
+	// A full 64 MB line takes seconds under -race on CI. The limit stays above the 64 KB
+	// start buffer of the scanner, which reads that much before it checks the limit.
+	defaultLimit := maxLineSize
+	maxLineSize = 1 << 20
+	t.Cleanup(func() { maxLineSize = defaultLimit })
 	tests := []struct {
 		name     string
 		provider Provider
