@@ -8,6 +8,7 @@ import (
 	"log"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -101,6 +102,9 @@ type app struct {
 	// session, by questionDraftKey or thread ID.
 	drafts map[string]string
 	runner runner
+	// streams counts the goroutines that stream agent runs into the store,
+	// so a test can wait for them before its store is removed.
+	streams sync.WaitGroup
 
 	sidebarW    float32
 	scopePct    float32
