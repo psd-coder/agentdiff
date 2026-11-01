@@ -71,8 +71,9 @@ func (event Event) terminal() bool {
 	return event.Kind == EventDone || event.Kind == EventError
 }
 
+var maxLineSize = 64 << 20
+
 const (
-	maxLineSize    = 64 << 20
 	stderrTailSize = 2048
 	waitDelay      = 3 * time.Second
 	versionTimeout = 5 * time.Second
