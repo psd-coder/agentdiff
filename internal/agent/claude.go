@@ -201,7 +201,9 @@ func readOnlyRules() []string {
 
 // claudeArgs keeps Claude read-only: in dontAsk mode a tool call that no
 // allow rule matches is refused instead of asked about, so the allow list
-// below, plus the user's own rules, is all that Bash may run.
+// below, plus the user's own rules, is all that Bash may run. Safe mode
+// leaves out the user's CLAUDE.md files, skills, plugins, hooks and MCP
+// servers, and keeps the login and the permission rules.
 func claudeArgs(cfg Config, req Request) []string {
 	args := []string{
 		"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -210,6 +212,9 @@ func claudeArgs(cfg Config, req Request) []string {
 		"--allowedTools",
 	}
 	args = append(args, readOnlyRules()...)
+	if !cfg.UserSetup {
+		args = append(args, "--safe-mode")
+	}
 	if cfg.Model != "" {
 		args = append(args, "--model", cfg.Model)
 	}

@@ -29,13 +29,14 @@ type agentForm struct {
 	autoEffort string
 	binary     string
 	extraArgs  string
+	userSetup  bool
 }
 
 func newAgentForm(cfg agent.Config) agentForm {
 	f := agentForm{
 		model: cfg.Model, effort: cmp.Or(cfg.Effort, defaultEffort),
 		autoModel: cfg.AutoModel, autoEffort: cmp.Or(cfg.AutoEffort, sameEffort),
-		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "),
+		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), userSetup: cfg.UserSetup,
 		provider: max(slices.Index(providers, cfg.Provider), 0),
 	}
 	return f
@@ -51,6 +52,7 @@ func (f agentForm) config() agent.Config {
 		AutoEffort: effortOf(p, f.autoEffort),
 		Binary:     strings.TrimSpace(f.binary),
 		ExtraArgs:  strings.Fields(f.extraArgs),
+		UserSetup:  f.userSetup,
 	}
 }
 
@@ -274,6 +276,17 @@ func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider
 	})
 	field("Extra arguments", func() {
 		ui.TextInput(c, &f.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
+	})
+	ui.Column(c).Gap(4).Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Switch(c, &f.userSetup).Label("Load my own instructions, skills, hooks and MCP servers")
+			ui.Text(c, "Load my own instructions, skills, hooks and MCP servers")
+		})
+		note := "The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app."
+		if !f.userSetup {
+			note = providers[f.provider].WithoutUserSetup() + " The Prompts tab holds the instructions it gets."
+		}
+		ui.Text(c, note).FontSize(11).TextColor(t.TextMuted)
 	})
 }
 
