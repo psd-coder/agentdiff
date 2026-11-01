@@ -20,8 +20,8 @@ usage() {
   cat <<'EOF'
 validate.sh [project-root] [flags]
 
-Runs golangci-lint (lint and gofmt), mygo vet, go mod tidy -diff, deadcode and
-the tests. Passing steps print nothing: success is one PASS line, failure is a
+Runs golangci-lint (lint and gofmt), mygo vet, go mod tidy -diff, deadcode,
+namelen (one-letter names) and the tests. Passing steps print nothing: success is one PASS line, failure is a
 FAIL line plus the output of each failing step.
 
 Moments (each exits at once when the repo's own git hook for that moment
@@ -121,6 +121,10 @@ vet_job() { go tool mygo vet ./internal/app; }
 
 tidy_job() { go mod tidy -diff; }
 
+# namelen reports one-letter names. golangci-lint's varnamelen only checks names by their
+# distance to later uses, so it misses short names used close to their declaration.
+namelen_job() { go run ./tools/namelen .; }
+
 # deadcode exits with 0 even when it finds unreachable functions.
 deadcode_job() {
   local out
@@ -139,7 +143,7 @@ run_step() {
   printf '%s' "$st" >"$TMP/$1.st"
 }
 
-STEPS=(vet tidy deadcode)
+STEPS=(vet tidy deadcode namelen)
 if [[ $QUICK -eq 0 ]]; then
   STEPS+=(test)
 fi
