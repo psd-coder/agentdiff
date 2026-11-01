@@ -311,11 +311,11 @@ type changeRow struct {
 // changesAbove are the rows of the list of changes above the commits.
 func (a *app) changesAbove() []changeRow {
 	rows := []changeRow{{kind: headingRow, text: "Changes"}}
-	if a.uncommittedShown() {
+	if a.cmpr.uncommittedShown() {
 		rows = append(rows, changeRow{kind: scopeRow, text: "Uncommitted changes", icon: editIcon, scope: gitx.Scope{Kind: gitx.ScopeUncommitted}})
 	}
 	rows = append(rows, changeRow{kind: sectionRow, text: a.commitsTitle()})
-	if s, ok := a.allScope(); ok && len(a.commits.rows) > 0 {
+	if s, ok := a.cmpr.allScope(); ok && len(a.commits.rows) > 0 {
 		rows = append(rows, changeRow{kind: scopeRow, text: "All changes", icon: layersIcon, scope: s, tooltip: s.Label(), badge: fmt.Sprint(a.commits.total)})
 	}
 	return rows
@@ -418,12 +418,12 @@ func (r *changeRows) find(s gitx.Scope) int {
 // commitsTitle names the commit list.
 func (a *app) commitsTitle() string {
 	switch {
-	case a.rng != nil:
-		return "Commits in " + a.rng.Label()
-	case a.commitBase() != "":
-		return "Commits on " + a.headBranch()
+	case a.cmpr.rng != nil:
+		return "Commits in " + a.cmpr.rng.Label()
+	case a.cmpr.commitBase() != "":
+		return "Commits on " + a.cmpr.headBranch()
 	}
-	return "Recent commits on " + a.headBranch()
+	return "Recent commits on " + a.cmpr.headBranch()
 }
 
 // scopeHeader names the changes under review, above their review.

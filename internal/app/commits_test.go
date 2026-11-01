@@ -130,7 +130,7 @@ func TestCommitListPagesWithKeys(t *testing.T) {
 	tt.Frame()
 	tt.Key(0, ui.KeyDown)
 	tt.Frame()
-	if s, ok := a.allScope(); !ok || a.chosen != s {
+	if s, ok := a.cmpr.allScope(); !ok || a.chosen != s {
 		t.Errorf("Home then Down chose %+v", a.chosen)
 	}
 }

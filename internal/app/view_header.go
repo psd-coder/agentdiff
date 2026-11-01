@@ -138,21 +138,9 @@ func (a *app) confirmRemoveProject(path string) {
 	})
 }
 
-// branchLabel names what the commit list shows: the branch and its
-// base, or the custom range.
-func (a *app) branchLabel() (string, string) {
-	if a.rng != nil {
-		return a.rng.Label(), ""
-	}
-	if base := a.commitBase(); base != "" {
-		return a.headBranch(), "vs " + base
-	}
-	return a.headBranch(), ""
-}
-
 func (a *app) branchPicker(c *ui.Context) {
 	t := c.Theme()
-	label, detail := a.branchLabel()
+	label, detail := a.cmpr.label()
 	r := t.Radius
 	ui.Row(c).AlignItems(ui.Stretch).Children(func() {
 		anchor := pickerButton(c, branchIcon, label, detail, a.branchesOpen).Radius(r, 0, 0, r).Label("Branch").Tooltip(a.tooltip(a.cmd("switch-branch")))
@@ -170,14 +158,14 @@ func (a *app) branchPicker(c *ui.Context) {
 func (a *app) toggleBranches() {
 	a.branchesOpen = !a.branchesOpen
 	a.branchQuery = ""
-	a.branchNav.open(slices.Index(a.branches, a.headBranch()))
+	a.branchNav.open(slices.Index(a.cmpr.branches, a.cmpr.headBranch()))
 }
 
 // filteredBranches are the branches whose name holds the filter.
 func (a *app) filteredBranches() []string {
 	q := strings.ToLower(a.branchQuery)
 	var out []string
-	for _, b := range a.branches {
+	for _, b := range a.cmpr.branches {
 		if strings.Contains(strings.ToLower(b), q) {
 			out = append(out, b)
 		}
@@ -188,7 +176,7 @@ func (a *app) filteredBranches() []string {
 func (a *app) branchList(c *ui.Context) {
 	t := c.Theme()
 	trees := map[string]string{}
-	for _, w := range a.worktrees {
+	for _, w := range a.cmpr.worktrees {
 		if w.Branch != "" && w.Path != a.repo.Root {
 			trees[w.Branch] = w.Path
 		}
@@ -227,7 +215,7 @@ func (a *app) branchList(c *ui.Context) {
 		ui.Scroll(c).MaxHeight(380).Children(func() {
 			_, rows = nav.list(c, "Branches", func(addRow pickRow) {
 				for _, b := range branches {
-					chosen := a.rng == nil && b == a.headBranch()
+					chosen := a.cmpr.rng == nil && b == a.cmpr.headBranch()
 					tree := trees[b]
 					var actions func()
 					if tree != "" {
@@ -243,7 +231,7 @@ func (a *app) branchList(c *ui.Context) {
 						}
 						ui.Text(c, b).SingleLine().Shrink(1).Grow(1)
 						switch {
-						case b == a.branch:
+						case b == a.cmpr.branch:
 							label += ", checked out"
 							ui.Text(c, "checked out").FontSize(11).TextColor(t.TextMuted)
 						case tree != "":
@@ -261,8 +249,8 @@ func (a *app) branchList(c *ui.Context) {
 				}
 			})
 			switch {
-			case a.branchesErr != "":
-				ui.Text(c, "Could not list the branches: "+a.branchesErr).FontSize(12).TextColor(t.Danger).Padding(6, 8).Selectable()
+			case a.cmpr.err != "":
+				ui.Text(c, "Could not list the branches: "+a.cmpr.err).FontSize(12).TextColor(t.Danger).Padding(6, 8).Selectable()
 			case len(branches) == 0:
 				ui.Text(c, "No branches match").FontSize(12).TextColor(t.TextMuted).Padding(6, 8)
 			}
@@ -286,10 +274,10 @@ const (
 )
 
 func (a *app) openCompare() {
-	f := &compareForm{open: true, mode: compareBranches, branch: a.headBranch(), base: a.base, to: "HEAD"}
-	if a.rng != nil {
-		f.mode, f.from, f.to = compareRange, a.rng.From, a.rng.To
-	} else if base := a.commitBase(); base != "" {
+	f := &compareForm{open: true, mode: compareBranches, branch: a.cmpr.headBranch(), base: a.cmpr.base, to: "HEAD"}
+	if a.cmpr.rng != nil {
+		f.mode, f.from, f.to = compareRange, a.cmpr.rng.From, a.cmpr.rng.To
+	} else if base := a.cmpr.commitBase(); base != "" {
 		f.from = base
 	}
 	a.compareForm = f
@@ -321,9 +309,9 @@ func (a *app) compareModal(c *ui.Context) {
 			if f.mode == compareBranches {
 				ui.Text(c, "Review the commits of a branch since it left its base. The branch does not have to be checked out.").FontSize(12).TextColor(t.TextMuted)
 				ui.Text(c, "Branch").FontSize(12).Bold()
-				a.takeFocus(ui.Combobox(c.Key("branch"), &f.branch, a.branches).Label("Branch").AutoFocus(), "compare")
+				a.takeFocus(ui.Combobox(c.Key("branch"), &f.branch, a.cmpr.branches).Label("Branch").AutoFocus(), "compare")
 				ui.Text(c, "Base").FontSize(12).Bold()
-				ui.Combobox(c.Key("base"), &f.base, a.branches).Label("Base")
+				ui.Combobox(c.Key("base"), &f.base, a.cmpr.branches).Label("Base")
 				if f.branch != "" && f.branch == f.base {
 					ui.Text(c, "Pick two different branches.").FontSize(12).TextColor(t.Danger)
 				}
