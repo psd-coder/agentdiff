@@ -23,25 +23,25 @@ const (
 // Outcome tells how the latest answer of target ended: the overview, the
 // latest turn of a walk, or the latest agent message of a thread. An
 // overview that failed over an earlier explanation failed.
-func (r *Review) Outcome(target string) Outcome {
-	kind, ok := r.Resolve(target)
+func (review *Review) Outcome(target string) Outcome {
+	kind, ok := review.Resolve(target)
 	if !ok {
 		return OutcomeNone
 	}
 	switch kind {
 	case KindOverview:
-		if ov := r.Overview; ov != nil {
+		if ov := review.Overview; ov != nil {
 			return outcomeOf(ov.Err, ov.Done())
 		}
 	case KindWalk:
-		w := r.Walk(target)
-		if n := len(w.More); n > 0 {
-			t := w.More[n-1]
-			return outcomeOf(t.Err, t.Content != nil || t.Markdown != "")
+		walk := review.Walk(target)
+		if count := len(walk.More); count > 0 {
+			turn := walk.More[count-1]
+			return outcomeOf(turn.Err, turn.Content != nil || turn.Markdown != "")
 		}
-		return outcomeOf(w.Err, w.Content != nil || w.Markdown != "")
+		return outcomeOf(walk.Err, walk.Content != nil || walk.Markdown != "")
 	case KindThread:
-		msgs := r.Thread(target).Messages
+		msgs := review.Thread(target).Messages
 		for _, msg := range slices.Backward(msgs) {
 			if msg.Role == RoleAgent {
 				return outcomeOf(msg.Err, true)
@@ -65,13 +65,13 @@ func outcomeOf(err string, answered bool) Outcome {
 
 // Resolve tells what the run target id is: the overview, a walk or a
 // thread. ok is false when the review has no such target.
-func (r *Review) Resolve(id string) (kind Kind, ok bool) {
+func (review *Review) Resolve(id string) (kind Kind, ok bool) {
 	switch {
 	case id == TargetOverview:
 		return KindOverview, true
-	case r.Walk(id) != nil:
+	case review.Walk(id) != nil:
 		return KindWalk, true
-	case r.Thread(id) != nil:
+	case review.Thread(id) != nil:
 		return KindThread, true
 	}
 	return 0, false

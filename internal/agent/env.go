@@ -77,8 +77,8 @@ func parseEnv(data []byte) []string {
 
 func lookupEnv(env []string, key string) string {
 	for _, kv := range slices.Backward(env) {
-		if v, ok := strings.CutPrefix(kv, key+"="); ok {
-			return v
+		if value, ok := strings.CutPrefix(kv, key+"="); ok {
+			return value
 		}
 	}
 	return ""

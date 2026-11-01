@@ -40,19 +40,19 @@ var pageNames = map[pageKind]string{
 	kindArchived: "archived:",
 }
 
-func (p page) String() string { return pageNames[p.kind] + p.key }
+func (page page) String() string { return pageNames[page.kind] + page.key }
 
 // parsePage reads the string form of a page. A string that names no page
 // is the Overview.
-func parsePage(s string) page {
+func parsePage(text string) page {
 	for kind, name := range pageNames {
 		if !strings.HasSuffix(name, ":") {
-			if s == name {
+			if text == name {
 				return page{kind: kind}
 			}
 			continue
 		}
-		if key, ok := strings.CutPrefix(s, name); ok {
+		if key, ok := strings.CutPrefix(text, name); ok {
 			return page{kind, key}
 		}
 	}
@@ -72,67 +72,67 @@ type navigation struct {
 }
 
 // goTo opens p and remembers the page it leaves, for Back.
-func (n *navigation) goTo(p page) {
-	if p == n.page {
+func (navigation *navigation) goTo(page page) {
+	if page == navigation.page {
 		return
 	}
-	n.history = push(n.history, n.page)
-	n.ahead = nil
-	n.page = p
+	navigation.history = push(navigation.history, navigation.page)
+	navigation.ahead = nil
+	navigation.page = page
 }
 
 // replace shows p in place of the page on screen, which Back does not
 // return to.
-func (n *navigation) replace(p page) { n.page = p }
+func (navigation *navigation) replace(page page) { navigation.page = page }
 
 // forget removes the gone pages from Back and Forward.
-func (n *navigation) forget(gone func(page) bool) {
-	n.history = deleteGone(n.history, gone)
-	n.ahead = deleteGone(n.ahead, gone)
+func (navigation *navigation) forget(gone func(page) bool) {
+	navigation.history = deleteGone(navigation.history, gone)
+	navigation.ahead = deleteGone(navigation.ahead, gone)
 }
 
 // prev is the page back opens.
-func (n *navigation) prev(gone func(page) bool) (page, bool) {
-	i := n.last(n.history, gone)
-	if i < 0 {
+func (navigation *navigation) prev(gone func(page) bool) (page, bool) {
+	index := navigation.last(navigation.history, gone)
+	if index < 0 {
 		return page{}, false
 	}
-	return n.history[i], true
+	return navigation.history[index], true
 }
 
-func (n *navigation) back(gone func(page) bool) {
-	n.history, n.ahead = n.step(n.history, n.ahead, gone)
+func (navigation *navigation) back(gone func(page) bool) {
+	navigation.history, navigation.ahead = navigation.step(navigation.history, navigation.ahead, gone)
 }
 
-func (n *navigation) forward(gone func(page) bool) {
-	n.ahead, n.history = n.step(n.ahead, n.history, gone)
+func (navigation *navigation) forward(gone func(page) bool) {
+	navigation.ahead, navigation.history = navigation.step(navigation.ahead, navigation.history, gone)
 }
 
 // step opens the last page of from that Back or Forward can open, drops
 // the pages after it, and remembers the page it leaves in to.
-func (n *navigation) step(from, to []page, gone func(page) bool) ([]page, []page) {
-	i := n.last(from, gone)
-	if i < 0 {
+func (navigation *navigation) step(from, to []page, gone func(page) bool) ([]page, []page) {
+	index := navigation.last(from, gone)
+	if index < 0 {
 		return from, to
 	}
-	to = push(to, n.page)
-	n.page = from[i]
-	return from[:i], to
+	to = push(to, navigation.page)
+	navigation.page = from[index]
+	return from[:index], to
 }
 
 // last is the index of the last page in pages that Back or Forward can
 // open, or -1.
-func (n *navigation) last(pages []page, gone func(page) bool) int {
+func (navigation *navigation) last(pages []page, gone func(page) bool) int {
 	for i, p := range slices.Backward(pages) {
-		if p != n.page && !gone(p) {
+		if p != navigation.page && !gone(p) {
 			return i
 		}
 	}
 	return -1
 }
 
-func push(pages []page, p page) []page {
-	pages = append(pages, p)
+func push(pages []page, page page) []page {
+	pages = append(pages, page)
 	if len(pages) > maxHistory {
 		pages = pages[1:]
 	}

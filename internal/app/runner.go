@@ -78,86 +78,86 @@ func newRunner(stream streamFunc, save func(*review.Review)) *runner {
 }
 
 // run is the run that writes into rev for target, nil when there is none.
-func (r *runner) run(rev *review.Review, target string) *agentRun {
-	return r.runs[runKey{rev, target}]
+func (runner *runner) run(rev *review.Review, target string) *agentRun {
+	return runner.runs[runKey{rev, target}]
 }
 
 // busy reports whether a run writes into rev for target, or waits in the
 // queue to.
-func (r *runner) busy(rev *review.Review, target string) bool {
-	return r.run(rev, target) != nil || r.queued(rev, target)
+func (runner *runner) busy(rev *review.Review, target string) bool {
+	return runner.run(rev, target) != nil || runner.queued(rev, target)
 }
 
 // queued reports whether a write-ahead run waits for its slot.
-func (r *runner) queued(rev *review.Review, target string) bool {
-	return slices.ContainsFunc(r.waiting, func(q waitingRun) bool { return q.key == runKey{rev, target} })
+func (runner *runner) queued(rev *review.Review, target string) bool {
+	return slices.ContainsFunc(runner.waiting, func(q waitingRun) bool { return q.key == runKey{rev, target} })
 }
 
 // reviewBusy reports whether an agent run writes into rev or waits to.
-func (r *runner) reviewBusy(rev *review.Review) bool {
-	for key := range r.runs {
+func (runner *runner) reviewBusy(rev *review.Review) bool {
+	for key := range runner.runs {
 		if key.rev == rev {
 			return true
 		}
 	}
-	return slices.ContainsFunc(r.waiting, func(q waitingRun) bool { return q.key.rev == rev })
+	return slices.ContainsFunc(runner.waiting, func(q waitingRun) bool { return q.key.rev == rev })
 }
 
 // start asks the agent for ex at once, in place of a run or a queued
 // walk of the same target. title and note go to the run log. ended runs
 // after the run wrote its result, nil for none.
-func (r *runner) start(ex *review.Exchange, title, note string, ended func(answered bool)) {
-	r.launch(&agentRun{ex: ex, ended: ended}, title, note)
+func (runner *runner) start(ex *review.Exchange, title, note string, ended func(answered bool)) {
+	runner.launch(&agentRun{ex: ex, ended: ended}, title, note)
 }
 
 // ahead puts a write-ahead run for target at the end of the queue. build
 // makes it when a slot is free. A run that build declines takes no slot.
-func (r *runner) ahead(rev *review.Review, target string, build buildFunc) {
-	r.waiting = append(r.waiting, waitingRun{runKey{rev, target}, build})
-	r.startWaiting()
+func (runner *runner) ahead(rev *review.Review, target string, build buildFunc) {
+	runner.waiting = append(runner.waiting, waitingRun{runKey{rev, target}, build})
+	runner.startWaiting()
 }
 
-func (r *runner) startWaiting() {
-	for len(r.waiting) > 0 && r.aheadCount() < maxAhead {
-		next := r.waiting[0]
-		r.waiting = r.waiting[1:]
-		r.launchAhead(next)
+func (runner *runner) startWaiting() {
+	for len(runner.waiting) > 0 && runner.aheadCount() < maxAhead {
+		next := runner.waiting[0]
+		runner.waiting = runner.waiting[1:]
+		runner.launchAhead(next)
 	}
 }
 
 // startNow starts the queued walk of rev for target at once, past the
 // limit of slots.
-func (r *runner) startNow(rev *review.Review, target string) {
-	i := slices.IndexFunc(r.waiting, func(q waitingRun) bool { return q.key == runKey{rev, target} })
-	if i < 0 {
+func (runner *runner) startNow(rev *review.Review, target string) {
+	index := slices.IndexFunc(runner.waiting, func(q waitingRun) bool { return q.key == runKey{rev, target} })
+	if index < 0 {
 		return
 	}
-	next := r.waiting[i]
-	r.waiting = slices.Delete(r.waiting, i, i+1)
-	r.launchAhead(next)
+	next := runner.waiting[index]
+	runner.waiting = slices.Delete(runner.waiting, index, index+1)
+	runner.launchAhead(next)
 }
 
-func (r *runner) launchAhead(q waitingRun) {
-	if ex, title, ok := q.build(); ok {
-		r.launch(&agentRun{ex: ex, ahead: true}, title, "")
+func (runner *runner) launchAhead(waitingRun waitingRun) {
+	if ex, title, ok := waitingRun.build(); ok {
+		runner.launch(&agentRun{ex: ex, ahead: true}, title, "")
 	}
 }
 
-func (r *runner) aheadCount() int {
-	n := 0
-	for _, run := range r.runs {
+func (runner *runner) aheadCount() int {
+	count := 0
+	for _, run := range runner.runs {
 		if run.ahead {
-			n++
+			count++
 		}
 	}
-	return n
+	return count
 }
 
-func (r *runner) launch(run *agentRun, title, note string) {
+func (runner *runner) launch(run *agentRun, title, note string) {
 	rev, cfg, target := run.ex.Review(), run.ex.Config(), run.ex.Target()
 	key := runKey{rev, target}
-	r.unqueue(rev, []string{target})
-	old := r.runs[key]
+	runner.unqueue(rev, []string{target})
+	old := runner.runs[key]
 	if old != nil {
 		old.cancel()
 	}
@@ -168,14 +168,14 @@ func (r *runner) launch(run *agentRun, title, note string) {
 	if run.ex.Kind() == review.KindThread {
 		run.activity = "Thinking…"
 	}
-	r.runs[key] = run
-	r.save(rev)
+	runner.runs[key] = run
+	runner.save(rev)
 	info := store.RunInfo{
 		ID: store.NewRunID(run.started), Target: target, Title: title, Note: note,
 		Agent: cfg.Provider, Model: cfg.Model, Effort: cfg.Effort, Started: run.started,
 	}
-	r.stream(ctx, cfg, run.ex.Request, rev, info, func(ev agent.Event) {
-		if r.runs[key] != run {
+	runner.stream(ctx, cfg, run.ex.Request, rev, info, func(ev agent.Event) {
+		if runner.runs[key] != run {
 			return
 		}
 		switch ev.Kind {
@@ -190,63 +190,63 @@ func (r *runner) launch(run *agentRun, title, note string) {
 		case agent.EventActivity:
 			run.activity = ev.Text
 		case agent.EventDone:
-			r.end(key, run, true, func(at time.Time) { run.ex.Answered(answer(ev.Text, run.text), at) })
+			runner.end(key, run, true, func(at time.Time) { run.ex.Answered(answer(ev.Text, run.text), at) })
 		case agent.EventError:
-			r.end(key, run, false, func(at time.Time) { run.ex.Failed(ev.Err.Error(), at) })
+			runner.end(key, run, false, func(at time.Time) { run.ex.Failed(ev.Err.Error(), at) })
 		}
 	})
 	// A user's run in place of a write-ahead walk frees its slot.
 	if old != nil && old.ahead {
-		r.startWaiting()
+		runner.startWaiting()
 	}
 }
 
 // stop ends the runs of rev for targets at once with "Stopped". A target
 // that waits in the queue leaves it without a trace. All of them leave
 // the queue first, so that a stop does not start a waiting one among them.
-func (r *runner) stop(rev *review.Review, targets ...string) {
-	r.unqueue(rev, targets)
+func (runner *runner) stop(rev *review.Review, targets ...string) {
+	runner.unqueue(rev, targets)
 	for _, target := range targets {
 		key := runKey{rev, target}
-		if run := r.runs[key]; run != nil {
-			r.end(key, run, false, run.ex.Stopped)
+		if run := runner.runs[key]; run != nil {
+			runner.end(key, run, false, run.ex.Stopped)
 		}
 	}
 }
 
-func (r *runner) unqueue(rev *review.Review, targets []string) {
-	r.waiting = slices.DeleteFunc(r.waiting, func(q waitingRun) bool {
+func (runner *runner) unqueue(rev *review.Review, targets []string) {
+	runner.waiting = slices.DeleteFunc(runner.waiting, func(q waitingRun) bool {
 		return q.key.rev == rev && slices.Contains(targets, q.key.target)
 	})
 }
 
 // release stops every run of rev and the walks queued for it without
 // writing into rev. Queued walks of other reviews take the free slots.
-func (r *runner) release(rev *review.Review) {
-	for key, run := range r.runs {
+func (runner *runner) release(rev *review.Review) {
+	for key, run := range runner.runs {
 		if key.rev == rev {
 			run.cancel()
-			delete(r.runs, key)
+			delete(runner.runs, key)
 		}
 	}
-	r.waiting = slices.DeleteFunc(r.waiting, func(q waitingRun) bool { return q.key.rev == rev })
-	r.startWaiting()
+	runner.waiting = slices.DeleteFunc(runner.waiting, func(q waitingRun) bool { return q.key.rev == rev })
+	runner.startWaiting()
 }
 
 // end forgets the run before anything else, so that ended, which may
 // start runs, finds its slot free.
-func (r *runner) end(key runKey, run *agentRun, answered bool, write func(time.Time)) {
-	delete(r.runs, key)
+func (runner *runner) end(key runKey, run *agentRun, answered bool, write func(time.Time)) {
+	delete(runner.runs, key)
 	run.cancel()
 	write(time.Now())
-	r.save(key.rev)
-	if r.onEnd != nil {
-		r.onEnd(key, run.ahead)
+	runner.save(key.rev)
+	if runner.onEnd != nil {
+		runner.onEnd(key, run.ahead)
 	}
 	if run.ended != nil {
 		run.ended(answered)
 	}
 	if run.ahead {
-		r.startWaiting()
+		runner.startWaiting()
 	}
 }

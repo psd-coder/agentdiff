@@ -70,9 +70,9 @@ func TestOverviewExchangeRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New("/repo", tt.scope)
-			r.Overview = &Overview{Walk: &Walkthrough{Summary: "old"}, Sessions: Sessions{agent.Claude: "c0", agent.Codex: "x0"}}
-			req := OverviewExchange(r, testChanges, agent.Config{Provider: tt.provider}, tt.prompts).Request
+			review := New("/repo", tt.scope)
+			review.Overview = &Overview{Walk: &Walkthrough{Summary: "old"}, Sessions: Sessions{agent.Claude: "c0", agent.Codex: "x0"}}
+			req := OverviewExchange(review, testChanges, agent.Config{Provider: tt.provider}, tt.prompts).Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
@@ -107,7 +107,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 		name    string
 		old     *Overview
 		session string
-		apply   func(e *Exchange)
+		apply   func(exchange *Exchange)
 		want    Overview
 	}{
 		{
@@ -192,15 +192,15 @@ func TestOverviewExchangeResults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-			r.Overview = tt.old
-			e := OverviewExchange(r, testChanges, agent.Config{Provider: agent.Codex, Model: "gpt"}, nil)
+			review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+			review.Overview = tt.old
+			exchange := OverviewExchange(review, testChanges, agent.Config{Provider: agent.Codex, Model: "gpt"}, nil)
 			if tt.session != "" {
-				e.Started(tt.session)
+				exchange.Started(tt.session)
 			}
-			tt.apply(e)
-			if !reflect.DeepEqual(*r.Overview, tt.want) {
-				t.Errorf("overview = %+v\nwant       %+v", *r.Overview, tt.want)
+			tt.apply(exchange)
+			if !reflect.DeepEqual(*review.Overview, tt.want) {
+				t.Errorf("overview = %+v\nwant       %+v", *review.Overview, tt.want)
 			}
 		})
 	}
@@ -209,17 +209,17 @@ func TestOverviewExchangeResults(t *testing.T) {
 // walkReview has an overview with a claude session and two steps, a walk
 // into its first step with its own claude session, and a question about
 // that walk's step.
-func walkReview(scope gitx.Scope) (r *Review, inner, question *Walk) {
-	r = New("/repo", scope)
-	r.Overview = &Overview{
+func walkReview(scope gitx.Scope) (review *Review, inner, question *Walk) {
+	review = New("/repo", scope)
+	review.Overview = &Overview{
 		Walk:     &Walkthrough{Steps: []Step{{Title: "Cache", Text: "c"}, {Title: "Keys", Text: "k"}}},
 		Sessions: Sessions{agent.Claude: "root"},
 	}
-	inner = r.AddWalk("", 0, "")
+	inner = review.AddWalk("", 0, "")
 	inner.Content = &Walkthrough{Steps: []Step{{Title: "Lower-case keys", Text: "Get lower-cases.", Refs: []Ref{{File: "c.go", Side: SideNew, Start: 6, End: 6, Why: "the change"}}}}}
 	inner.Sessions = Sessions{agent.Claude: "inner"}
-	question = r.AddWalk(inner.ID, -1, "Is it tested?")
-	return r, inner, question
+	question = review.AddWalk(inner.ID, -1, "Is it tested?")
+	return review, inner, question
 }
 
 func TestDeeperExchangeRequest(t *testing.T) {
@@ -227,7 +227,7 @@ func TestDeeperExchangeRequest(t *testing.T) {
 		name     string
 		provider agent.Provider
 		scope    gitx.Scope
-		walk     func(r *Review, inner, question *Walk) *Walk
+		walk     func(review *Review, inner, question *Walk) *Walk
 		resume   string
 		want     []string
 		lacks    []string
@@ -282,8 +282,8 @@ func TestDeeperExchangeRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, inner, question := walkReview(tt.scope)
-			req := DeeperExchange(r, tt.walk(r, inner, question), agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat).Request
+			review, inner, question := walkReview(tt.scope)
+			req := DeeperExchange(review, tt.walk(review, inner, question), agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat).Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
@@ -296,11 +296,11 @@ func TestDeeperExchangeRequest(t *testing.T) {
 }
 
 func TestDeeperExchangeClearsTheWalkAndItsSessions(t *testing.T) {
-	r, inner, _ := walkReview(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	review, inner, _ := walkReview(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	inner.Sessions.Set(agent.Codex, "x0")
 	inner.Markdown, inner.Err, inner.Agent, inner.Model = "old", "boom", agent.Claude, "opus"
 	inner.More = []Turn{{Question: "And then?"}}
-	DeeperExchange(r, inner, agent.Config{Provider: agent.Claude}, nil, "")
+	DeeperExchange(review, inner, agent.Config{Provider: agent.Claude}, nil, "")
 	want := Walk{ID: inner.ID, Step: 0, Generated: inner.Generated}
 	if !reflect.DeepEqual(*inner, want) {
 		t.Errorf("walk = %+v\nwant   %+v", *inner, want)
@@ -334,18 +334,18 @@ func TestFollowupExchangeRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-			w := r.AddWalk("", -1, "Why?")
-			w.Content = &Walkthrough{Summary: "Because."}
-			w.Sessions = Sessions{agent.Claude: "q1"}
-			w.More = []Turn{{Question: "How?", Err: "boom"}}
-			req := FollowupExchange(r, w, agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat, "And then?").Request
+			review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+			walk := review.AddWalk("", -1, "Why?")
+			walk.Content = &Walkthrough{Summary: "Because."}
+			walk.Sessions = Sessions{agent.Claude: "q1"}
+			walk.More = []Turn{{Question: "How?", Err: "boom"}}
+			req := FollowupExchange(review, walk, agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat, "And then?").Request
 			if req.ResumeID != tt.resume || req.Fork {
 				t.Errorf("resumes %q (fork %v), want %q without a fork", req.ResumeID, req.Fork, tt.resume)
 			}
 			checkPrompt(t, req.Prompt, tt.want, tt.lacks)
-			if n := len(w.More); n != 2 || w.More[1].Question != "And then?" || w.More[1].Content != nil {
-				t.Errorf("turns after the follow-up = %+v", w.More)
+			if count := len(walk.More); count != 2 || walk.More[1].Question != "And then?" || walk.More[1].Content != nil {
+				t.Errorf("turns after the follow-up = %+v", walk.More)
 			}
 		})
 	}
@@ -356,20 +356,20 @@ func TestWalkExchangeResults(t *testing.T) {
 	json := "```json\n" + `{"summary": "s", "steps": [{"title": "t", "text": "x"}]}` + "\n```"
 	cfg := agent.Config{Provider: agent.Codex, Model: "gpt"}
 	first := func(r *Review) (*Walk, *Exchange) {
-		w := r.AddWalk("", -1, "Why?")
-		return w, DeeperExchange(r, w, cfg, nil, "")
+		walk := r.AddWalk("", -1, "Why?")
+		return walk, DeeperExchange(r, walk, cfg, nil, "")
 	}
 	followup := func(r *Review) (*Walk, *Exchange) {
-		w := r.AddWalk("", -1, "Why?")
-		w.Content, w.Agent, w.Model = &Walkthrough{Summary: "Because."}, agent.Claude, "opus"
-		w.Sessions = Sessions{agent.Claude: "c0"}
-		return w, FollowupExchange(r, w, cfg, nil, "", "And then?")
+		walk := r.AddWalk("", -1, "Why?")
+		walk.Content, walk.Agent, walk.Model = &Walkthrough{Summary: "Because."}, agent.Claude, "opus"
+		walk.Sessions = Sessions{agent.Claude: "c0"}
+		return walk, FollowupExchange(r, walk, cfg, nil, "", "And then?")
 	}
 	tests := []struct {
 		name  string
-		start func(r *Review) (*Walk, *Exchange)
-		apply func(e *Exchange)
-		check func(t *testing.T, w *Walk)
+		start func(review *Review) (*Walk, *Exchange)
+		apply func(exchange *Exchange)
+		check func(subtest *testing.T, walk *Walk)
 	}{
 		{
 			name:  "a walkthrough answer becomes the content, by the run's agent",
@@ -434,9 +434,9 @@ func TestWalkExchangeResults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w, e := tt.start(New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted}))
-			tt.apply(e)
-			tt.check(t, w)
+			walk, exchange := tt.start(New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted}))
+			tt.apply(exchange)
+			tt.check(t, walk)
 		})
 	}
 }
@@ -494,12 +494,12 @@ func TestThreadExchangeRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New("/repo", gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
-			r.Overview = &Overview{Sessions: tt.overview}
-			th := r.AddThread(lines)
+			review := New("/repo", gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
+			review.Overview = &Overview{Sessions: tt.overview}
+			th := review.AddThread(lines)
 			th.Sessions = tt.thread
 			th.Messages = append([]Message(nil), tt.messages...)
-			req := ThreadExchange(r, th, agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat, "And then?").Request
+			req := ThreadExchange(review, th, agent.Config{Provider: tt.provider}, nil, testChanges.Diffstat, "And then?").Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
@@ -519,9 +519,9 @@ func TestThreadExchangeRequest(t *testing.T) {
 }
 
 func TestThreadExchangeWithoutOverview(t *testing.T) {
-	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	th := r.AddThread(Anchor{Kind: AnchorGeneral})
-	req := ThreadExchange(r, th, agent.Config{Provider: agent.Claude}, nil, "", "Why?").Request
+	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	th := review.AddThread(Anchor{Kind: AnchorGeneral})
+	req := ThreadExchange(review, th, agent.Config{Provider: agent.Claude}, nil, "", "Why?").Request
 	if req.ResumeID != "" || req.Fork {
 		t.Errorf("resumes %q (fork %v), want a new session", req.ResumeID, req.Fork)
 	}
@@ -532,7 +532,7 @@ func TestThreadExchangeResults(t *testing.T) {
 	at := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name     string
-		apply    func(e *Exchange, th *Thread)
+		apply    func(exchange *Exchange, th *Thread)
 		want     []Message
 		sessions Sessions
 	}{
@@ -570,29 +570,29 @@ func TestThreadExchangeResults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-			th := r.AddThread(Anchor{Kind: AnchorGeneral})
+			review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+			th := review.AddThread(Anchor{Kind: AnchorGeneral})
 			th.Sessions = Sessions{agent.Claude: "c1"}
-			e := ThreadExchange(r, th, agent.Config{Provider: agent.Codex}, nil, "", "Why?")
+			exchange := ThreadExchange(review, th, agent.Config{Provider: agent.Codex}, nil, "", "Why?")
 			th.Messages[0].Time = time.Time{}
-			tt.apply(e, th)
+			tt.apply(exchange, th)
 			if !reflect.DeepEqual(th.Messages, tt.want) {
 				t.Errorf("messages = %+v\nwant       %+v", th.Messages, tt.want)
 			}
 			if !reflect.DeepEqual(th.Sessions, tt.sessions) {
 				t.Errorf("sessions = %v, want %v", th.Sessions, tt.sessions)
 			}
-			if r.Overview != nil || len(r.Walks) != 0 {
-				t.Errorf("the thread run wrote the overview %+v or walks %+v", r.Overview, r.Walks)
+			if review.Overview != nil || len(review.Walks) != 0 {
+				t.Errorf("the thread run wrote the overview %+v or walks %+v", review.Overview, review.Walks)
 			}
 		})
 	}
 }
 
 func TestExchangeTargetAndKind(t *testing.T) {
-	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	w := r.AddWalk("", -1, "Why?")
-	th := r.AddThread(Anchor{Kind: AnchorGeneral})
+	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	walk := review.AddWalk("", -1, "Why?")
+	th := review.AddThread(Anchor{Kind: AnchorGeneral})
 	cfg := agent.Config{Provider: agent.Claude}
 	tests := []struct {
 		name   string
@@ -600,10 +600,10 @@ func TestExchangeTargetAndKind(t *testing.T) {
 		target string
 		kind   Kind
 	}{
-		{"overview", OverviewExchange(r, testChanges, cfg, nil), "overview", KindOverview},
-		{"deeper", DeeperExchange(r, w, cfg, nil, ""), w.ID, KindWalk},
-		{"follow-up", FollowupExchange(r, w, cfg, nil, "", "And?"), w.ID, KindWalk},
-		{"thread", ThreadExchange(r, th, cfg, nil, "", "Why?"), th.ID, KindThread},
+		{"overview", OverviewExchange(review, testChanges, cfg, nil), "overview", KindOverview},
+		{"deeper", DeeperExchange(review, walk, cfg, nil, ""), walk.ID, KindWalk},
+		{"follow-up", FollowupExchange(review, walk, cfg, nil, "", "And?"), walk.ID, KindWalk},
+		{"thread", ThreadExchange(review, th, cfg, nil, "", "Why?"), th.ID, KindThread},
 	}
 	for _, tc := range tests {
 		if got := tc.ex.Target(); got != tc.target {

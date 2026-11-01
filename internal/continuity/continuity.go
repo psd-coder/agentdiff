@@ -26,7 +26,7 @@ type Earlier struct {
 }
 
 // ID names the archived review in the page that shows it.
-func (e *Earlier) ID() string { return e.Rev.Scope.From }
+func (earlier *Earlier) ID() string { return earlier.Rev.Scope.From }
 
 // archiveID names an archived review: the patch ID of its overview, or
 // the time it was written for an overview from before patch IDs.
@@ -44,8 +44,8 @@ type ChangeID struct {
 // key. moved maps a key to the commit with the same changes. When no
 // commit has the same changes, probable maps the key to a commit that
 // changes all of its files.
-func findCommits(ctx context.Context, r *gitx.Repo, wanted map[string]ChangeID) (moved, probable map[string]string) {
-	ids, err := r.CommitPatchIDs(ctx, "", "", commitsSearched)
+func findCommits(ctx context.Context, gitRepo *gitx.Repo, wanted map[string]ChangeID) (moved, probable map[string]string) {
+	ids, err := gitRepo.CommitPatchIDs(ctx, "", "", commitsSearched)
 	if err != nil {
 		log.Printf("commit patch ids: %v", err)
 	}
@@ -57,7 +57,7 @@ func findCommits(ctx context.Context, r *gitx.Repo, wanted map[string]ChangeID) 
 			sets[key] = w.Files
 		}
 	}
-	probable, err = r.CommitsWithFiles(ctx, sets, commitsSearched)
+	probable, err = gitRepo.CommitsWithFiles(ctx, sets, commitsSearched)
 	if err != nil {
 		log.Printf("commits with files: %v", err)
 	}

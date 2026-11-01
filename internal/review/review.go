@@ -65,8 +65,8 @@ type Thread struct {
 	Created  time.Time      `json:"created"`
 }
 
-func (t *Thread) Discussed() bool {
-	for _, m := range t.Messages {
+func (thread *Thread) Discussed() bool {
+	for _, m := range thread.Messages {
 		if m.Role == RoleAgent {
 			return true
 		}
@@ -99,10 +99,14 @@ type Overview struct {
 
 // Empty reports whether the review has nothing written: no overview,
 // walkthroughs or threads.
-func (r *Review) Empty() bool { return r.Overview == nil && len(r.Walks) == 0 && len(r.Threads) == 0 }
+func (review *Review) Empty() bool {
+	return review.Overview == nil && len(review.Walks) == 0 && len(review.Threads) == 0
+}
 
 // Done reports whether the overview has an explanation to show.
-func (o *Overview) Done() bool { return o != nil && (o.Walk != nil || o.Markdown != "") }
+func (overview *Overview) Done() bool {
+	return overview != nil && (overview.Walk != nil || overview.Markdown != "")
+}
 
 type Review struct {
 	Repo     string          `json:"repo"`
@@ -121,14 +125,14 @@ func New(repo string, scope gitx.Scope) *Review {
 	return &Review{Repo: repo, Scope: scope, Viewed: map[string]bool{}}
 }
 
-func (r *Review) AddThread(a Anchor) *Thread {
-	t := &Thread{ID: newID(), Anchor: a, Created: time.Now()}
-	r.Threads = append(r.Threads, t)
-	return t
+func (review *Review) AddThread(anchor Anchor) *Thread {
+	thread := &Thread{ID: newID(), Anchor: anchor, Created: time.Now()}
+	review.Threads = append(review.Threads, thread)
+	return thread
 }
 
-func (r *Review) Thread(id string) *Thread {
-	for _, t := range r.Threads {
+func (review *Review) Thread(id string) *Thread {
+	for _, t := range review.Threads {
 		if t.ID == id {
 			return t
 		}
@@ -136,18 +140,18 @@ func (r *Review) Thread(id string) *Thread {
 	return nil
 }
 
-func (r *Review) DeleteThread(id string) {
-	for i, t := range r.Threads {
+func (review *Review) DeleteThread(id string) {
+	for i, t := range review.Threads {
 		if t.ID == id {
-			r.Threads = append(r.Threads[:i], r.Threads[i+1:]...)
+			review.Threads = append(review.Threads[:i], review.Threads[i+1:]...)
 			return
 		}
 	}
 }
 
-func (r *Review) ThreadsOn(file string) []*Thread {
+func (review *Review) ThreadsOn(file string) []*Thread {
 	var out []*Thread
-	for _, t := range r.Threads {
+	for _, t := range review.Threads {
 		if t.Anchor.File == file && t.Anchor.onFile() {
 			out = append(out, t)
 		}
@@ -157,24 +161,24 @@ func (r *Review) ThreadsOn(file string) []*Thread {
 
 // ThreadCounts is the number of threads on each file, the ones ThreadsOn
 // returns for it.
-func (r *Review) ThreadCounts() map[string]int {
-	n := map[string]int{}
-	for _, t := range r.Threads {
+func (review *Review) ThreadCounts() map[string]int {
+	counts := map[string]int{}
+	for _, t := range review.Threads {
 		if t.Anchor.onFile() {
-			n[t.Anchor.File]++
+			counts[t.Anchor.File]++
 		}
 	}
-	return n
+	return counts
 }
 
 // onFile tells whether the anchor is a file or lines of it.
-func (a Anchor) onFile() bool {
-	return a.Kind == AnchorFile || a.Kind == AnchorLines
+func (anchor Anchor) onFile() bool {
+	return anchor.Kind == AnchorFile || anchor.Kind == AnchorLines
 }
 
-func (r *Review) ThreadsOnSection(title string) []*Thread {
+func (review *Review) ThreadsOnSection(title string) []*Thread {
 	var out []*Thread
-	for _, t := range r.Threads {
+	for _, t := range review.Threads {
 		if t.Anchor.Kind == AnchorSection && t.Anchor.Section == title {
 			out = append(out, t)
 		}
@@ -183,26 +187,26 @@ func (r *Review) ThreadsOnSection(title string) []*Thread {
 }
 
 func newID() string {
-	b := make([]byte, 6)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	random := make([]byte, 6)
+	_, _ = rand.Read(random)
+	return hex.EncodeToString(random)
 }
 
 // Stale reports whether the overview was written for other changes than
 // the ones with patchID. An overview from before patch IDs compares the
 // files of its groups instead.
-func (o *Overview) Stale(patchID string, files []string) bool {
-	if o == nil {
+func (overview *Overview) Stale(patchID string, files []string) bool {
+	if overview == nil {
 		return false
 	}
-	if o.PatchID != "" {
-		return o.PatchID != patchID
+	if overview.PatchID != "" {
+		return overview.PatchID != patchID
 	}
-	if len(o.Groups) == 0 {
+	if len(overview.Groups) == 0 {
 		return false
 	}
 	grouped := map[string]bool{}
-	for _, g := range o.Groups {
+	for _, g := range overview.Groups {
 		for _, f := range g.Files {
 			grouped[f] = true
 		}
@@ -233,41 +237,43 @@ type Drift struct {
 }
 
 // Disjoint reports whether none of the overview's files is still changed.
-func (d Drift) Disjoint() bool { return d.Written > 0 && d.Gone == d.Written }
+func (drift Drift) Disjoint() bool { return drift.Written > 0 && drift.Gone == drift.Written }
 
 // Drift compares the files the overview was written for with files, which
 // maps the changed files to the IDs of their changes.
-func (o *Overview) Drift(files map[string]string) Drift {
-	written, known := o.written(), o.Files != nil
-	d := Drift{Written: len(written), Known: known}
+func (overview *Overview) Drift(files map[string]string) Drift {
+	written, known := overview.written(), overview.Files != nil
+	drift := Drift{Written: len(written), Known: known}
 	for f, id := range written {
 		now, ok := files[f]
 		switch {
 		case !ok:
-			d.Gone++
+			drift.Gone++
 		case known && (id == "" || id != now):
-			d.Changed++
+			drift.Changed++
 		}
 	}
 	for f := range files {
 		if _, ok := written[f]; !ok {
-			d.New++
+			drift.New++
 		}
 	}
-	return d
+	return drift
 }
 
 // WrittenFiles returns the files the overview was written for.
-func (o *Overview) WrittenFiles() []string { return slices.Sorted(maps.Keys(o.written())) }
+func (overview *Overview) WrittenFiles() []string {
+	return slices.Sorted(maps.Keys(overview.written()))
+}
 
 // written maps the files the overview was written for to the IDs of
 // their changes, which an overview from before file IDs does not know.
-func (o *Overview) written() map[string]string {
-	if o.Files != nil {
-		return o.Files
+func (overview *Overview) written() map[string]string {
+	if overview.Files != nil {
+		return overview.Files
 	}
 	out := map[string]string{}
-	for _, g := range o.Groups {
+	for _, g := range overview.Groups {
 		for _, f := range g.Files {
 			out[f] = ""
 		}

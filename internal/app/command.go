@@ -30,196 +30,201 @@ type command struct {
 	target func() (target string, ok bool)
 	// can tells whether the command applies to target. Nil: it does.
 	can func(target string) bool
-	run func(c *ui.Context, target string)
+	run func(ctx *ui.Context, target string)
 }
 
 // commands lists the app's commands, in the order the palette shows them.
-func (a *app) commands() []*command {
+func (app *app) commands() []*command {
 	return []*command{
 		// Actions on the side panel, the page and the scope.
-		{id: "comment-lines", title: "Comment on Selected Lines", target: a.targetFile, can: func(f string) bool {
-			_, ok := a.selectedLines(f)
+		{id: "comment-lines", title: "Comment on Selected Lines", target: app.targetFile, can: func(f string) bool {
+			_, ok := app.selectedLines(f)
 			return ok
 		}, run: func(_ *ui.Context, f string) {
-			r, _ := a.selectedLines(f)
-			a.lineThread(f, r)
-			a.diffs[f].state.SetSelectedLines(editor.DiffLineRange{}, false)
+			lines, _ := app.selectedLines(f)
+			app.lineThread(f, lines)
+			app.diffs[f].state.SetSelectedLines(editor.DiffLineRange{}, false)
 		}},
-		{id: "comment-file", title: "Comment on File", target: a.targetFile, run: func(_ *ui.Context, f string) {
-			a.newThread(review.Anchor{Kind: review.AnchorFile, File: f})
+		{id: "comment-file", title: "Comment on File", target: app.targetFile, run: func(_ *ui.Context, f string) {
+			app.newThread(review.Anchor{Kind: review.AnchorFile, File: f})
 		}},
-		{id: "mark-viewed", title: "Mark File as Viewed", target: a.targetFile,
-			can: func(f string) bool { return !a.rev.Viewed[f] },
-			run: func(_ *ui.Context, f string) { a.setViewed([]string{f}, true) }},
-		{id: "mark-not-viewed", title: "Mark File as Not Viewed", target: a.targetFile,
-			can: func(f string) bool { return a.rev.Viewed[f] },
-			run: func(_ *ui.Context, f string) { a.setViewed([]string{f}, false) }},
-		{id: "mark-group-viewed", title: "Mark All Files of the Group as Viewed", target: a.targetGroup,
-			can: func(g string) bool { return !a.groupViewed(g) },
-			run: func(_ *ui.Context, g string) { a.setViewed(a.groupFiles(g), true) }},
-		{id: "mark-group-not-viewed", title: "Mark All Files of the Group as Not Viewed", target: a.targetGroup,
-			can: a.groupViewed,
-			run: func(_ *ui.Context, g string) { a.setViewed(a.groupFiles(g), false) }},
-		{id: "mark-all-viewed", title: "Mark All Files as Viewed", target: a.targetAll,
-			can: func(string) bool { return !a.allViewed() },
-			run: func(*ui.Context, string) { a.setViewed(a.fileNames(), true) }},
-		{id: "mark-all-not-viewed", title: "Mark All Files as Not Viewed", target: a.targetAll,
-			can: func(string) bool { return a.allViewed() },
-			run: func(*ui.Context, string) { a.setViewed(a.fileNames(), false) }},
+		{id: "mark-viewed", title: "Mark File as Viewed", target: app.targetFile,
+			can: func(f string) bool { return !app.rev.Viewed[f] },
+			run: func(_ *ui.Context, f string) { app.setViewed([]string{f}, true) }},
+		{id: "mark-not-viewed", title: "Mark File as Not Viewed", target: app.targetFile,
+			can: func(f string) bool { return app.rev.Viewed[f] },
+			run: func(_ *ui.Context, f string) { app.setViewed([]string{f}, false) }},
+		{id: "mark-group-viewed", title: "Mark All Files of the Group as Viewed", target: app.targetGroup,
+			can: func(g string) bool { return !app.groupViewed(g) },
+			run: func(_ *ui.Context, g string) { app.setViewed(app.groupFiles(g), true) }},
+		{id: "mark-group-not-viewed", title: "Mark All Files of the Group as Not Viewed", target: app.targetGroup,
+			can: app.groupViewed,
+			run: func(_ *ui.Context, g string) { app.setViewed(app.groupFiles(g), false) }},
+		{id: "mark-all-viewed", title: "Mark All Files as Viewed", target: app.targetAll,
+			can: func(string) bool { return !app.allViewed() },
+			run: func(*ui.Context, string) { app.setViewed(app.fileNames(), true) }},
+		{id: "mark-all-not-viewed", title: "Mark All Files as Not Viewed", target: app.targetAll,
+			can: func(string) bool { return app.allViewed() },
+			run: func(*ui.Context, string) { app.setViewed(app.fileNames(), false) }},
 
-		{id: "close-thread", title: "Close Thread", tip: "Escape", target: a.targetThread, run: func(*ui.Context, string) { a.closeThread() }},
-		{id: "resolve-thread", title: "Resolve Thread", target: a.targetThread,
-			can: func(id string) bool { return !a.rev.Thread(id).Resolved },
-			run: func(_ *ui.Context, id string) { a.setResolved(id, true) }},
-		{id: "reopen-thread", title: "Reopen Thread", target: a.targetThread,
-			can: func(id string) bool { return a.rev.Thread(id).Resolved },
-			run: func(_ *ui.Context, id string) { a.setResolved(id, false) }},
-		{id: "include-thread", title: "Include Thread in Feedback", target: a.targetThread,
-			can: func(id string) bool { return a.rev.Thread(id).Excluded },
-			run: func(_ *ui.Context, id string) { a.setExcluded(id, false) }},
-		{id: "exclude-thread", title: "Leave Thread out of Feedback", target: a.targetThread,
-			can: func(id string) bool { return !a.rev.Thread(id).Excluded },
-			run: func(_ *ui.Context, id string) { a.setExcluded(id, true) }},
-		{id: "stop-thread", title: "Stop the Agent in the Thread", target: a.targetThread,
-			can: a.busy,
-			run: func(_ *ui.Context, id string) { a.runner.stop(a.rev, id) }},
-		{id: "thread-log", title: "Show Log of the Thread", tip: "What the agent did in this thread", target: a.targetThread,
-			can: func(id string) bool { return a.rev.Thread(id).Agent != "" },
-			run: func(_ *ui.Context, id string) { a.showLog(id) }},
-		{id: "delete-thread", title: "Delete Thread", target: a.targetThread, run: func(_ *ui.Context, id string) { a.deleteThread(id) }},
+		{id: "close-thread", title: "Close Thread", tip: "Escape", target: app.targetThread, run: func(*ui.Context, string) { app.closeThread() }},
+		{id: "resolve-thread", title: "Resolve Thread", target: app.targetThread,
+			can: func(id string) bool { return !app.rev.Thread(id).Resolved },
+			run: func(_ *ui.Context, id string) { app.setResolved(id, true) }},
+		{id: "reopen-thread", title: "Reopen Thread", target: app.targetThread,
+			can: func(id string) bool { return app.rev.Thread(id).Resolved },
+			run: func(_ *ui.Context, id string) { app.setResolved(id, false) }},
+		{id: "include-thread", title: "Include Thread in Feedback", target: app.targetThread,
+			can: func(id string) bool { return app.rev.Thread(id).Excluded },
+			run: func(_ *ui.Context, id string) { app.setExcluded(id, false) }},
+		{id: "exclude-thread", title: "Leave Thread out of Feedback", target: app.targetThread,
+			can: func(id string) bool { return !app.rev.Thread(id).Excluded },
+			run: func(_ *ui.Context, id string) { app.setExcluded(id, true) }},
+		{id: "stop-thread", title: "Stop the Agent in the Thread", target: app.targetThread,
+			can: app.busy,
+			run: func(_ *ui.Context, id string) { app.runner.stop(app.rev, id) }},
+		{id: "thread-log", title: "Show Log of the Thread", tip: "What the agent did in this thread", target: app.targetThread,
+			can: func(id string) bool { return app.rev.Thread(id).Agent != "" },
+			run: func(_ *ui.Context, id string) { app.showLog(id) }},
+		{id: "delete-thread", title: "Delete Thread", target: app.targetThread, run: func(_ *ui.Context, id string) { app.deleteThread(id) }},
 
-		{id: "close-question", title: "Close Question", tip: "Escape", target: a.targetQuestion, run: func(*ui.Context, string) { a.closeQuestion() }},
-		{id: "question-page", title: "Open Question as Page", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) {
-			a.closeQuestion()
-			a.nav.goTo(page{kindWalk, id})
+		{id: "close-question", title: "Close Question", tip: "Escape", target: app.targetQuestion, run: func(*ui.Context, string) { app.closeQuestion() }},
+		{id: "question-page", title: "Open Question as Page", target: app.targetQuestionWalk, run: func(_ *ui.Context, id string) {
+			app.closeQuestion()
+			app.nav.goTo(page{kindWalk, id})
 		}},
-		{id: "question-log", title: "Show Log of the Question", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) { a.showLog(id) }},
-		{id: "delete-question", title: "Delete Question", target: a.targetQuestionWalk, run: func(_ *ui.Context, id string) {
-			a.runner.stop(a.rev, id)
-			a.rev.DeleteWalk(id)
-			a.closeQuestion()
-			a.leaveGone()
-			a.saveReview()
+		{id: "question-log", title: "Show Log of the Question", target: app.targetQuestionWalk, run: func(_ *ui.Context, id string) { app.showLog(id) }},
+		{id: "delete-question", title: "Delete Question", target: app.targetQuestionWalk, run: func(_ *ui.Context, id string) {
+			app.runner.stop(app.rev, id)
+			app.rev.DeleteWalk(id)
+			app.closeQuestion()
+			app.leaveGone()
+			app.saveReview()
 		}},
 
-		{id: "stop-walk", title: "Stop Walkthrough", target: a.targetWalk, can: a.busy,
-			run: func(_ *ui.Context, id string) { a.runner.stop(a.rev, id) }},
-		{id: "regenerate-walk", title: "Regenerate Walkthrough", target: a.targetWalk,
-			can: func(id string) bool { return !a.busy(id) },
-			run: func(_ *ui.Context, id string) { a.regenerate(id) }},
-		{id: "walk-log", title: "Show Log of the Walkthrough", tip: "What the agent did for this walkthrough", target: a.targetWalk,
-			run: func(_ *ui.Context, id string) { a.showLog(id) }},
-		{id: "delete-walk", title: "Delete Walkthrough", tip: "Delete this walkthrough and the ones under it", target: a.targetWalk,
-			run: func(_ *ui.Context, id string) { a.deleteWalk(a.rev.Walk(id)) }},
+		{id: "stop-walk", title: "Stop Walkthrough", target: app.targetWalk, can: app.busy,
+			run: func(_ *ui.Context, id string) { app.runner.stop(app.rev, id) }},
+		{id: "regenerate-walk", title: "Regenerate Walkthrough", target: app.targetWalk,
+			can: func(id string) bool { return !app.busy(id) },
+			run: func(_ *ui.Context, id string) { app.regenerate(id) }},
+		{id: "walk-log", title: "Show Log of the Walkthrough", tip: "What the agent did for this walkthrough", target: app.targetWalk,
+			run: func(_ *ui.Context, id string) { app.showLog(id) }},
+		{id: "delete-walk", title: "Delete Walkthrough", tip: "Delete this walkthrough and the ones under it", target: app.targetWalk,
+			run: func(_ *ui.Context, id string) { app.deleteWalk(app.rev.Walk(id)) }},
 
-		{id: "copy-feedback", title: "Copy Feedback", target: a.targetFeedback, can: a.hasFeedback, run: func(c *ui.Context, _ string) {
-			c.WriteClipboard(a.feedback())
+		{id: "copy-feedback", title: "Copy Feedback", target: app.targetFeedback, can: app.hasFeedback, run: func(c *ui.Context, _ string) {
+			c.WriteClipboard(app.feedback())
 			c.Toast("Feedback copied")
 		}},
-		{id: "save-feedback", title: "Save Feedback to File…", target: a.targetFeedback, can: a.hasFeedback,
-			run: func(c *ui.Context, _ string) { a.saveFeedback(c.Services()) }},
-		{id: "copy-agent-prompt", title: "Copy Prompt for Agent", tip: "Copy a prompt that tells the agent to read the saved feedback", target: a.targetFeedback,
-			can: func(string) bool { return a.savedPath != "" },
+		{id: "save-feedback", title: "Save Feedback to File…", target: app.targetFeedback, can: app.hasFeedback,
+			run: func(c *ui.Context, _ string) { app.saveFeedback(c.Services()) }},
+		{id: "copy-agent-prompt", title: "Copy Prompt for Agent", tip: "Copy a prompt that tells the agent to read the saved feedback", target: app.targetFeedback,
+			can: func(string) bool { return app.savedPath != "" },
 			run: func(c *ui.Context, _ string) {
-				c.WriteClipboard(agentPrompt(a.savedPath))
+				c.WriteClipboard(agentPrompt(app.savedPath))
 				c.Toast("Prompt copied")
 			}},
 
 		{id: "explain", title: "Explain Changes", can: func(string) bool {
-			return !a.busy(store.TargetOverview) && !a.rev.Overview.Done() && len(a.files) > 0
-		}, run: func(*ui.Context, string) { a.generateOverview() }},
-		{id: "stop-overview", title: "Stop Overview", can: func(string) bool { return a.busy(store.TargetOverview) },
-			run: func(*ui.Context, string) { a.runner.stop(a.rev, store.TargetOverview) }},
+			return !app.busy(store.TargetOverview) && !app.rev.Overview.Done() && len(app.files) > 0
+		}, run: func(*ui.Context, string) { app.generateOverview() }},
+		{id: "stop-overview", title: "Stop Overview", can: func(string) bool { return app.busy(store.TargetOverview) },
+			run: func(*ui.Context, string) { app.runner.stop(app.rev, store.TargetOverview) }},
 		{id: "regenerate-overview", title: "Regenerate Overview", can: func(string) bool {
-			return !a.busy(store.TargetOverview) && a.rev.Overview.Done() && len(a.files) > 0
-		}, run: func(*ui.Context, string) { a.regenerate("") }},
+			return !app.busy(store.TargetOverview) && app.rev.Overview.Done() && len(app.files) > 0
+		}, run: func(*ui.Context, string) { app.regenerate("") }},
 		{id: "overview-log", title: "Show Log of the Overview", tip: "What the agent did to write the overview",
-			can: func(string) bool { return a.busy(store.TargetOverview) || a.rev.Overview != nil },
-			run: func(*ui.Context, string) { a.showLog(store.TargetOverview) }},
+			can: func(string) bool { return app.busy(store.TargetOverview) || app.rev.Overview != nil },
+			run: func(*ui.Context, string) { app.showLog(store.TargetOverview) }},
 		{id: "start-over", title: "Start Over", tip: "Delete the overview and comments of this scope",
-			can: func(string) bool { return a.rev.Overview != nil || len(a.rev.Threads) > 0 || len(a.rev.Walks) > 0 },
-			run: func(*ui.Context, string) { a.confirmStartOver() }},
+			can: func(string) bool {
+				return app.rev.Overview != nil || len(app.rev.Threads) > 0 || len(app.rev.Walks) > 0
+			},
+			run: func(*ui.Context, string) { app.confirmStartOver() }},
 
 		{id: "open-moved-commit", title: "Open Commit That Holds These Changes",
-			can: func(string) bool { return a.movedTo != "" && a.freshness() == overviewStale },
-			run: func(*ui.Context, string) { a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.movedTo}) }},
-		{id: "open-archived-commit", title: "Open Commit of the Earlier Review", target: a.targetArchived,
-			can: func(id string) bool { return a.reviews.Find(id).MovedTo != "" },
+			can: func(string) bool { return app.movedTo != "" && app.freshness() == overviewStale },
+			run: func(*ui.Context, string) { app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: app.movedTo}) }},
+		{id: "open-archived-commit", title: "Open Commit of the Earlier Review", target: app.targetArchived,
+			can: func(id string) bool { return app.reviews.Find(id).MovedTo != "" },
 			run: func(_ *ui.Context, id string) {
-				a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: a.reviews.Find(id).MovedTo})
+				app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: app.reviews.Find(id).MovedTo})
 			}},
-		{id: "move-archived", title: "Move Earlier Review to the Commit", target: a.targetArchived,
-			can: func(id string) bool { e := a.reviews.Find(id); return e.MovedTo == "" && e.Probably != "" },
-			run: func(_ *ui.Context, id string) { a.moveArchived(a.reviews.Find(id)) }},
+		{id: "move-archived", title: "Move Earlier Review to the Commit", target: app.targetArchived,
+			can: func(id string) bool {
+				earlier := app.reviews.Find(id)
+				return earlier.MovedTo == "" && earlier.Probably != ""
+			},
+			run: func(_ *ui.Context, id string) { app.moveArchived(app.reviews.Find(id)) }},
 		{id: "restore-archived", title: "Restore Earlier Review", tip: "Bring the review back to the uncommitted changes, with a warning that it was written for other changes",
-			target: a.targetArchived, can: func(string) bool { return a.rev.Empty() },
-			run: func(_ *ui.Context, id string) { a.restoreArchived(a.reviews.Find(id)) }},
-		{id: "delete-archived", title: "Delete Earlier Review", target: a.targetArchived, run: func(_ *ui.Context, id string) {
-			e := a.reviews.Find(id)
-			a.confirm("Delete the earlier review?", "Its overview, walkthroughs and comments are deleted.", "Delete", func() { a.deleteArchived(e) })
+			target: app.targetArchived, can: func(string) bool { return app.rev.Empty() },
+			run: func(_ *ui.Context, id string) { app.restoreArchived(app.reviews.Find(id)) }},
+		{id: "delete-archived", title: "Delete Earlier Review", target: app.targetArchived, run: func(_ *ui.Context, id string) {
+			earlier := app.reviews.Find(id)
+			app.confirm("Delete the earlier review?", "Its overview, walkthroughs and comments are deleted.", "Delete", func() { app.deleteArchived(earlier) })
 		}},
 
 		// How the window shows the changes.
-		{id: "split-diffs", title: "Show Split Diffs", can: func(string) bool { return a.cfg.Unified },
-			run: func(*ui.Context, string) { a.setUnified(false) }},
-		{id: "unified-diffs", title: "Show Unified Diffs", can: func(string) bool { return !a.cfg.Unified },
-			run: func(*ui.Context, string) { a.setUnified(true) }},
-		{id: "flat-files", title: "List Files by Path", can: func(string) bool { return !a.cfg.FlatFiles },
-			run: func(*ui.Context, string) { a.setFlatFiles(true) }},
-		{id: "grouped-files", title: "List Files by Group", can: func(string) bool { return a.cfg.FlatFiles },
-			run: func(*ui.Context, string) { a.setFlatFiles(false) }},
-		{id: "hide-viewed", title: "Hide Viewed Files", can: func(string) bool { return !a.cfg.HideViewed },
-			run: func(*ui.Context, string) { a.setHideViewed(true) }},
-		{id: "show-viewed", title: "Show Viewed Files", can: func(string) bool { return a.cfg.HideViewed },
-			run: func(*ui.Context, string) { a.setHideViewed(false) }},
-		{id: "close-log", title: "Close Agent Log", can: func(string) bool { return a.logOpen },
-			run: func(*ui.Context, string) { a.logOpen = false }},
-		{id: "log-show-all", title: "Show All Runs in Agent Log", can: func(string) bool { return a.logOpen && a.logTarget != "" },
-			run: func(*ui.Context, string) { a.logTarget = "" }},
+		{id: "split-diffs", title: "Show Split Diffs", can: func(string) bool { return app.cfg.Unified },
+			run: func(*ui.Context, string) { app.setUnified(false) }},
+		{id: "unified-diffs", title: "Show Unified Diffs", can: func(string) bool { return !app.cfg.Unified },
+			run: func(*ui.Context, string) { app.setUnified(true) }},
+		{id: "flat-files", title: "List Files by Path", can: func(string) bool { return !app.cfg.FlatFiles },
+			run: func(*ui.Context, string) { app.setFlatFiles(true) }},
+		{id: "grouped-files", title: "List Files by Group", can: func(string) bool { return app.cfg.FlatFiles },
+			run: func(*ui.Context, string) { app.setFlatFiles(false) }},
+		{id: "hide-viewed", title: "Hide Viewed Files", can: func(string) bool { return !app.cfg.HideViewed },
+			run: func(*ui.Context, string) { app.setHideViewed(true) }},
+		{id: "show-viewed", title: "Show Viewed Files", can: func(string) bool { return app.cfg.HideViewed },
+			run: func(*ui.Context, string) { app.setHideViewed(false) }},
+		{id: "close-log", title: "Close Agent Log", can: func(string) bool { return app.logOpen },
+			run: func(*ui.Context, string) { app.logOpen = false }},
+		{id: "log-show-all", title: "Show All Runs in Agent Log", can: func(string) bool { return app.logOpen && app.logTarget != "" },
+			run: func(*ui.Context, string) { app.logTarget = "" }},
 
 		// The menu bar's commands.
-		{id: "open-repo", title: "Open Repository…", keys: "CmdOrCtrl+O", anywhere: true, run: func(*ui.Context, string) { a.chooseRepo() }},
-		{id: "switch-project", overlay: true, title: "Switch Project…", keys: "CmdOrCtrl+P", tip: "Open another project", run: func(*ui.Context, string) { a.toggleProjects() }},
-		{id: "switch-branch", overlay: true, title: "Switch Branch…", keys: "CmdOrCtrl+B", tip: "Branch to review", run: func(*ui.Context, string) { a.toggleBranches() }},
+		{id: "open-repo", title: "Open Repository…", keys: "CmdOrCtrl+O", anywhere: true, run: func(*ui.Context, string) { app.chooseRepo() }},
+		{id: "switch-project", overlay: true, title: "Switch Project…", keys: "CmdOrCtrl+P", tip: "Open another project", run: func(*ui.Context, string) { app.toggleProjects() }},
+		{id: "switch-branch", overlay: true, title: "Switch Branch…", keys: "CmdOrCtrl+B", tip: "Branch to review", run: func(*ui.Context, string) { app.toggleBranches() }},
 		{id: "compare", overlay: true, title: "Compare…", keys: "CmdOrCtrl+Shift+B", tip: "Compare with another base, or review a custom range",
-			run: func(*ui.Context, string) { a.openCompare() }},
-		{id: "refresh", title: "Refresh", keys: "CmdOrCtrl+R", tip: "Read the changes again", run: func(*ui.Context, string) { a.refresh() }},
-		{id: "settings", overlay: true, title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { a.openSettings() }},
-		{id: "focus-changes", title: "Focus Changes", keys: "CmdOrCtrl+Shift+C", run: func(*ui.Context, string) { a.refocus = "changes" }},
-		{id: "focus-files", title: "Focus Files", keys: "CmdOrCtrl+Shift+F", run: func(*ui.Context, string) { a.focusFiles() }},
-		{id: "focus-page", title: "Focus Page", keys: "CmdOrCtrl+0", run: func(*ui.Context, string) { a.refocus = "page" }},
-		{id: "palette", overlay: true, title: "Command Palette…", keys: "CmdOrCtrl+Shift+P", run: func(*ui.Context, string) { a.openPalette() }},
+			run: func(*ui.Context, string) { app.openCompare() }},
+		{id: "refresh", title: "Refresh", keys: "CmdOrCtrl+R", tip: "Read the changes again", run: func(*ui.Context, string) { app.refresh() }},
+		{id: "settings", overlay: true, title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { app.openSettings() }},
+		{id: "focus-changes", title: "Focus Changes", keys: "CmdOrCtrl+Shift+C", run: func(*ui.Context, string) { app.refocus = "changes" }},
+		{id: "focus-files", title: "Focus Files", keys: "CmdOrCtrl+Shift+F", run: func(*ui.Context, string) { app.focusFiles() }},
+		{id: "focus-page", title: "Focus Page", keys: "CmdOrCtrl+0", run: func(*ui.Context, string) { app.refocus = "page" }},
+		{id: "palette", overlay: true, title: "Command Palette…", keys: "CmdOrCtrl+Shift+P", run: func(*ui.Context, string) { app.openPalette() }},
 		{id: "agent-log", title: "Agent Log", keys: "CmdOrCtrl+L", tip: "Every call to the agent: command, prompt, tool calls, tokens",
-			run: func(*ui.Context, string) { a.toggleLog() }},
-		{id: "back", title: "Back", keys: "CmdOrCtrl+[", run: func(*ui.Context, string) { a.goBack() }},
-		{id: "forward", title: "Forward", keys: "CmdOrCtrl+]", run: func(*ui.Context, string) { a.goForward() }},
-		{id: "go-overview", title: "Overview", keys: "CmdOrCtrl+1", run: func(*ui.Context, string) { a.openPage(overview) }},
-		{id: "go-threads", title: "Questions & Comments", keys: "CmdOrCtrl+2", run: func(*ui.Context, string) { a.openPage(page{kind: kindThreads}) }},
-		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { a.openPage(page{kind: kindFeedback}) }},
-		{id: "go-all", title: "All Files Diff", keys: "CmdOrCtrl+4", run: func(*ui.Context, string) { a.openPage(page{kind: kindAll}) }},
-		{id: "next-file", title: "Next File", keys: "Alt+CmdOrCtrl+Down", run: func(*ui.Context, string) { a.stepFile(1) }},
-		{id: "previous-file", title: "Previous File", keys: "Alt+CmdOrCtrl+Up", run: func(*ui.Context, string) { a.stepFile(-1) }},
-		{id: "shortcuts", overlay: true, title: "Keyboard Shortcuts", keys: "CmdOrCtrl+/", run: func(*ui.Context, string) { a.shortcutsOpen = true }},
+			run: func(*ui.Context, string) { app.toggleLog() }},
+		{id: "back", title: "Back", keys: "CmdOrCtrl+[", run: func(*ui.Context, string) { app.goBack() }},
+		{id: "forward", title: "Forward", keys: "CmdOrCtrl+]", run: func(*ui.Context, string) { app.goForward() }},
+		{id: "go-overview", title: "Overview", keys: "CmdOrCtrl+1", run: func(*ui.Context, string) { app.openPage(overview) }},
+		{id: "go-threads", title: "Questions & Comments", keys: "CmdOrCtrl+2", run: func(*ui.Context, string) { app.openPage(page{kind: kindThreads}) }},
+		{id: "go-feedback", title: "Feedback", keys: "CmdOrCtrl+3", run: func(*ui.Context, string) { app.openPage(page{kind: kindFeedback}) }},
+		{id: "go-all", title: "All Files Diff", keys: "CmdOrCtrl+4", run: func(*ui.Context, string) { app.openPage(page{kind: kindAll}) }},
+		{id: "next-file", title: "Next File", keys: "Alt+CmdOrCtrl+Down", run: func(*ui.Context, string) { app.stepFile(1) }},
+		{id: "previous-file", title: "Previous File", keys: "Alt+CmdOrCtrl+Up", run: func(*ui.Context, string) { app.stepFile(-1) }},
+		{id: "shortcuts", overlay: true, title: "Keyboard Shortcuts", keys: "CmdOrCtrl+/", run: func(*ui.Context, string) { app.shortcutsOpen = true }},
 	}
 }
 
 // cachedCommands is commands, built once: a command reads the app's state
 // only in its functions, so the list never changes.
-func (a *app) cachedCommands() []*command {
-	if a.cmdList == nil {
-		a.cmdList = a.commands()
-		a.cmds = map[string]*command{}
-		for _, cm := range a.cmdList {
-			a.cmds[cm.id] = cm
+func (app *app) cachedCommands() []*command {
+	if app.cmdList == nil {
+		app.cmdList = app.commands()
+		app.cmds = map[string]*command{}
+		for _, cm := range app.cmdList {
+			app.cmds[cm.id] = cm
 		}
 	}
-	return a.cmdList
+	return app.cmdList
 }
 
 // cmd is the command id. It panics on an unknown id, which is a bug.
-func (a *app) cmd(id string) *command {
-	a.cachedCommands()
-	cm := a.cmds[id]
+func (app *app) cmd(id string) *command {
+	app.cachedCommands()
+	cm := app.cmds[id]
 	if cm == nil {
 		panic("unknown command " + id)
 	}
@@ -227,8 +232,8 @@ func (a *app) cmd(id string) *command {
 }
 
 // applies tells whether the command acts on target now.
-func (a *app) applies(cm *command, target string) bool {
-	if a.repo == nil && !cm.anywhere {
+func (app *app) applies(cm *command, target string) bool {
+	if app.repo == nil && !cm.anywhere {
 		return false
 	}
 	return cm.can == nil || cm.can(target)
@@ -236,8 +241,8 @@ func (a *app) applies(cm *command, target string) bool {
 
 // here is the target of the command from the menu bar or the palette, and
 // whether the command applies there.
-func (a *app) here(cm *command) (string, bool) {
-	if a.repo == nil && !cm.anywhere {
+func (app *app) here(cm *command) (string, bool) {
+	if app.repo == nil && !cm.anywhere {
 		return "", false
 	}
 	target := ""
@@ -247,78 +252,78 @@ func (a *app) here(cm *command) (string, bool) {
 			return "", false
 		}
 	}
-	return target, a.applies(cm, target)
+	return target, app.applies(cm, target)
 }
 
 // runHere runs the command on its target from the menu bar or the palette.
-func (a *app) runHere(c *ui.Context, id string) {
-	cm := a.cmd(id)
-	if target, ok := a.here(cm); ok {
+func (app *app) runHere(ctx *ui.Context, id string) {
+	cm := app.cmd(id)
+	if target, ok := app.here(cm); ok {
 		if cm.overlay {
-			a.closeOverlays(id)
+			app.closeOverlays(id)
 		} else {
-			a.paletteOpen = false
+			app.paletteOpen = false
 		}
-		cm.run(c, target)
+		cm.run(ctx, target)
 		if cm.overlay {
 			// The dialog or list it opened takes the keyboard focus.
-			a.refocus = id
+			app.refocus = id
 		}
 	}
 }
 
 // closeOverlays closes the dialogs and lists over the window, but the one
 // of the command keep, which toggles its own.
-func (a *app) closeOverlays(keep string) {
+func (app *app) closeOverlays(keep string) {
 	if keep != "palette" {
-		a.paletteOpen = false
+		app.paletteOpen = false
 	}
 	if keep != "switch-project" {
-		a.projectsOpen = false
+		app.projectsOpen = false
 	}
 	if keep != "switch-branch" {
-		a.branchesOpen = false
+		app.branchesOpen = false
 	}
 	if keep != "shortcuts" {
-		a.shortcutsOpen = false
+		app.shortcutsOpen = false
 	}
-	if f := a.compareForm; f != nil && keep != "compare" {
-		f.open = false
+	if compare := app.compareForm; compare != nil && keep != "compare" {
+		compare.open = false
 	}
-	if f := a.settings; f != nil && keep != "settings" {
-		f.open = false
-		a.recording = ""
+	if settings := app.settings; settings != nil && keep != "settings" {
+		settings.open = false
+		app.recording = ""
 	}
 }
 
 // queueCommand runs the command in the next frame, which has the context that
 // some commands need, and draws the window again. The menu bar runs its
 // commands with it.
-func (a *app) queueCommand(id string) {
-	if a.recording != "" {
+func (app *app) queueCommand(id string) {
+	if app.recording != "" {
 		// The menu bar takes its keys before the window sees them: they
 		// are the keys being recorded.
-		a.recordKeys(a.keymap().of(id))
+		app.recordKeys(app.keymap().of(id))
 		return
 	}
-	a.pending = id
-	if a.win != nil {
-		a.win.Invalidate()
+	app.pending = id
+	if app.win != nil {
+		app.win.Invalidate()
 	}
 }
 
 // runQueued runs the command the menu bar queued.
-func (a *app) runQueued(c *ui.Context) {
-	if id := a.pending; id != "" {
-		a.pending = ""
-		a.runHere(c, id)
+func (app *app) runQueued(ctx *ui.Context) {
+	if id := app.pending; id != "" {
+		app.pending = ""
+		app.runHere(ctx, id)
 	}
 }
 
 // tooltip is the tooltip of the command's button: what it does and its
 // keys.
-func (a *app) tooltip(cm *command) string {
-	keys := a.keymap().of(cm.id)
+func (app *app) tooltip(cm *command) string {
+	keys := app.keymap().of(cm.id)
 	switch {
 	case keys != "" && cm.tip != "":
 		return cm.tip + " (" + keyLabel(keys) + ")"
@@ -329,195 +334,199 @@ func (a *app) tooltip(cm *command) string {
 }
 
 // runOn runs the command on target from a button of the window.
-func (a *app) runOn(c *ui.Context, id, target string) {
-	if cm := a.cmd(id); a.applies(cm, target) {
-		cm.run(c, target)
+func (app *app) runOn(ctx *ui.Context, id, target string) {
+	if cm := app.cmd(id); app.applies(cm, target) {
+		cm.run(ctx, target)
 	}
 }
 
 // cmdButton shows the command as a button acting on target, labeled
 // label. It shows nothing where the command does not apply.
-func (a *app) cmdButton(c *ui.Context, id, target, label string) {
-	a.cmdButtonBase(c, id, target, label, ui.Button)
+func (app *app) cmdButton(ctx *ui.Context, id, target, label string) {
+	app.cmdButtonBase(ctx, id, target, label, ui.Button)
 }
 
 // cmdPrimaryButton is cmdButton with the look of the main action.
-func (a *app) cmdPrimaryButton(c *ui.Context, id, target, label string) {
-	a.cmdButtonBase(c, id, target, label, ui.PrimaryButton)
+func (app *app) cmdPrimaryButton(ctx *ui.Context, id, target, label string) {
+	app.cmdButtonBase(ctx, id, target, label, ui.PrimaryButton)
 }
 
-func (a *app) cmdButtonBase(c *ui.Context, id, target, label string, button func(*ui.Context, string) ui.Element) {
-	cm := a.cmd(id)
-	if !a.applies(cm, target) {
+func (app *app) cmdButtonBase(ctx *ui.Context, id, target, label string, button func(*ui.Context, string) ui.Element) {
+	cm := app.cmd(id)
+	if !app.applies(cm, target) {
 		return
 	}
-	b := button(c.Key(id+target), label).OnClick(func() { cm.run(c, target) })
-	if tip := a.tooltip(cm); tip != "" {
-		b.Tooltip(tip)
+	element := button(ctx.Key(id+target), label).OnClick(func() { cm.run(ctx, target) })
+	if tip := app.tooltip(cm); tip != "" {
+		element.Tooltip(tip)
 	}
 }
 
 // cmdCheckbox shows the commands on and off, a pair of which one applies
 // at a time, as a checkbox on target: checked while off applies.
-func (a *app) cmdCheckbox(c *ui.Context, on, off, target, label string) ui.Element {
-	checked := a.applies(a.cmd(off), target)
-	box := ui.Checkbox(c.Key(on+target), &checked, label)
+func (app *app) cmdCheckbox(ctx *ui.Context, on, off, target, label string) ui.Element {
+	checked := app.applies(app.cmd(off), target)
+	box := ui.Checkbox(ctx.Key(on+target), &checked, label)
 	if box.Changed() {
 		id := off
 		if checked {
 			id = on
 		}
-		a.cmd(id).run(c, target)
+		app.cmd(id).run(ctx, target)
 	}
 	return box
 }
 
 // cmdSegmented shows commands, of which all but the one in effect apply,
 // as a segmented control.
-func (a *app) cmdSegmented(c *ui.Context, ids []string, labels ...string) ui.Element {
+func (app *app) cmdSegmented(ctx *ui.Context, ids []string, labels ...string) ui.Element {
 	at := 0
 	for i, id := range ids {
-		if !a.applies(a.cmd(id), "") {
+		if !app.applies(app.cmd(id), "") {
 			at = i
 		}
 	}
-	seg := ui.Segmented(c, &at, labels...)
+	seg := ui.Segmented(ctx, &at, labels...)
 	if seg.Changed() {
-		a.cmd(ids[at]).run(c, "")
+		app.cmd(ids[at]).run(ctx, "")
 	}
 	return seg
 }
 
 // focusFiles moves the keyboard focus to the list of files, on the file
 // or group open, or else on the first file listed, which it opens.
-func (a *app) focusFiles() {
-	a.refocus = "files"
-	if f, ok := a.targetFile(); ok && a.listed(f) {
+func (app *app) focusFiles() {
+	app.refocus = "files"
+	if file, ok := app.targetFile(); ok && app.listed(file) {
 		return
 	}
-	if g, ok := a.targetGroup(); ok && !a.cfg.FlatFiles && slices.ContainsFunc(a.groupFiles(g), a.listed) {
+	if groupID, ok := app.targetGroup(); ok && !app.cfg.FlatFiles && slices.ContainsFunc(app.groupFiles(groupID), app.listed) {
 		return
 	}
-	for _, f := range a.fileOrder() {
-		if a.listed(f) {
-			a.nav.goTo(page{kindFile, f})
+	for _, f := range app.fileOrder() {
+		if app.listed(f) {
+			app.nav.goTo(page{kindFile, f})
 			return
 		}
 	}
 }
 
-func (a *app) targetFile() (string, bool) {
-	p := a.nav.page
-	return p.key, p.kind == kindFile && !a.pageGone(p)
+func (app *app) targetFile() (string, bool) {
+	current := app.nav.page
+	return current.key, current.kind == kindFile && !app.pageGone(current)
 }
 
-func (a *app) targetGroup() (string, bool) {
-	p := a.nav.page
-	return p.key, p.kind == kindGroup && !a.pageGone(p)
+func (app *app) targetGroup() (string, bool) {
+	current := app.nav.page
+	return current.key, current.kind == kindGroup && !app.pageGone(current)
 }
 
-func (a *app) targetWalk() (string, bool) {
-	p := a.nav.page
-	return p.key, p.kind == kindWalk && !a.pageGone(p)
+func (app *app) targetWalk() (string, bool) {
+	current := app.nav.page
+	return current.key, current.kind == kindWalk && !app.pageGone(current)
 }
 
-func (a *app) targetThread() (string, bool) {
-	id := a.threadID()
-	return id, id != "" && a.rev.Thread(id) != nil
+func (app *app) targetThread() (string, bool) {
+	id := app.threadID()
+	return id, id != "" && app.rev.Thread(id) != nil
 }
 
-func (a *app) targetQuestion() (string, bool) { return "", a.threadID() == "" && a.questionOpen() }
-
-func (a *app) targetQuestionWalk() (string, bool) {
-	_, open := a.targetQuestion()
-	id := a.questionID()
-	return id, open && a.rev.Walk(id) != nil
+func (app *app) targetQuestion() (string, bool) {
+	return "", app.threadID() == "" && app.questionOpen()
 }
 
-func (a *app) targetFeedback() (string, bool) { return "", a.nav.page.kind == kindFeedback }
-
-func (a *app) targetAll() (string, bool) { return "", a.nav.page.kind == kindAll && len(a.files) > 0 }
-
-func (a *app) targetArchived() (string, bool) {
-	p := a.nav.page
-	return p.key, p.kind == kindArchived && !a.pageGone(p)
+func (app *app) targetQuestionWalk() (string, bool) {
+	_, open := app.targetQuestion()
+	id := app.questionID()
+	return id, open && app.rev.Walk(id) != nil
 }
 
-func (a *app) hasFeedback(string) bool {
-	return len(review.ExportedThreads(a.rev, a.exportOptions())) > 0
+func (app *app) targetFeedback() (string, bool) { return "", app.nav.page.kind == kindFeedback }
+
+func (app *app) targetAll() (string, bool) {
+	return "", app.nav.page.kind == kindAll && len(app.files) > 0
+}
+
+func (app *app) targetArchived() (string, bool) {
+	current := app.nav.page
+	return current.key, current.kind == kindArchived && !app.pageGone(current)
+}
+
+func (app *app) hasFeedback(string) bool {
+	return len(review.ExportedThreads(app.rev, app.exportOptions())) > 0
 }
 
 // groupIndex finds the group with the id g, the part of a group page
 // key, and reports whether the group exists.
-func (a *app) groupIndex(g string) (int, bool) {
-	a.groups()
-	i := slices.Index(a.grouped.ids, g)
-	return i, i >= 0
+func (app *app) groupIndex(groupID string) (int, bool) {
+	app.groups()
+	index := slices.Index(app.grouped.ids, groupID)
+	return index, index >= 0
 }
 
 // groupFiles are the files of the group with the id g, nil for none.
-func (a *app) groupFiles(g string) []string {
-	i, ok := a.groupIndex(g)
+func (app *app) groupFiles(groupID string) []string {
+	index, ok := app.groupIndex(groupID)
 	if !ok {
 		return nil
 	}
-	return a.groups()[i].Files
+	return app.groups()[index].Files
 }
 
-func (a *app) groupViewed(g string) bool {
-	for _, f := range a.groupFiles(g) {
-		if !a.rev.Viewed[f] {
+func (app *app) groupViewed(groupID string) bool {
+	for _, f := range app.groupFiles(groupID) {
+		if !app.rev.Viewed[f] {
 			return false
 		}
 	}
 	return true
 }
 
-func (a *app) allViewed() bool {
-	for _, f := range a.files {
-		if !a.rev.Viewed[f.Path] {
+func (app *app) allViewed() bool {
+	for _, f := range app.files {
+		if !app.rev.Viewed[f.Path] {
 			return false
 		}
 	}
 	return true
 }
 
-func (a *app) selectedLines(f string) (editor.DiffLineRange, bool) {
-	d := a.diffs[f]
-	if d == nil || d.state == nil {
+func (app *app) selectedLines(file string) (editor.DiffLineRange, bool) {
+	diff := app.diffs[file]
+	if diff == nil || diff.state == nil {
 		return editor.DiffLineRange{}, false
 	}
-	return d.state.SelectedLines()
+	return diff.state.SelectedLines()
 }
 
-func (a *app) setResolved(id string, resolved bool) {
-	a.rev.Thread(id).Resolved = resolved
-	a.saveReview()
+func (app *app) setResolved(id string, resolved bool) {
+	app.rev.Thread(id).Resolved = resolved
+	app.saveReview()
 }
 
-func (a *app) setExcluded(id string, excluded bool) {
-	a.rev.Thread(id).Excluded = excluded
-	a.saveReview()
+func (app *app) setExcluded(id string, excluded bool) {
+	app.rev.Thread(id).Excluded = excluded
+	app.saveReview()
 }
 
-func (a *app) deleteThread(id string) {
-	a.runner.stop(a.rev, id)
-	a.rev.DeleteThread(id)
-	a.panel = nil
-	a.saveReview()
+func (app *app) deleteThread(id string) {
+	app.runner.stop(app.rev, id)
+	app.rev.DeleteThread(id)
+	app.panel = nil
+	app.saveReview()
 }
 
-func (a *app) setUnified(on bool) {
-	a.cfg.Unified = on
-	a.saveConfig()
+func (app *app) setUnified(on bool) {
+	app.cfg.Unified = on
+	app.saveConfig()
 }
 
-func (a *app) setFlatFiles(on bool) {
-	a.cfg.FlatFiles = on
-	a.saveConfig()
+func (app *app) setFlatFiles(on bool) {
+	app.cfg.FlatFiles = on
+	app.saveConfig()
 }
 
-func (a *app) setHideViewed(on bool) {
-	a.cfg.HideViewed = on
-	a.saveConfig()
+func (app *app) setHideViewed(on bool) {
+	app.cfg.HideViewed = on
+	app.saveConfig()
 }

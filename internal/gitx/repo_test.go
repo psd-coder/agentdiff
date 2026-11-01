@@ -21,15 +21,15 @@ func TestOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{tr.dir, filepath.Join(tr.dir, "sub", "dir"), filepath.Join(tr.dir, "sub", "dir", "file.txt")} {
-		r, err := Open(path)
+		repo, err := Open(path)
 		if err != nil {
 			t.Fatalf("Open(%q): %v", path, err)
 		}
-		if r.Root != want {
-			t.Errorf("Open(%q).Root = %q, want %q", path, r.Root, want)
+		if repo.Root != want {
+			t.Errorf("Open(%q).Root = %q, want %q", path, repo.Root, want)
 		}
-		if r.Name() != filepath.Base(want) {
-			t.Errorf("Name() = %q", r.Name())
+		if repo.Name() != filepath.Base(want) {
+			t.Errorf("Name() = %q", repo.Name())
 		}
 	}
 }
@@ -57,15 +57,15 @@ func TestOpenWithoutGit(t *testing.T) {
 
 func TestUnbornRepo(t *testing.T) {
 	ctx := t.Context()
-	r := newTestRepo(t).open()
-	if r.HasHead(ctx) {
+	repo := newTestRepo(t).open()
+	if repo.HasHead(ctx) {
 		t.Error("HasHead() = true in a repo without commits")
 	}
-	branch, err := r.CurrentBranch(ctx)
+	branch, err := repo.CurrentBranch(ctx)
 	if err != nil || branch != "main" {
 		t.Errorf("CurrentBranch() = %q, %v", branch, err)
 	}
-	log, err := r.CommitLog(ctx, "", "")
+	log, err := repo.CommitLog(ctx, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,10 +73,10 @@ func TestUnbornRepo(t *testing.T) {
 	if err != nil || commits == nil || len(commits) != 0 {
 		t.Errorf("Page() = %#v, %v, want empty slice", commits, err)
 	}
-	if n, err := log.Count(ctx); n != 0 || err != nil {
-		t.Errorf("Count() = %d, %v, want 0", n, err)
+	if count, err := log.Count(ctx); count != 0 || err != nil {
+		t.Errorf("Count() = %d, %v, want 0", count, err)
 	}
-	if base := r.DefaultBase(ctx); base != "" {
+	if base := repo.DefaultBase(ctx); base != "" {
 		t.Errorf("DefaultBase() = %q, want empty", base)
 	}
 }
@@ -88,15 +88,15 @@ func TestBranchesAndDefaultBase(t *testing.T) {
 	remote.commit("init")
 	remote.git("branch", "release")
 
-	tr := &testRepo{t: t, dir: filepath.Join(t.TempDir(), "clone")}
+	tr := &testRepo{currentTest: t, dir: filepath.Join(t.TempDir(), "clone")}
 	if err := os.MkdirAll(tr.dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	tr.git("clone", "-q", remote.dir, ".")
 	tr.git("checkout", "-q", "-b", "feature")
-	r := tr.open()
+	repo := tr.open()
 
-	branches, err := r.Branches(ctx)
+	branches, err := repo.Branches(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,15 +104,15 @@ func TestBranchesAndDefaultBase(t *testing.T) {
 	if !slices.Equal(branches, want) {
 		t.Errorf("Branches() = %q, want %q", branches, want)
 	}
-	if base := r.DefaultBase(ctx); base != "origin/main" {
+	if base := repo.DefaultBase(ctx); base != "origin/main" {
 		t.Errorf("DefaultBase() = %q, want origin/main", base)
 	}
-	if branch, _ := r.CurrentBranch(ctx); branch != "feature" {
+	if branch, _ := repo.CurrentBranch(ctx); branch != "feature" {
 		t.Errorf("CurrentBranch() = %q, want feature", branch)
 	}
 
 	tr.git("checkout", "-q", "--detach")
-	if branch, err := r.CurrentBranch(ctx); err != nil || branch != "" {
+	if branch, err := repo.CurrentBranch(ctx); err != nil || branch != "" {
 		t.Errorf("CurrentBranch() detached = %q, %v", branch, err)
 	}
 }
@@ -128,7 +128,7 @@ func TestDefaultBaseLocal(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.branch, func(t *testing.T) {
-			tr := &testRepo{t: t, dir: t.TempDir()}
+			tr := &testRepo{currentTest: t, dir: t.TempDir()}
 			tr.git("init", "-q", "-b", tt.branch)
 			tr.commit("init")
 			if got := tr.open().DefaultBase(t.Context()); got != tt.want {
@@ -150,7 +150,7 @@ func TestCommits(t *testing.T) {
 	third := tr.commit("third")
 	tr.write("b.txt", "bb\n")
 	fourth := tr.commit("fourth")
-	r := tr.open()
+	repo := tr.open()
 
 	tests := []struct {
 		name        string
@@ -168,7 +168,7 @@ func TestCommits(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			log, err := r.CommitLog(ctx, tt.base, "")
+			log, err := repo.CommitLog(ctx, tt.base, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -178,7 +178,7 @@ func TestCommits(t *testing.T) {
 		})
 	}
 
-	log, err := r.CommitLog(ctx, "", "")
+	log, err := repo.CommitLog(ctx, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,20 +186,20 @@ func TestCommits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := commits[2]
-	if c.Subject != "second" || c.Body != "second body\nline two" {
-		t.Errorf("subject %q, body %q", c.Subject, c.Body)
+	commit := commits[2]
+	if commit.Subject != "second" || commit.Body != "second body\nline two" {
+		t.Errorf("subject %q, body %q", commit.Subject, commit.Body)
 	}
-	if c.Author != "Test Author" || c.Short != second[:len(c.Short)] || len(c.Short) < 7 {
-		t.Errorf("author %q, short %q", c.Author, c.Short)
+	if commit.Author != "Test Author" || commit.Short != second[:len(commit.Short)] || len(commit.Short) < 7 {
+		t.Errorf("author %q, short %q", commit.Author, commit.Short)
 	}
-	if !c.Time.Equal(time.Date(2026, 1, 1, 0, 0, 2, 0, time.UTC)) {
-		t.Errorf("time %v", c.Time)
+	if !commit.Time.Equal(time.Date(2026, 1, 1, 0, 0, 2, 0, time.UTC)) {
+		t.Errorf("time %v", commit.Time)
 	}
-	if _, err := r.CommitLog(ctx, "no-such-branch", ""); err == nil {
+	if _, err := repo.CommitLog(ctx, "no-such-branch", ""); err == nil {
 		t.Error("CommitLog with unknown base succeeded")
 	}
-	if _, err := r.CommitLog(ctx, "--all", ""); err == nil {
+	if _, err := repo.CommitLog(ctx, "--all", ""); err == nil {
 		t.Error("CommitLog with option-like base succeeded")
 	}
 }
@@ -211,8 +211,8 @@ func TestCommit(t *testing.T) {
 	sha := tr.commit("Subject line\n\nFirst body line\nsecond body line")
 	tr.write("a.txt", "2\n")
 	tr.commit("later")
-	r := tr.open()
-	got, err := r.Commit(ctx, "HEAD~1")
+	repo := tr.open()
+	got, err := repo.Commit(ctx, "HEAD~1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestCommit(t *testing.T) {
 		t.Errorf("Commit = %+v", got)
 	}
 	for _, ref := range []string{"nope", "--all"} {
-		if _, err := r.Commit(ctx, ref); err == nil {
+		if _, err := repo.Commit(ctx, ref); err == nil {
 			t.Errorf("Commit(%q) succeeded", ref)
 		}
 	}
@@ -238,8 +238,8 @@ func TestCommitLogKeepsItsCommits(t *testing.T) {
 	for i := range 5 {
 		want = append([]string{tr.commit(fmt.Sprint("work ", i))}, want...)
 	}
-	r := tr.open()
-	log, err := r.CommitLog(ctx, "main", "")
+	repo := tr.open()
+	log, err := repo.CommitLog(ctx, "main", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,15 +250,15 @@ func TestCommitLogKeepsItsCommits(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("pages = %q, want %q", got, want)
 	}
-	if n, err := log.Count(ctx); n != 5 || err != nil {
-		t.Errorf("Count() = %d, %v, want 5", n, err)
+	if count, err := log.Count(ctx); count != 5 || err != nil {
+		t.Errorf("Count() = %d, %v, want 5", count, err)
 	}
-	log, err = r.CommitLog(ctx, "main", "")
+	log, err = repo.CommitLog(ctx, "main", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, err := log.Count(ctx); n != 6 || err != nil {
-		t.Errorf("Count() of a new log = %d, %v, want 6", n, err)
+	if count, err := log.Count(ctx); count != 6 || err != nil {
+		t.Errorf("Count() of a new log = %d, %v, want 6", count, err)
 	}
 }
 
@@ -291,18 +291,18 @@ func TestCommonDirOfLinkedWorktree(t *testing.T) {
 	tr.commit("first")
 	other := filepath.Join(t.TempDir(), "wt")
 	tr.git("worktree", "add", "-q", "-b", "agent", other)
-	r, err := Open(other)
+	repo, err := Open(other)
 	if err != nil {
 		t.Fatal(err)
 	}
-	common, err := r.CommonDir(ctx)
+	common, err := repo.CommonDir(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := filepath.Join(mustEval(t, tr.dir), ".git"); mustEval(t, common) != want {
 		t.Errorf("CommonDir = %q, want %q", common, want)
 	}
-	gitDir, err := r.GitDir(ctx)
+	gitDir, err := repo.GitDir(ctx)
 	if err != nil || mustEval(t, gitDir) == mustEval(t, common) {
 		t.Errorf("GitDir = %q, %v: same as the common dir", gitDir, err)
 	}
@@ -337,21 +337,21 @@ func TestOtherBranch(t *testing.T) {
 	third := tr.commit("feature work")
 	tr.git("checkout", "-q", "main")
 	tr.write("a.txt", "dirty\n")
-	r := tr.open()
+	repo := tr.open()
 
-	log, err := r.CommitLog(ctx, "main", "feature")
+	log, err := repo.CommitLog(ctx, "main", "feature")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := pageSHAs(t, log, 0, 10); !slices.Equal(got, []string{third}) {
 		t.Fatalf("Page() of main..feature = %q", got)
 	}
-	if _, err := r.CommitLog(ctx, "", "no-such-branch"); err == nil {
+	if _, err := repo.CommitLog(ctx, "", "no-such-branch"); err == nil {
 		t.Error("CommitLog with unknown head succeeded")
 	}
 
-	s := Scope{Kind: ScopeBranch, Base: "main", Head: "feature"}
-	snap := snapshot(t, r, s)
+	scope := Scope{Kind: ScopeBranch, Base: "main", Head: "feature"}
+	snap := snapshot(t, repo, scope)
 	changes, err := snap.Changes(ctx)
 	if err != nil || len(changes) != 1 || changes[0].Path != "b.txt" {
 		t.Fatalf("Changes = %+v, %v", changes, err)
@@ -360,11 +360,11 @@ func TestOtherBranch(t *testing.T) {
 	if err != nil || newText != "feature\n" {
 		t.Errorf("Contents = %q, %v", newText, err)
 	}
-	if s.Key() == (Scope{Kind: ScopeBranch, Base: "main"}).Key() {
+	if scope.Key() == (Scope{Kind: ScopeBranch, Base: "main"}).Key() {
 		t.Error("a branch scope with a head shares its key with the current branch's")
 	}
-	if s.Label() != "feature vs main" || !strings.Contains(s.Describe(), "git show feature:<path>") {
-		t.Errorf("label %q, describe %q", s.Label(), s.Describe())
+	if scope.Label() != "feature vs main" || !strings.Contains(scope.Describe(), "git show feature:<path>") {
+		t.Errorf("label %q, describe %q", scope.Label(), scope.Describe())
 	}
 }
 
@@ -387,9 +387,9 @@ func TestWorktrees(t *testing.T) {
 	}
 }
 
-func mustEval(t *testing.T, p string) string {
+func mustEval(t *testing.T, path string) string {
 	t.Helper()
-	got, err := filepath.EvalSymlinks(p)
+	got, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,10 +401,10 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	tr.write("a.txt", "one\ntwo\n")
 	tr.write("old.txt", "old\n")
 	tr.commit("init")
-	r := tr.open()
+	repo := tr.open()
 	ctx := t.Context()
 	uncommitted := Scope{Kind: ScopeUncommitted}
-	if fp, err := snapshot(t, r, uncommitted).Fingerprint(ctx); err != nil || fp.Patch != "" || len(fp.Files) != 0 {
+	if fp, err := snapshot(t, repo, uncommitted).Fingerprint(ctx); err != nil || fp.Patch != "" || len(fp.Files) != 0 {
 		t.Fatalf("clean tree: %+v, err %v", fp, err)
 	}
 	tr.write("a.txt", "one\nTWO\nthree\n")
@@ -413,7 +413,7 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 	if err := os.Remove(filepath.Join(tr.dir, "old.txt")); err != nil {
 		t.Fatal(err)
 	}
-	before, err := snapshot(t, r, uncommitted).Fingerprint(ctx)
+	before, err := snapshot(t, repo, uncommitted).Fingerprint(ctx)
 	if err != nil || before.Patch == "" {
 		t.Fatalf("uncommitted: %+v, err %v", before, err)
 	}
@@ -424,17 +424,17 @@ func TestFingerprintFollowsCommit(t *testing.T) {
 		t.Errorf("binary file missing: %v", before.Files)
 	}
 	sha := tr.commit("change")
-	after, err := snapshot(t, r, Scope{Kind: ScopeCommit, Commit: sha}).Fingerprint(ctx)
+	after, err := snapshot(t, repo, Scope{Kind: ScopeCommit, Commit: sha}).Fingerprint(ctx)
 	if err != nil || after.Patch != before.Patch || !maps.Equal(after.Files, before.Files) {
 		t.Errorf("commit %+v, uncommitted %+v, err %v", after, before, err)
 	}
-	ids, err := r.CommitPatchIDs(ctx, "", "", 10)
+	ids, err := repo.CommitPatchIDs(ctx, "", "", 10)
 	if err != nil || ids[before.Patch] != sha {
 		t.Errorf("commit ids = %v, err %v", ids, err)
 	}
 	tr.write("a.txt", "again\n")
 	again := tr.commit("again")
-	got, err := r.CommitsWithFiles(ctx, map[string][]string{
+	got, err := repo.CommitsWithFiles(ctx, map[string][]string{
 		"both": {"a.txt", "dir/new file.txt"}, "old": {"old.txt"}, "a": {"a.txt"}, "nope": {"a.txt", "nope"}, "empty": nil,
 	}, 10)
 	want := map[string]string{"both": sha, "old": sha, "a": again}
@@ -449,18 +449,18 @@ func TestFingerprintIgnoresDiffPrefixConfig(t *testing.T) {
 			tr := newTestRepo(t)
 			tr.write("a.txt", "one\ntwo\n")
 			tr.commit("init")
-			r := tr.open()
+			repo := tr.open()
 			ctx := t.Context()
 			uncommitted := Scope{Kind: ScopeUncommitted}
 			tr.write("a.txt", "one\nTWO\n")
 			tr.write("dir/new file.txt", "new\n")
 			tr.write("pic.bin", "\x00\x01")
-			want, err := snapshot(t, r, uncommitted).Fingerprint(ctx)
+			want, err := snapshot(t, repo, uncommitted).Fingerprint(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
 			tr.git("config", key, "true")
-			got, err := snapshot(t, r, uncommitted).Fingerprint(ctx)
+			got, err := snapshot(t, repo, uncommitted).Fingerprint(ctx)
 			if err != nil || got.Patch != want.Patch || !maps.Equal(got.Files, want.Files) {
 				t.Fatalf("with %s %+v, without %+v, err %v", key, got, want, err)
 			}
@@ -470,7 +470,7 @@ func TestFingerprintIgnoresDiffPrefixConfig(t *testing.T) {
 				}
 			}
 			sha := tr.commit("change")
-			ids, err := r.CommitPatchIDs(ctx, "", "", 10)
+			ids, err := repo.CommitPatchIDs(ctx, "", "", 10)
 			if err != nil || ids[want.Patch] != sha {
 				t.Errorf("commit ids = %v, want %s for %s, err %v", ids, sha, want.Patch, err)
 			}

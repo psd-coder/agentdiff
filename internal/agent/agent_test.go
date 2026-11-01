@@ -25,9 +25,9 @@ func TestReadOnlyRules(t *testing.T) {
 	}
 }
 
-func TestMain(m *testing.M) {
+func TestMain(suite *testing.M) {
 	loginEnv = os.Environ
-	os.Exit(m.Run())
+	os.Exit(suite.Run())
 }
 
 var claudeShared = append([]string{
@@ -149,13 +149,13 @@ func TestStdinText(t *testing.T) {
 }
 
 func TestTailBuffer(t *testing.T) {
-	b := &tailBuffer{max: 5}
+	buffer := &tailBuffer{max: 5}
 	for _, s := range []string{"ab", "cdef", "", "ghijklmn"} {
-		if _, err := b.Write([]byte(s)); err != nil {
+		if _, err := buffer.Write([]byte(s)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got := b.String(); got != "jklmn" {
+	if got := buffer.String(); got != "jklmn" {
 		t.Errorf("tail = %q", got)
 	}
 }

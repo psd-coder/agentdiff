@@ -52,24 +52,24 @@ func TestCodeThemeNamedFallsBackToGitHub(t *testing.T) {
 }
 
 func TestCodeThemeSetting(t *testing.T) {
-	a := newTestApp(t)
-	tt := ui.NewTester(a.view, 1300, 800)
-	a.openSettings()
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
+	app.openSettings()
 	tt.Frame()
-	a.settings.codeTheme = "Dracula"
+	app.settings.codeTheme = "Dracula"
 	tt.Frame()
-	if got := a.store.LoadConfig().CodeTheme; got != "Dracula" {
+	if got := app.store.LoadConfig().CodeTheme; got != "Dracula" {
 		t.Errorf("saved code theme = %q, want Dracula", got)
 	}
 	tt.Frame()
 	want := ui.Hex("#282a36")
-	if a.codeColors.Background != want || a.md.Theme.CodeBlockBackground != want {
-		t.Errorf("diff background %v, code block %v, want %v", a.codeColors.Background, a.md.Theme.CodeBlockBackground, want)
+	if app.codeColors.Background != want || app.md.Theme.CodeBlockBackground != want {
+		t.Errorf("diff background %v, code block %v, want %v", app.codeColors.Background, app.md.Theme.CodeBlockBackground, want)
 	}
 
-	a.settings.codeTheme = "GitHub"
+	app.settings.codeTheme = "GitHub"
 	tt.Frame()
-	if got := a.store.LoadConfig().CodeTheme; got != "" {
+	if got := app.store.LoadConfig().CodeTheme; got != "" {
 		t.Errorf("saved code theme = %q, want the default", got)
 	}
 }

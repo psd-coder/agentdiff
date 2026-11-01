@@ -8,139 +8,139 @@ import (
 )
 
 // startRecording records the next keys pressed as the command's shortcut.
-func (a *app) startRecording(id string) {
-	a.recording, a.recordStart, a.keysNote = id, true, ""
+func (app *app) startRecording(id string) {
+	app.recording, app.recordStart, app.keysNote = id, true, ""
 }
 
 // recordKeys ends the recording with keys, unless something the user
 // cannot change takes them.
-func (a *app) recordKeys(keys string) {
-	cm := a.cmd(a.recording)
-	a.recording = ""
-	switch as := a.keymap().assign(cm.id, keys); as.kind {
+func (app *app) recordKeys(keys string) {
+	cm := app.cmd(app.recording)
+	app.recording = ""
+	switch as := app.keymap().assign(cm.id, keys); as.kind {
 	case assignUnchanged:
 		return
 	case assignTaken:
-		a.keysNote = keyLabel(keys) + " is taken by " + as.other + ", which you cannot change."
+		app.keysNote = keyLabel(keys) + " is taken by " + as.other + ", which you cannot change."
 		return
 	case assignMoved:
-		a.keysNote = keyLabel(keys) + " moved from " + a.cmd(as.other).title + " to " + cm.title + "."
+		app.keysNote = keyLabel(keys) + " moved from " + app.cmd(as.other).title + " to " + cm.title + "."
 	default:
-		a.keysNote = ""
+		app.keysNote = ""
 	}
-	a.keysChanged()
+	app.keysChanged()
 }
 
 // keyInput records a key pressed with Command or Control. Escape cancels,
 // and other keys, as Tab, do what they do.
-func (a *app) keyInput(ev ui.InputEvent) bool {
+func (app *app) keyInput(ev ui.InputEvent) bool {
 	if ev.Kind != ui.InputKeyDown {
 		return false
 	}
 	mods := ev.Mods & (ui.Ctrl | ui.Alt | ui.Shift | ui.Cmd)
 	switch {
 	case ev.Key == ui.KeyEscape && mods == 0:
-		a.recording = ""
+		app.recording = ""
 		return true
 	case mods&(ui.Cmd|ui.Ctrl) == 0:
 		return false
 	}
 	if keys := accelerator(mods, ev.Key); keys != "" {
-		a.recordKeys(keys)
+		app.recordKeys(keys)
 	}
 	return true
 }
 
 // shortcutsTab lists the commands with their shortcuts, which a click
 // on the keys records anew.
-func (a *app) shortcutsTab(c *ui.Context) {
-	t := c.Theme()
-	q := strings.ToLower(strings.TrimSpace(a.keysFilter))
+func (app *app) shortcutsTab(ctx *ui.Context) {
+	theme := ctx.Theme()
+	filter := strings.ToLower(strings.TrimSpace(app.keysFilter))
 	var cmds []*command
-	for _, cm := range a.cachedCommands() {
-		if strings.Contains(strings.ToLower(cm.title), q) || q != "" && strings.Contains(strings.ToLower(keyLabel(a.keymap().of(cm.id))), q) {
+	for _, cm := range app.cachedCommands() {
+		if strings.Contains(strings.ToLower(cm.title), filter) || filter != "" && strings.Contains(strings.ToLower(keyLabel(app.keymap().of(cm.id))), filter) {
 			cmds = append(cmds, cm)
 		}
 	}
 	slices.SortFunc(cmds, func(x, y *command) int { return strings.Compare(x.title, y.title) })
-	ui.Text(c, "Click a shortcut and press the new keys, with ⌘ or ⌃. Escape cancels. A shortcut another command has moves to this one.").FontSize(12).TextColor(t.TextMuted)
-	ui.TextInput(c, &a.keysFilter).Placeholder("Filter commands").Label("Filter commands")
-	ui.Scroll(c).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-		ui.Column(c).Gap(2).PaddingEnd(4).Children(func() {
+	ui.Text(ctx, "Click a shortcut and press the new keys, with ⌘ or ⌃. Escape cancels. A shortcut another command has moves to this one.").FontSize(12).TextColor(theme.TextMuted)
+	ui.TextInput(ctx, &app.keysFilter).Placeholder("Filter commands").Label("Filter commands")
+	ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
+		ui.Column(ctx).Gap(2).PaddingEnd(4).Children(func() {
 			for _, cm := range cmds {
-				a.shortcutRow(c.Key(cm.id), cm)
+				app.shortcutRow(ctx.Key(cm.id), cm)
 			}
 			if len(cmds) == 0 {
-				ui.Text(c, "No commands match").FontSize(12).TextColor(t.TextMuted).Padding(6, 0)
+				ui.Text(ctx, "No commands match").FontSize(12).TextColor(theme.TextMuted).Padding(6, 0)
 			}
 		})
 	})
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, a.keysNote).FontSize(12).TextColor(t.TextMuted).Grow(1).Shrink(1)
-		ui.Button(c, "Reset all shortcuts").Disabled(len(a.cfg.Keys) == 0).OnClick(func() {
-			a.keymap().reset()
-			a.keysChanged()
-			a.keysNote = ""
+	ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Text(ctx, app.keysNote).FontSize(12).TextColor(theme.TextMuted).Grow(1).Shrink(1)
+		ui.Button(ctx, "Reset all shortcuts").Disabled(len(app.cfg.Keys) == 0).OnClick(func() {
+			app.keymap().reset()
+			app.keysChanged()
+			app.keysNote = ""
 		})
 	})
 }
 
-func (a *app) shortcutRow(c *ui.Context, cm *command) {
-	t := c.Theme()
-	keys := a.keymap().of(cm.id)
-	changed := a.keymap().changed(cm.id)
-	ui.Row(c).Gap(8).Padding(2, 0).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, strings.TrimSuffix(cm.title, "…")).Grow(1).Shrink(1).SingleLine()
-		if a.recording == cm.id {
-			rec := ui.Row(c).Padding(4, 10).MinWidth(120).Radius(t.Radius).Border(1, t.Accent).Background(t.Surface).
-				Focusable().Label("Press the new shortcut for " + cm.title + ", or Escape to cancel").HandleInput(a.keyInput).
+func (app *app) shortcutRow(ctx *ui.Context, cm *command) {
+	theme := ctx.Theme()
+	keys := app.keymap().of(cm.id)
+	changed := app.keymap().changed(cm.id)
+	ui.Row(ctx).Gap(8).Padding(2, 0).AlignItems(ui.Center).Children(func() {
+		ui.Text(ctx, strings.TrimSuffix(cm.title, "…")).Grow(1).Shrink(1).SingleLine()
+		if app.recording == cm.id {
+			rec := ui.Row(ctx).Padding(4, 10).MinWidth(120).Radius(theme.Radius).Border(1, theme.Accent).Background(theme.Surface).
+				Focusable().Label("Press the new shortcut for " + cm.title + ", or Escape to cancel").HandleInput(app.keyInput).
 				Children(func() {
 					// The modifiers show as they are held, before the key
 					// that ends the recording.
-					if held := modsLabel(c.Modifiers()); held != "" {
-						ui.Text(c, held+"…").Font("monospace").FontSize(12)
+					if held := modsLabel(ctx.Modifiers()); held != "" {
+						ui.Text(ctx, held+"…").Font("monospace").FontSize(12)
 					} else {
-						ui.Text(c, "Press keys…").FontSize(12).TextColor(t.TextMuted)
+						ui.Text(ctx, "Press keys…").FontSize(12).TextColor(theme.TextMuted)
 					}
 				})
 			switch {
-			case a.recordStart:
+			case app.recordStart:
 				rec.Focus()
-				a.recordStart = false
+				app.recordStart = false
 			case !rec.Focused():
 				// The focus moved away: a click elsewhere, or Tab.
-				a.recording = ""
+				app.recording = ""
 			}
 		} else {
 			label := "None"
 			if keys != "" {
 				label = keyLabel(keys)
 			}
-			b := ui.Button(c, label).MinWidth(120).Label("Shortcut for " + cm.title + ": " + label + ". Press to record another")
+			button := ui.Button(ctx, label).MinWidth(120).Label("Shortcut for " + cm.title + ": " + label + ". Press to record another")
 			if keys == "" {
-				b.TextColor(t.TextMuted)
+				button.TextColor(theme.TextMuted)
 			} else {
-				b.Font("monospace")
+				button.Font("monospace")
 			}
-			if b.Clicked() {
-				a.startRecording(cm.id)
+			if button.Clicked() {
+				app.startRecording(cm.id)
 			}
 		}
-		remove := iconButton(c, trashIcon, "Remove the shortcut of "+cm.title, "Remove the shortcut")
+		remove := iconButton(ctx, trashIcon, "Remove the shortcut of "+cm.title, "Remove the shortcut")
 		if keys == "" {
 			remove.Invisible()
 		} else if remove.Clicked() {
-			a.keymap().assign(cm.id, "")
-			a.keysChanged()
-			a.keysNote = ""
+			app.keymap().assign(cm.id, "")
+			app.keysChanged()
+			app.keysNote = ""
 		}
-		reset := ui.Button(c, "Reset").Label("Reset the shortcut of " + cm.title).Tooltip("Back to " + defaultKeysLabel(cm))
+		reset := ui.Button(ctx, "Reset").Label("Reset the shortcut of " + cm.title).Tooltip("Back to " + defaultKeysLabel(cm))
 		if !changed {
 			reset.Invisible()
 		} else if reset.Clicked() {
-			a.keymap().reset(cm.id)
-			a.keysChanged()
-			a.keysNote = ""
+			app.keymap().reset(cm.id)
+			app.keysChanged()
+			app.keysNote = ""
 		}
 	})
 }

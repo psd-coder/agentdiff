@@ -13,72 +13,72 @@ import (
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
-func (a *app) view(c *ui.Context) {
-	a.syncCodeTheme(c)
-	a.runQueued(c)
-	a.updateMenu()
-	if a.repo == nil {
-		a.welcome(c)
+func (app *app) view(ctx *ui.Context) {
+	app.syncCodeTheme(ctx)
+	app.runQueued(ctx)
+	app.updateMenu()
+	if app.repo == nil {
+		app.welcome(ctx)
 		return
 	}
-	t := c.Theme()
-	a.markSeen()
-	a.keys(c)
-	ui.Column(c).Fill().Children(func() {
-		a.toolbar(c)
-		a.saveNotice(c)
-		ui.Split(c, &a.sidebarW, func() { a.sidebar(c) }, func() {
+	theme := ctx.Theme()
+	app.markSeen()
+	app.keys(ctx)
+	ui.Column(ctx).Fill().Children(func() {
+		app.toolbar(ctx)
+		app.saveNotice(ctx)
+		ui.Split(ctx, &app.sidebarW, func() { app.sidebar(ctx) }, func() {
 			var panel func()
-			switch id := a.threadID(); {
-			case id != "" && a.rev.Thread(id) != nil:
-				panel = func() { a.threadPanel(c) }
-			case a.questionOpen():
-				panel = func() { a.questionPanel(c) }
+			switch id := app.threadID(); {
+			case id != "" && app.rev.Thread(id) != nil:
+				panel = func() { app.threadPanel(ctx) }
+			case app.questionOpen():
+				panel = func() { app.questionPanel(ctx) }
 			}
 			var side func()
 			switch {
-			case panel != nil && a.logOpen:
+			case panel != nil && app.logOpen:
 				side = func() {
-					ui.SplitVerticalPercent(c, &a.logPct, panel, func() { a.logPanel(c) }).Fill()
+					ui.SplitVerticalPercent(ctx, &app.logPct, panel, func() { app.logPanel(ctx) }).Fill()
 				}
 			case panel != nil:
 				side = panel
-			case a.logOpen:
-				side = func() { a.logPanel(c) }
+			case app.logOpen:
+				side = func() { app.logPanel(ctx) }
 			default:
-				a.main(c)
+				app.main(ctx)
 				return
 			}
-			ui.SplitPercent(c, &a.mainPct, func() { a.main(c) }, side).Fill()
+			ui.SplitPercent(ctx, &app.mainPct, func() { app.main(ctx) }, side).Fill()
 		}).Grow(1).FillWidth()
-	}).Background(t.Background)
-	a.settingsModal(c)
-	a.compareModal(c)
-	a.shortcutsModal(c)
-	a.paletteModal(c)
+	}).Background(theme.Background)
+	app.settingsModal(ctx)
+	app.compareModal(ctx)
+	app.shortcutsModal(ctx)
+	app.paletteModal(ctx)
 }
 
-func (a *app) sidebar(c *ui.Context) {
-	t := c.Theme()
-	ui.SplitVerticalPercent(c, &a.scopePct, func() {
-		ui.Column(c).Fill().Background(t.Surface).Children(func() {
-			a.scopeList(c)
+func (app *app) sidebar(ctx *ui.Context) {
+	theme := ctx.Theme()
+	ui.SplitVerticalPercent(ctx, &app.scopePct, func() {
+		ui.Column(ctx).Fill().Background(theme.Surface).Children(func() {
+			app.scopeList(ctx)
 		})
 	}, func() {
-		ui.Column(c).Fill().Background(t.Surface).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-			a.scopeHeader(c)
-			a.reviewNav(c)
-			a.fileNav(c)
+		ui.Column(ctx).Fill().Background(theme.Surface).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+			app.scopeHeader(ctx)
+			app.reviewNav(ctx)
+			app.fileNav(ctx)
 		})
 	}).Fill()
 }
 
 // sidebarHeading names a part of a sidebar, above its sections, with the
 // controls end builds after the title, if any.
-func sidebarHeading(c *ui.Context, title string, end func()) {
-	t := c.Theme()
-	ui.Row(c).Gap(6).Padding(10, 8, 4, 8).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, strings.ToUpper(title)).FontSize(10).Bold().LetterSpacing(0.6).TextColor(t.TextMuted).Grow(1).SingleLine()
+func sidebarHeading(ctx *ui.Context, title string, end func()) {
+	theme := ctx.Theme()
+	ui.Row(ctx).Gap(6).Padding(10, 8, 4, 8).AlignItems(ui.Center).Children(func() {
+		ui.Text(ctx, strings.ToUpper(title)).FontSize(10).Bold().LetterSpacing(0.6).TextColor(theme.TextMuted).Grow(1).SingleLine()
 		if end != nil {
 			end()
 		}
@@ -89,78 +89,78 @@ func sidebarHeading(c *ui.Context, title string, end func()) {
 // changes of the branch or range, and its commits. It builds only the
 // rows in view, and reads the next page of commits as the list nears the
 // last one read.
-func (a *app) scopeList(c *ui.Context) {
-	t := c.Theme()
-	s := &a.changeList
-	above := a.changesAbove()
-	if a.commits.scrollTop() {
-		s.ScrollTo(0, ui.Start)
+func (app *app) scopeList(ctx *ui.Context) {
+	theme := ctx.Theme()
+	changeList := &app.changeList
+	above := app.changesAbove()
+	if app.commits.scrollTop() {
+		changeList.ScrollTo(0, ui.Start)
 	}
 	last := -1
-	if first, l := s.Visible(); first <= l {
-		last = l - len(above)
+	if first, lastVisible := changeList.Visible(); first <= lastVisible {
+		last = lastVisible - len(above)
 	}
-	if a.commits.built(last) {
-		a.readCommitPage(last)
+	if app.commits.built(last) {
+		app.readCommitPage(last)
 	}
-	rows := &changeRows{above: above, commits: a.commits.rows, note: a.commitsNote()}
-	chosen := rows.find(a.chosen)
+	rows := &changeRows{above: above, commits: app.commits.rows, note: app.commitsNote()}
+	chosen := rows.find(app.chosen)
 	// The list paints its chosen row in the accent color. As in a
 	// sidebar, the open scope shows so only while the list has the focus,
 	// and in gray without it.
-	focused := s.Handle.Focused(c)
+	focused := changeList.Handle.Focused(ctx)
 	sel := -1
 	if focused {
 		sel = chosen
 	}
-	s.Selected = &sel
-	s.Key = rows.key
-	s.Label = rows.label
-	s.Header = rows.header
-	list := ui.List(c.Key("changes"), s, rows.len()).Fill().Padding(t.Space(2.5), t.Space(2.5)).Gap(t.Space(0.5)).
-		Background(t.Surface).FocusRing(false).Label("Changes")
+	changeList.Selected = &sel
+	changeList.Key = rows.key
+	changeList.Label = rows.label
+	changeList.Header = rows.header
+	list := ui.List(ctx.Key("changes"), changeList, rows.len()).Fill().Padding(theme.Space(2.5), theme.Space(2.5)).Gap(theme.Space(0.5)).
+		Background(theme.Surface).FocusRing(false).Label("Changes")
 	ring := list.FocusVisible()
 	list.Rows(func(lr ui.ListRow) {
-		i := lr.Index
+		index := lr.Index
 		look := plainItem
 		switch {
 		case lr.Selected() && ring:
 			look = ringedItem
 		case lr.Selected():
 			look = accentItem
-		case !focused && i == chosen:
+		case !focused && index == chosen:
 			look = grayItem
 		}
-		switch k := rows.kind(i); {
-		case k == headingRow:
-			ui.Column(c).Background(t.Surface).Children(func() { sidebarHeading(c, rows.label(i), nil) })
-		case k == sectionRow:
-			ui.Row(c).Padding(t.Space(4), t.Space(2), t.Space(1), t.Space(2)).Background(t.Surface).Children(func() {
-				ui.Text(c, rows.label(i)).FontSize(t.FontSize - 1).FontWeight(600).TextColor(t.TextMuted).Grow(1).SingleLine()
+		switch kind := rows.kind(index); {
+		case kind == headingRow:
+			ui.Column(ctx).Background(theme.Surface).Children(func() { sidebarHeading(ctx, rows.label(index), nil) })
+		case kind == sectionRow:
+			ui.Row(ctx).Padding(theme.Space(4), theme.Space(2), theme.Space(1), theme.Space(2)).Background(theme.Surface).Children(func() {
+				ui.Text(ctx, rows.label(index)).FontSize(theme.FontSize - 1).FontWeight(600).TextColor(theme.TextMuted).Grow(1).SingleLine()
 			})
-		case k == noteRow && a.commits.err != "" && len(rows.commits) > 0:
-			ui.Column(c).Gap(4).Padding(4, 8).Children(func() {
-				ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.Danger).Selectable()
-				textLink(c, "Try again", func(e ui.Element) { e.FontSize(12) }).AlignSelf(ui.Start).
-					OnClick(func() { a.readCommitPage(a.commits.failedAt) })
+		case kind == noteRow && app.commits.err != "" && len(rows.commits) > 0:
+			ui.Column(ctx).Gap(4).Padding(4, 8).Children(func() {
+				ui.Text(ctx, rows.label(index)).FontSize(12).TextColor(theme.Danger).Selectable()
+				textLink(ctx, "Try again", func(e ui.Element) { e.FontSize(12) }).AlignSelf(ui.Start).
+					OnClick(func() { app.readCommitPage(app.commits.failedAt) })
 			})
-		case k == noteRow && a.commits.err != "":
-			ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.Danger).Padding(4, 8).Selectable()
-		case k == noteRow:
-			ui.Text(c, rows.label(i)).FontSize(12).TextColor(t.TextMuted).Padding(4, 8)
-		case k == commitRow:
-			cm := rows.commit(i)
-			changeItem(c, commitIcon, cm.Subject, look, func() {
-				s, _ := rows.scope(i)
-				a.scopeMark(c, s)
-				ui.Text(c, age(cm.Time)).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		case kind == noteRow && app.commits.err != "":
+			ui.Text(ctx, rows.label(index)).FontSize(12).TextColor(theme.Danger).Padding(4, 8).Selectable()
+		case kind == noteRow:
+			ui.Text(ctx, rows.label(index)).FontSize(12).TextColor(theme.TextMuted).Padding(4, 8)
+		case kind == commitRow:
+			cm := rows.commit(index)
+			changeItem(ctx, commitIcon, cm.Subject, look, func() {
+				commitScope, _ := rows.scope(index)
+				app.scopeMark(ctx, commitScope)
+				ui.Text(ctx, age(cm.Time)).FontSize(11).TextColor(theme.TextMuted).SingleLine()
 			}).Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04"))
 		default:
-			row := rows.above[i]
-			item := changeItem(c, row.icon, row.text, look, func() {
-				a.scopeMark(c, row.scope)
+			row := rows.above[index]
+			item := changeItem(ctx, row.icon, row.text, look, func() {
+				app.scopeMark(ctx, row.scope)
 				if row.badge != "" {
-					ui.Badge(c, row.badge)
+					ui.Badge(ctx, row.badge)
 				}
 			})
 			if row.tooltip != "" {
@@ -168,10 +168,10 @@ func (a *app) scopeList(c *ui.Context) {
 			}
 		}
 	})
-	a.takeFocus(list, "changes")
+	app.takeFocus(list, "changes")
 	if list.Changed() && sel >= 0 {
-		if scope, ok := rows.scope(sel); ok && scope.Key() != a.chosen.Key() {
-			a.setScope(scope)
+		if scope, ok := rows.scope(sel); ok && scope.Key() != app.chosen.Key() {
+			app.setScope(scope)
 		}
 	}
 }
@@ -179,72 +179,72 @@ func (a *app) scopeList(c *ui.Context) {
 // scopeMark shows in the row of scope s in the list of changes what its
 // review has new: a spinner while the agent writes the overview, and a dot
 // while a run ended that the user did not see.
-func (a *app) scopeMark(c *ui.Context, s gitx.Scope) {
-	t := c.Theme()
-	rev := a.reviews.Kept(a.repo.Root, s)
+func (app *app) scopeMark(ctx *ui.Context, scope gitx.Scope) {
+	theme := ctx.Theme()
+	rev := app.reviews.Kept(app.repo.Root, scope)
 	if rev == nil {
 		return
 	}
-	ov := a.targets.state(rev, review.TargetOverview)
+	ov := app.targets.state(rev, review.TargetOverview)
 	switch {
 	case ov.status == targetRunning:
-		ui.Spinner(c).Size(12, 12).Tooltip("Writing the overview")
+		ui.Spinner(ctx).Size(12, 12).Tooltip("Writing the overview")
 	case ov.unseen && ov.status == targetFailed:
-		unseenDot(c, t.Danger, "The overview failed")
+		unseenDot(ctx, theme.Danger, "The overview failed")
 	case ov.unseen:
-		unseenDot(c, t.Accent, "The overview is ready")
-	case a.targets.unseenIn(rev):
-		unseenDot(c, t.Accent, "New answers")
+		unseenDot(ctx, theme.Accent, "The overview is ready")
+	case app.targets.unseenIn(rev):
+		unseenDot(ctx, theme.Accent, "New answers")
 	}
 }
 
-func unseenDot(c *ui.Context, color ui.Color, tip string) {
-	ui.Box(c).Size(8, 8).Radius(4).Background(color).Tooltip(tip)
+func unseenDot(ctx *ui.Context, color ui.Color, tip string) {
+	ui.Box(ctx).Size(8, 8).Radius(4).Background(color).Tooltip(tip)
 }
 
 // targetMark shows the state of a run target in a row that links to it:
 // a spinner while the agent writes it, "failed" or "stopped" when its
 // latest answer did not come, and a dot while the user did not see the end
 // of its run.
-func targetMark(c *ui.Context, s targetState) {
-	t := c.Theme()
-	switch s.status {
+func targetMark(ctx *ui.Context, state targetState) {
+	theme := ctx.Theme()
+	switch state.status {
 	case targetQueued, targetRunning:
-		ui.Spinner(c).Size(12, 12)
+		ui.Spinner(ctx).Size(12, 12)
 		return
 	case targetFailed:
-		ui.Text(c, "failed").FontSize(11).TextColor(t.Danger)
+		ui.Text(ctx, "failed").FontSize(11).TextColor(theme.Danger)
 	case targetStopped:
-		ui.Text(c, "stopped").FontSize(11).TextColor(t.TextMuted)
+		ui.Text(ctx, "stopped").FontSize(11).TextColor(theme.TextMuted)
 	case targetIdle, targetAnswered:
 	}
-	if s.unseen {
-		unseenDot(c, t.Accent, "New answer")
+	if state.unseen {
+		unseenDot(ctx, theme.Accent, "New answer")
 	}
 }
 
 // errorText shows why an answer did not come: the agent's error, or
 // Stopped in gray for a run the user stopped.
-func errorText(c *ui.Context, err string) {
-	t := c.Theme()
+func errorText(ctx *ui.Context, err string) {
+	theme := ctx.Theme()
 	if err == review.Stopped {
-		ui.Text(c, err).FontSize(12).TextColor(t.TextMuted)
+		ui.Text(ctx, err).FontSize(12).TextColor(theme.TextMuted)
 		return
 	}
-	ui.Text(c, err).FontSize(12).TextColor(t.Danger).Selectable()
+	ui.Text(ctx, err).FontSize(12).TextColor(theme.Danger).Selectable()
 }
 
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
-func failureBox(c *ui.Context, err string) {
-	t := c.Theme()
+func failureBox(ctx *ui.Context, err string) {
+	theme := ctx.Theme()
 	if err == review.Stopped {
-		errorText(c, err)
+		errorText(ctx, err)
 		return
 	}
-	ui.Column(c).Gap(4).Padding(12).Radius(8).Border(1, t.Danger).Children(func() {
-		ui.Text(c, "The agent failed").Bold().TextColor(t.Danger)
-		ui.Text(c, err).FontSize(12).Font("monospace").Selectable()
+	ui.Column(ctx).Gap(4).Padding(12).Radius(8).Border(1, theme.Danger).Children(func() {
+		ui.Text(ctx, "The agent failed").Bold().TextColor(theme.Danger)
+		ui.Text(ctx, err).FontSize(12).Font("monospace").Selectable()
 	})
 }
 
@@ -263,25 +263,25 @@ const (
 
 // changeItem builds a row that opens a scope, in the look of a sidebar
 // item: the icon, the label, then what end builds.
-func changeItem(c *ui.Context, icon *ui.SVG, label string, look itemLook, end func()) ui.Element {
-	t := c.Theme()
-	iconColor := t.Accent
-	item := ui.Row(c).AlignItems(ui.Center).Gap(t.Space(2)).Padding(t.Space(1.5), t.Space(2)).Radius(t.Radius)
+func changeItem(ctx *ui.Context, icon *ui.SVG, label string, look itemLook, end func()) ui.Element {
+	theme := ctx.Theme()
+	iconColor := theme.Accent
+	item := ui.Row(ctx).AlignItems(ui.Center).Gap(theme.Space(2)).Padding(theme.Space(1.5), theme.Space(2)).Radius(theme.Radius)
 	switch look {
 	case ringedItem:
 		item.DrawOver(func(p *ui.Painter, r ui.Rect) {
-			p.FocusRing(r, [4]float32{t.Radius, t.Radius, t.Radius, t.Radius})
+			p.FocusRing(r, [4]float32{theme.Radius, theme.Radius, theme.Radius, theme.Radius})
 		})
 		fallthrough
 	case accentItem:
-		iconColor = t.AccentText
+		iconColor = theme.AccentText
 	case grayItem:
-		item.Background(t.SurfacePressed)
+		item.Background(theme.SurfacePressed)
 	case plainItem:
 	}
 	return item.Children(func() {
-		ui.Icon(c, icon).FontSize(16).TextColor(iconColor)
-		ui.Text(c, label).Grow(1).SingleLine()
+		ui.Icon(ctx, icon).FontSize(16).TextColor(iconColor)
+		ui.Text(ctx, label).Grow(1).SingleLine()
 		end()
 	})
 }
@@ -309,26 +309,26 @@ type changeRow struct {
 }
 
 // changesAbove are the rows of the list of changes above the commits.
-func (a *app) changesAbove() []changeRow {
+func (app *app) changesAbove() []changeRow {
 	rows := []changeRow{{kind: headingRow, text: "Changes"}}
-	if a.cmpr.uncommittedShown() {
+	if app.cmpr.uncommittedShown() {
 		rows = append(rows, changeRow{kind: scopeRow, text: "Uncommitted changes", icon: editIcon, scope: gitx.Scope{Kind: gitx.ScopeUncommitted}})
 	}
-	rows = append(rows, changeRow{kind: sectionRow, text: a.commitsTitle()})
-	if s, ok := a.cmpr.allScope(); ok && len(a.commits.rows) > 0 {
-		rows = append(rows, changeRow{kind: scopeRow, text: "All changes", icon: layersIcon, scope: s, tooltip: s.Label(), badge: fmt.Sprint(a.commits.total)})
+	rows = append(rows, changeRow{kind: sectionRow, text: app.commitsTitle()})
+	if scope, ok := app.cmpr.allScope(); ok && len(app.commits.rows) > 0 {
+		rows = append(rows, changeRow{kind: scopeRow, text: "All changes", icon: layersIcon, scope: scope, tooltip: scope.Label(), badge: fmt.Sprint(app.commits.total)})
 	}
 	return rows
 }
 
 // commitsNote is the row under the commits, if any.
-func (a *app) commitsNote() []changeRow {
+func (app *app) commitsNote() []changeRow {
 	switch {
-	case a.commits.err != "" && len(a.commits.rows) > 0:
-		return []changeRow{{kind: noteRow, text: "Could not list more commits: " + a.commits.err}}
-	case a.commits.err != "":
-		return []changeRow{{kind: noteRow, text: "Could not list the commits: " + a.commits.err}}
-	case len(a.commits.rows) == 0:
+	case app.commits.err != "" && len(app.commits.rows) > 0:
+		return []changeRow{{kind: noteRow, text: "Could not list more commits: " + app.commits.err}}
+	case app.commits.err != "":
+		return []changeRow{{kind: noteRow, text: "Could not list the commits: " + app.commits.err}}
+	case len(app.commits.rows) == 0:
 		return []changeRow{{kind: noteRow, text: "No commits"}}
 	}
 	return nil
@@ -342,72 +342,72 @@ type changeRows struct {
 	note    []changeRow
 }
 
-func (r *changeRows) len() int { return len(r.above) + len(r.commits) + len(r.note) }
+func (rows *changeRows) len() int { return len(rows.above) + len(rows.commits) + len(rows.note) }
 
 // commit returns the commit of row i, nil for a row that is not one.
-func (r *changeRows) commit(i int) *gitx.Commit {
-	if j := i - len(r.above); j >= 0 && j < len(r.commits) {
-		return &r.commits[j]
+func (rows *changeRows) commit(index int) *gitx.Commit {
+	if commitIndex := index - len(rows.above); commitIndex >= 0 && commitIndex < len(rows.commits) {
+		return &rows.commits[commitIndex]
 	}
 	return nil
 }
 
 // other returns row i when it is not a commit.
-func (r *changeRows) other(i int) changeRow {
-	if i < len(r.above) {
-		return r.above[i]
+func (rows *changeRows) other(index int) changeRow {
+	if index < len(rows.above) {
+		return rows.above[index]
 	}
-	return r.note[i-len(r.above)-len(r.commits)]
+	return rows.note[index-len(rows.above)-len(rows.commits)]
 }
 
-func (r *changeRows) kind(i int) changeKind {
-	if r.commit(i) != nil {
+func (rows *changeRows) kind(index int) changeKind {
+	if rows.commit(index) != nil {
 		return commitRow
 	}
-	return r.other(i).kind
+	return rows.other(index).kind
 }
 
-func (r *changeRows) key(i int) any {
-	if cm := r.commit(i); cm != nil {
+func (rows *changeRows) key(index int) any {
+	if cm := rows.commit(index); cm != nil {
 		return cm.SHA
 	}
-	return r.other(i).text
+	return rows.other(index).text
 }
 
-func (r *changeRows) label(i int) string {
-	if cm := r.commit(i); cm != nil {
+func (rows *changeRows) label(index int) string {
+	if cm := rows.commit(index); cm != nil {
 		return cm.Subject
 	}
-	return r.other(i).text
+	return rows.other(index).text
 }
 
 // header reports whether row i is one the list cannot choose.
-func (r *changeRows) header(i int) bool {
-	k := r.kind(i)
-	return k != scopeRow && k != commitRow
+func (rows *changeRows) header(index int) bool {
+	kind := rows.kind(index)
+	return kind != scopeRow && kind != commitRow
 }
 
 // scope returns the scope row i opens.
-func (r *changeRows) scope(i int) (gitx.Scope, bool) {
-	if cm := r.commit(i); cm != nil {
+func (rows *changeRows) scope(index int) (gitx.Scope, bool) {
+	if cm := rows.commit(index); cm != nil {
 		return gitx.Scope{Kind: gitx.ScopeCommit, Commit: cm.SHA}, true
 	}
-	row := r.other(i)
+	row := rows.other(index)
 	return row.scope, row.kind == scopeRow
 }
 
 // find returns the row that opens s, -1 for none.
-func (r *changeRows) find(s gitx.Scope) int {
-	if s.Kind == gitx.ScopeCommit {
-		for j := range r.commits {
-			if r.commits[j].SHA == s.Commit {
-				return len(r.above) + j
+func (rows *changeRows) find(scope gitx.Scope) int {
+	if scope.Kind == gitx.ScopeCommit {
+		for j := range rows.commits {
+			if rows.commits[j].SHA == scope.Commit {
+				return len(rows.above) + j
 			}
 		}
 		return -1
 	}
-	key := s.Key()
-	for i, row := range r.above {
+	key := scope.Key()
+	for i, row := range rows.above {
 		if row.kind == scopeRow && row.scope.Key() == key {
 			return i
 		}
@@ -416,135 +416,135 @@ func (r *changeRows) find(s gitx.Scope) int {
 }
 
 // commitsTitle names the commit list.
-func (a *app) commitsTitle() string {
+func (app *app) commitsTitle() string {
 	switch {
-	case a.cmpr.rng != nil:
-		return "Commits in " + a.cmpr.rng.Label()
-	case a.cmpr.commitBase() != "":
-		return "Commits on " + a.cmpr.headBranch()
+	case app.cmpr.rng != nil:
+		return "Commits in " + app.cmpr.rng.Label()
+	case app.cmpr.commitBase() != "":
+		return "Commits on " + app.cmpr.headBranch()
 	}
-	return "Recent commits on " + a.cmpr.headBranch()
+	return "Recent commits on " + app.cmpr.headBranch()
 }
 
 // scopeHeader names the changes under review, above their review.
-func (a *app) scopeHeader(c *ui.Context) {
-	t := c.Theme()
+func (app *app) scopeHeader(ctx *ui.Context) {
+	theme := ctx.Theme()
 	add, del := 0, 0
-	for _, f := range a.files {
+	for _, f := range app.files {
 		add += f.Additions
 		del += f.Deletions
 	}
-	ui.Column(c).Gap(2).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, a.scopeLabel()).Bold().SingleLine().Shrink(1).Tooltip(a.scopeLabel())
-			if a.loader.switching() {
-				ui.Spinner(c).Size(12, 12).Label("Reading changes")
+	ui.Column(ctx).Gap(2).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Text(ctx, app.scopeLabel()).Bold().SingleLine().Shrink(1).Tooltip(app.scopeLabel())
+			if app.loader.switching() {
+				ui.Spinner(ctx).Size(12, 12).Label("Reading changes")
 			}
 		})
-		if len(a.files) == 0 {
+		if len(app.files) == 0 {
 			return
 		}
-		ui.Row(c).Gap(8).Children(func() {
-			ui.Text(c, plural(len(a.files), "file")).FontSize(11).TextColor(t.TextMuted)
-			ui.Text(c, fmt.Sprintf("+%d", add)).FontSize(11).TextColor(t.Success)
-			ui.Text(c, fmt.Sprintf("−%d", del)).FontSize(11).TextColor(t.Danger)
+		ui.Row(ctx).Gap(8).Children(func() {
+			ui.Text(ctx, plural(len(app.files), "file")).FontSize(11).TextColor(theme.TextMuted)
+			ui.Text(ctx, fmt.Sprintf("+%d", add)).FontSize(11).TextColor(theme.Success)
+			ui.Text(ctx, fmt.Sprintf("−%d", del)).FontSize(11).TextColor(theme.Danger)
 			viewed := 0
-			for _, f := range a.files {
-				if a.rev.Viewed[f.Path] {
+			for _, f := range app.files {
+				if app.rev.Viewed[f.Path] {
 					viewed++
 				}
 			}
-			ui.Text(c, fmt.Sprintf("%d of %d viewed", viewed, len(a.files))).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(ctx, fmt.Sprintf("%d of %d viewed", viewed, len(app.files))).FontSize(11).TextColor(theme.TextMuted)
 		})
 	})
 }
 
-func (a *app) reviewNav(c *ui.Context) {
-	chosen := a.nav.page.String()
-	nav := ui.Sidebar(c, &chosen, func() {
-		sidebarHeading(c, "Review", nil)
-		ui.SidebarItem(c, overview.String(), overviewIcon, "Overview").Children(func() { targetMark(c, a.state(review.TargetOverview)) })
-		a.walkItems(c, "", 1)
-		ui.SidebarItem(c, page{kind: kindAll}.String(), filesIcon, "All files diff")
-		threads := len(a.rev.Threads)
-		ui.SidebarItem(c, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Children(func() {
+func (app *app) reviewNav(ctx *ui.Context) {
+	chosen := app.nav.page.String()
+	nav := ui.Sidebar(ctx, &chosen, func() {
+		sidebarHeading(ctx, "Review", nil)
+		ui.SidebarItem(ctx, overview.String(), overviewIcon, "Overview").Children(func() { targetMark(ctx, app.state(review.TargetOverview)) })
+		app.walkItems(ctx, "", 1)
+		ui.SidebarItem(ctx, page{kind: kindAll}.String(), filesIcon, "All files diff")
+		threads := len(app.rev.Threads)
+		ui.SidebarItem(ctx, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Children(func() {
 			if threads > 0 {
-				ui.Badge(c, fmt.Sprint(threads))
+				ui.Badge(ctx, fmt.Sprint(threads))
 			}
 		})
-		feedback := len(review.ExportedThreads(a.rev, review.ExportOptions{}))
-		ui.SidebarItem(c, page{kind: kindFeedback}.String(), sendIcon, "Feedback").Children(func() {
+		feedback := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
+		ui.SidebarItem(ctx, page{kind: kindFeedback}.String(), sendIcon, "Feedback").Children(func() {
 			if feedback > 0 {
-				ui.Badge(c, fmt.Sprint(feedback))
+				ui.Badge(ctx, fmt.Sprint(feedback))
 			}
 		})
 	}).Shrink(0).Label("Review")
 	if nav.Changed() {
-		a.nav.goTo(parsePage(chosen))
+		app.nav.goTo(parsePage(chosen))
 	}
 }
 
 // fileNav lists the files, by path or in their groups, under the switches
 // that choose how.
-func (a *app) fileNav(c *ui.Context) {
-	t := c.Theme()
-	chosen := a.nav.page.String()
-	groups := a.groups()
-	threads := a.rev.ThreadCounts()
-	ui.Column(c).Padding(0, 10).Children(func() {
-		sidebarHeading(c, "Files", func() {
-			a.cmdSegmented(c, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
+func (app *app) fileNav(ctx *ui.Context) {
+	theme := ctx.Theme()
+	chosen := app.nav.page.String()
+	groups := app.groups()
+	threads := app.rev.ThreadCounts()
+	ui.Column(ctx).Padding(0, 10).Children(func() {
+		sidebarHeading(ctx, "Files", func() {
+			app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
 		})
-		ui.Row(c).Padding(0, 8, 4, 8).Children(func() {
-			a.cmdCheckbox(c, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
+		ui.Row(ctx).Padding(0, 8, 4, 8).Children(func() {
+			app.cmdCheckbox(ctx, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
 		})
 	})
-	nav := ui.Sidebar(c, &chosen, func() {
-		if a.cfg.FlatFiles {
-			for _, f := range a.files {
-				if a.listed(f.Path) {
-					a.fileItem(c, f.Path, threads[f.Path])
+	nav := ui.Sidebar(ctx, &chosen, func() {
+		if app.cfg.FlatFiles {
+			for _, f := range app.files {
+				if app.listed(f.Path) {
+					app.fileItem(ctx, f.Path, threads[f.Path])
 				}
 			}
 		}
 		for gi, g := range groups {
-			if a.cfg.FlatFiles {
+			if app.cfg.FlatFiles {
 				break
 			}
-			files := slices.DeleteFunc(slices.Clone(g.Files), func(f string) bool { return !a.listed(f) })
+			files := slices.DeleteFunc(slices.Clone(g.Files), func(f string) bool { return !app.listed(f) })
 			if len(files) == 0 {
 				continue
 			}
-			id := a.groupID(gi)
-			open := a.groupOpen(id)
-			column := ui.Column(c.Key(id)).Gap(2)
+			id := app.groupID(gi)
+			open := app.groupOpen(id)
+			column := ui.Column(ctx.Key(id)).Gap(2)
 			if gi > 0 {
 				column.Margin(8, 0, 0, 0)
 			}
 			column.Children(func() {
-				a.groupItem(c, id, g.Title, len(files), open)
+				app.groupItem(ctx, id, g.Title, len(files), open)
 				if *open {
 					for _, f := range files {
-						a.fileItem(c, f, threads[f]).Level(2)
+						app.fileItem(ctx, f, threads[f]).Level(2)
 					}
 				}
 			})
 		}
-		if len(a.files) > 0 && !slices.ContainsFunc(a.files, func(f gitx.FileChange) bool { return a.listed(f.Path) }) {
-			ui.Text(c, "All files are viewed.").FontSize(12).TextColor(t.TextMuted).Padding(4, 12)
+		if len(app.files) > 0 && !slices.ContainsFunc(app.files, func(f gitx.FileChange) bool { return app.listed(f.Path) }) {
+			ui.Text(ctx, "All files are viewed.").FontSize(12).TextColor(theme.TextMuted).Padding(4, 12)
 		}
-		if a.loader.firstLoad() {
-			ui.Row(c).Gap(8).Padding(8, 12).Children(func() {
-				ui.Spinner(c).Size(12, 12)
-				ui.Text(c, "Reading changes…").FontSize(12).TextColor(t.TextMuted)
+		if app.loader.firstLoad() {
+			ui.Row(ctx).Gap(8).Padding(8, 12).Children(func() {
+				ui.Spinner(ctx).Size(12, 12)
+				ui.Text(ctx, "Reading changes…").FontSize(12).TextColor(theme.TextMuted)
 			})
 		}
 	}).Grow(1).Shrink(1).MinHeight(0).Label("Files")
-	a.takeFocus(nav, "files")
+	app.takeFocus(nav, "files")
 	// Left and Right close and open the group chosen, as in a tree.
-	if p := parsePage(chosen); p.kind == kindGroup {
-		if _, ok := a.groupIndex(p.key); ok {
-			open := a.groupOpen(p.key)
+	if chosenPage := parsePage(chosen); chosenPage.kind == kindGroup {
+		if _, ok := app.groupIndex(chosenPage.key); ok {
+			open := app.groupOpen(chosenPage.key)
 			switch {
 			case *open && nav.Shortcut(0, ui.KeyLeft):
 				*open = false
@@ -554,53 +554,53 @@ func (a *app) fileNav(c *ui.Context) {
 		}
 	}
 	if nav.Changed() {
-		a.nav.goTo(parsePage(chosen))
+		app.nav.goTo(parsePage(chosen))
 	}
 }
 
 // walkItems lists the walks under parent in the sidebar, each indented
 // under the one it goes deeper into.
-func (a *app) walkItems(c *ui.Context, parent string, depth int) {
-	for _, w := range a.rev.Walks {
+func (app *app) walkItems(ctx *ui.Context, parent string, depth int) {
+	for _, w := range app.rev.Walks {
 		if w.Parent != parent || w.Question != "" {
 			continue
 		}
-		item := ui.SidebarItem(c, page{kindWalk, w.ID}.String(), nil, strings.Repeat("    ", depth)+excerpt(a.rev.WalkTitle(w), 36)).Tooltip(a.rev.WalkTitle(w))
-		item.Children(func() { targetMark(c, a.state(w.ID)) })
+		item := ui.SidebarItem(ctx, page{kindWalk, w.ID}.String(), nil, strings.Repeat("    ", depth)+excerpt(app.rev.WalkTitle(w), 36)).Tooltip(app.rev.WalkTitle(w))
+		item.Children(func() { targetMark(ctx, app.state(w.ID)) })
 		if depth < 8 {
-			a.walkItems(c, w.ID, depth+1)
+			app.walkItems(ctx, w.ID, depth+1)
 		}
 	}
 }
 
-func (a *app) groupOpen(id string) *bool {
-	open := a.groupsOpen[id]
+func (app *app) groupOpen(id string) *bool {
+	open := app.groupsOpen[id]
 	if open == nil {
-		v := true
-		open = &v
-		a.groupsOpen[id] = open
+		isOpen := true
+		open = &isOpen
+		app.groupsOpen[id] = open
 	}
 	return open
 }
 
 // groupItem is the title of a group in the sidebar. Choosing it opens
 // the group page, and its chevron shows and hides the group's files.
-func (a *app) groupItem(c *ui.Context, id, title string, files int, open *bool) {
-	t := c.Theme()
-	ui.SidebarItem(c, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
-		ui.Text(c, fmt.Sprint(files)).FontSize(11).TextColor(t.TextMuted)
+func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bool) {
+	theme := ctx.Theme()
+	ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
+		ui.Text(ctx, fmt.Sprint(files)).FontSize(11).TextColor(theme.TextMuted)
 		label := "Hide files"
 		if !*open {
 			label = "Show files"
 		}
-		btn := ui.ButtonBase(c).Padding(2).Radius(4).Label(label).Tooltip(label).Children(func() {
-			arrow := ui.Icon(c, chevronIcon).Size(12, 12).TextColor(t.TextMuted)
+		btn := ui.ButtonBase(ctx).Padding(2).Radius(4).Label(label).Tooltip(label).Children(func() {
+			arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(theme.TextMuted)
 			if !*open {
 				arrow.Rotate(-90)
 			}
 		})
 		if btn.Hovered() {
-			btn.Background(t.Text.Alpha(0.1))
+			btn.Background(theme.Text.Alpha(0.1))
 		}
 		if btn.Clicked() {
 			*open = !*open
@@ -611,38 +611,38 @@ func (a *app) groupItem(c *ui.Context, id, title string, files int, open *bool) 
 // fileItem is a file in the sidebar, with the number of threads on it.
 // In the flat list, the file's folder shows on a second line under its
 // name.
-func (a *app) fileItem(c *ui.Context, file string, threads int) ui.Element {
-	t := c.Theme()
-	viewed := a.rev.Viewed[file]
-	item := ui.SidebarItem(c, page{kindFile, file}.String(), nil, path.Base(file)).Tooltip(file)
+func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
+	theme := ctx.Theme()
+	viewed := app.rev.Viewed[file]
+	item := ui.SidebarItem(ctx, page{kindFile, file}.String(), nil, path.Base(file)).Tooltip(file)
 	dir := path.Dir(file)
-	folder := a.cfg.FlatFiles && dir != "."
+	folder := app.cfg.FlatFiles && dir != "."
 	if folder {
 		// SidebarItem builds the name first, so the name takes the first
 		// cell and the marks after it the second. The marks keep their
 		// width, and the name is cut only when the row is too narrow.
 		item.Grid().ColumnTracks(ui.Fr(1), ui.FitContent()).AlignItems(ui.Center).GapY(1)
 	}
-	if viewed && a.nav.page != (page{kindFile, file}) {
-		item.TextColor(t.TextMuted)
+	if viewed && app.nav.page != (page{kindFile, file}) {
+		item.TextColor(theme.TextMuted)
 	}
-	d := a.diffs[file]
+	diff := app.diffs[file]
 	marks := func() {
 		if threads > 0 {
-			ui.Badge(c, fmt.Sprint(threads))
+			ui.Badge(ctx, fmt.Sprint(threads))
 		}
-		if d != nil {
-			ui.Row(c).Gap(4).Children(func() {
-				if d.change.Additions > 0 {
-					ui.Text(c, fmt.Sprintf("+%d", d.change.Additions)).FontSize(11).TextColor(t.Success)
+		if diff != nil {
+			ui.Row(ctx).Gap(4).Children(func() {
+				if diff.change.Additions > 0 {
+					ui.Text(ctx, fmt.Sprintf("+%d", diff.change.Additions)).FontSize(11).TextColor(theme.Success)
 				}
-				if d.change.Deletions > 0 {
-					ui.Text(c, fmt.Sprintf("−%d", d.change.Deletions)).FontSize(11).TextColor(t.Danger)
+				if diff.change.Deletions > 0 {
+					ui.Text(ctx, fmt.Sprintf("−%d", diff.change.Deletions)).FontSize(11).TextColor(theme.Danger)
 				}
 			})
 		}
 		if viewed {
-			ui.Icon(c, checkIcon).FontSize(12).TextColor(t.Success).Label("Viewed")
+			ui.Icon(ctx, checkIcon).FontSize(12).TextColor(theme.Success).Label("Viewed")
 		}
 	}
 	item.Children(func() {
@@ -650,92 +650,92 @@ func (a *app) fileItem(c *ui.Context, file string, threads int) ui.Element {
 			marks()
 			return
 		}
-		ui.Row(c).Gap(t.Space(2)).AlignItems(ui.Center).Children(marks)
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(marks)
 		// Opacity keeps the row's text color, so the folder stays readable
 		// on the accent of the chosen row.
-		ui.Text(c, dir).FontSize(11).Opacity(0.7).SingleLine().ColumnStart(1).RowStart(2)
+		ui.Text(ctx, dir).FontSize(11).Opacity(0.7).SingleLine().ColumnStart(1).RowStart(2)
 	})
 	return item
 }
 
-func (a *app) main(c *ui.Context) {
-	ui.Column(c).Fill().Children(func() {
-		a.backBar(c)
-		if a.loadErr != "" {
-			a.errorState(c, "Could not read the changes", a.loadErr)
+func (app *app) main(ctx *ui.Context) {
+	ui.Column(ctx).Fill().Children(func() {
+		app.backBar(ctx)
+		if app.loadErr != "" {
+			app.errorState(ctx, "Could not read the changes", app.loadErr)
 			return
 		}
-		switch p := a.nav.page; p.kind {
+		switch current := app.nav.page; current.kind {
 		case kindOverview:
-			a.overviewPage(c)
+			app.overviewPage(ctx)
 		case kindThreads:
-			a.threadsPage(c)
+			app.threadsPage(ctx)
 		case kindFeedback:
-			a.feedbackPage(c)
+			app.feedbackPage(ctx)
 		case kindAll:
-			a.allPage(c)
+			app.allPage(ctx)
 		case kindArchived:
-			a.archivedPage(c, p.key)
+			app.archivedPage(ctx, current.key)
 		case kindFile:
-			a.filePage(c, p.key)
+			app.filePage(ctx, current.key)
 		case kindWalk:
-			a.walkPage(c, p.key)
+			app.walkPage(ctx, current.key)
 		case kindGroup:
-			a.groupPage(c, p.key)
+			app.groupPage(ctx, current.key)
 		}
 	})
 }
 
 // saveNotice says that the review or the settings could not be saved,
 // above every page, until a later save works.
-func (a *app) saveNotice(c *ui.Context) {
-	if a.saveErr == "" {
+func (app *app) saveNotice(ctx *ui.Context) {
+	if app.saveErr == "" {
 		return
 	}
-	t := c.Theme()
-	ui.Column(c).Gap(2).Padding(8, 14).Background(t.Danger.Alpha(0.15)).BorderWidth(0, 0, 1, 0).BorderColor(t.Danger).Children(func() {
-		ui.Text(c, "Could not save your changes. AgentDiff tries again on the next change.").Bold()
-		ui.Text(c, a.saveErr).FontSize(12).TextColor(t.TextMuted).Selectable()
+	theme := ctx.Theme()
+	ui.Column(ctx).Gap(2).Padding(8, 14).Background(theme.Danger.Alpha(0.15)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Danger).Children(func() {
+		ui.Text(ctx, "Could not save your changes. AgentDiff tries again on the next change.").Bold()
+		ui.Text(ctx, app.saveErr).FontSize(12).TextColor(theme.TextMuted).Selectable()
 	})
 }
 
-func (a *app) errorState(c *ui.Context, title, detail string) {
-	t := c.Theme()
-	ui.Column(c).Grow(1).Center().Gap(8).Padding(24).Children(func() {
-		ui.Text(c, title).FontSize(16).Bold()
-		ui.Text(c, detail).TextColor(t.TextMuted).Selectable().MaxWidth(600)
+func (app *app) errorState(ctx *ui.Context, title, detail string) {
+	theme := ctx.Theme()
+	ui.Column(ctx).Grow(1).Center().Gap(8).Padding(24).Children(func() {
+		ui.Text(ctx, title).FontSize(16).Bold()
+		ui.Text(ctx, detail).TextColor(theme.TextMuted).Selectable().MaxWidth(600)
 	})
 }
 
-func (a *app) emptyState(c *ui.Context, title, detail string) {
-	t := c.Theme()
-	ui.Column(c).Grow(1).Center().Gap(8).Padding(24).Children(func() {
-		ui.Text(c, title).FontSize(16).Bold()
-		ui.Text(c, detail).TextColor(t.TextMuted).MaxWidth(520).TextAlign(ui.Center)
+func (app *app) emptyState(ctx *ui.Context, title, detail string) {
+	theme := ctx.Theme()
+	ui.Column(ctx).Grow(1).Center().Gap(8).Padding(24).Children(func() {
+		ui.Text(ctx, title).FontSize(16).Bold()
+		ui.Text(ctx, detail).TextColor(theme.TextMuted).MaxWidth(520).TextAlign(ui.Center)
 	})
 }
 
 // age is how long ago t was, in a few characters.
-func age(t time.Time) string {
-	d := time.Since(t)
+func age(when time.Time) string {
+	elapsed := time.Since(when)
 	switch {
-	case d < time.Minute:
+	case elapsed < time.Minute:
 		return "now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	case d < 30*24*time.Hour:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
-	case d < 365*24*time.Hour:
-		return t.Format("Jan 2")
+	case elapsed < time.Hour:
+		return fmt.Sprintf("%dm", int(elapsed.Minutes()))
+	case elapsed < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(elapsed.Hours()))
+	case elapsed < 30*24*time.Hour:
+		return fmt.Sprintf("%dd", int(elapsed.Hours()/24))
+	case elapsed < 365*24*time.Hour:
+		return when.Format("Jan 2")
 	}
-	return t.Format("Jan 2006")
+	return when.Format("Jan 2006")
 }
 
-func plural(n int, noun string) string {
-	if n == 1 {
+func plural(count int, noun string) string {
+	if count == 1 {
 		return "1 " + noun
 	}
-	return fmt.Sprintf("%d %ss", n, noun)
+	return fmt.Sprintf("%d %ss", count, noun)
 }

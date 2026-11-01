@@ -26,7 +26,7 @@ func readRepoPrompts(root string) (review.Prompts, []string) {
 	var problems []string
 	for _, t := range review.Templates {
 		file := repoPromptFile(t.Name)
-		b, err := os.ReadFile(filepath.Join(root, file))
+		data, err := os.ReadFile(filepath.Join(root, file))
 		if os.IsNotExist(err) {
 			continue
 		}
@@ -34,7 +34,7 @@ func readRepoPrompts(root string) (review.Prompts, []string) {
 			problems = append(problems, fmt.Sprintf("%s: %v", file, err))
 			continue
 		}
-		text := string(b)
+		text := string(data)
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
@@ -50,10 +50,10 @@ func readRepoPrompts(root string) (review.Prompts, []string) {
 // prompts are the prompts of a run in the repository at root: its own
 // prompt files over the prompts in the settings. It keeps the problems of
 // the files for the overview page.
-func (a *app) prompts(root string) review.Prompts {
+func (app *app) prompts(root string) review.Prompts {
 	repo, problems := readRepoPrompts(root)
-	a.promptProblems = problems
-	out := maps.Clone(a.cfg.Prompts)
+	app.promptProblems = problems
+	out := maps.Clone(app.cfg.Prompts)
 	if out == nil {
 		out = review.Prompts{}
 	}

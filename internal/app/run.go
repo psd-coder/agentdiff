@@ -20,14 +20,14 @@ type agentFunc func(context.Context, agent.Config, agent.Request) <-chan agent.E
 // stream runs the agent and hands its events to fn on the main thread,
 // text deltas joined into one event per streamFlush. It records the run in
 // the log of rev, in memory and in the run's file.
-func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, rev *review.Review, info store.RunInfo, fn func(agent.Event)) {
+func (app *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, rev *review.Review, info store.RunInfo, fn func(agent.Event)) {
 	info.Resumed = req.ResumeID
-	rec := &runRecorder{run: a.startRun(rev, info), provider: cfg.Provider}
+	rec := &runRecorder{run: app.startRun(rev, info), provider: cfg.Provider}
 	req.Log = rec.entry
-	events := a.startAgent(ctx, cfg, req)
+	events := app.startAgent(ctx, cfg, req)
 	repo, scope := rev.Repo, rev.Scope
-	a.streams.Go(func() {
-		a.createRunFile(rec, rev, repo, scope, info)
+	app.streams.Go(func() {
+		app.createRunFile(rec, rev, repo, scope, info)
 		batch := textBatch{last: time.Now()}
 		flush := func() {
 			items := rec.take()
@@ -35,7 +35,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 				return
 			}
 			text := batch.take(time.Now())
-			a.update(func() {
+			app.update(func() {
 				rec.run.info.Usage = rec.run.add(items)
 				if text != "" {
 					fn(agent.Event{Kind: agent.EventText, Text: text})
@@ -50,11 +50,11 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 				continue
 			}
 			flush()
-			a.update(func() { fn(ev) })
+			app.update(func() { fn(ev) })
 		}
 		flush()
 		rec.file.close()
-		a.update(func() { a.endRun(rec, rev) })
+		app.update(func() { app.endRun(rec, rev) })
 	})
 }
 
@@ -67,35 +67,35 @@ type textBatch struct {
 
 // add appends text and reports whether streamFlush passed since the last
 // take.
-func (b *textBatch) add(text string, now time.Time) bool {
-	b.text.WriteString(text)
-	return now.Sub(b.last) >= streamFlush
+func (textBatch *textBatch) add(text string, now time.Time) bool {
+	textBatch.text.WriteString(text)
+	return now.Sub(textBatch.last) >= streamFlush
 }
 
-func (b *textBatch) empty() bool { return b.text.Len() == 0 }
+func (textBatch *textBatch) empty() bool { return textBatch.text.Len() == 0 }
 
 // take returns the joined text and starts the next batch at now.
-func (b *textBatch) take(now time.Time) string {
-	text := b.text.String()
-	b.text.Reset()
-	b.last = now
+func (textBatch *textBatch) take(now time.Time) string {
+	text := textBatch.text.String()
+	textBatch.text.Reset()
+	textBatch.last = now
 	return text
 }
 
-func (a *app) generateOverview() {
-	if a.rev == nil || len(a.files) == 0 {
+func (app *app) generateOverview() {
+	if app.rev == nil || len(app.files) == 0 {
 		return
 	}
-	rev := a.rev
-	cfg := a.cfg.Agent.Auto()
-	changes := review.ChangeSet{Diffstat: a.diffstatOf(rev), Files: a.fileNames(), PatchID: a.fp.Patch, FileIDs: a.fp.Files}
-	ex := review.OverviewExchange(rev, changes, cfg, a.prompts(rev.Repo))
-	a.runner.start(ex, "Overview", "", func(answered bool) {
-		if rev == a.rev {
-			a.leaveGone()
+	rev := app.rev
+	cfg := app.cfg.Agent.Auto()
+	changes := review.ChangeSet{Diffstat: app.diffstatOf(rev), Files: app.fileNames(), PatchID: app.fp.Patch, FileIDs: app.fp.Files}
+	ex := review.OverviewExchange(rev, changes, cfg, app.prompts(rev.Repo))
+	app.runner.start(ex, "Overview", "", func(answered bool) {
+		if rev == app.rev {
+			app.leaveGone()
 		}
 		if answered {
-			a.deeperAhead(rev)
+			app.deeperAhead(rev)
 		}
 	})
 }
@@ -114,10 +114,10 @@ func answer(result, streamed string) string {
 // user confirms that first. A reload can put another review on screen
 // while the dialog is open. Regenerate rewrites the review on screen at
 // the moment the user confirms.
-func (a *app) regenerate(parent string) {
-	shown, repo, scope := a.rev, a.rev.Repo, a.rev.Scope
+func (app *app) regenerate(parent string) {
+	shown, repo, scope := app.rev, app.rev.Repo, app.rev.Scope
 	run := func() {
-		rev := a.rev
+		rev := app.rev
 		if rev == nil || rev.Repo != repo || rev.Scope != scope {
 			return
 		}
@@ -132,47 +132,47 @@ func (a *app) regenerate(parent string) {
 				steps = append(steps, w.ID)
 			}
 		}
-		a.runner.stop(rev, steps...)
+		app.runner.stop(rev, steps...)
 		rev.DeleteStepWalks(parent)
-		a.closeGoneQuestion()
-		a.leaveGone()
+		app.closeGoneQuestion()
+		app.leaveGone()
 		if parent == "" {
-			a.generateOverview()
-		} else if w := rev.Walk(parent); w != nil {
-			a.runWalk(rev, w)
+			app.generateOverview()
+		} else if walk := rev.Walk(parent); walk != nil {
+			app.runWalk(rev, walk)
 		}
 	}
-	if !a.rev.HasStepWalks(parent) {
+	if !app.rev.HasStepWalks(parent) {
 		run()
 		return
 	}
-	a.confirm("Regenerate this walkthrough?", "The new walkthrough has new steps, so the deeper walkthroughs into the current steps are deleted. Questions about the page as a whole stay.", "Regenerate", run)
+	app.confirm("Regenerate this walkthrough?", "The new walkthrough has new steps, so the deeper walkthroughs into the current steps are deleted. Questions about the page as a whole stay.", "Regenerate", run)
 }
 
 // deeper starts a walkthrough one level below parent: into one of its
 // steps, or about the question for step -1.
-func (a *app) deeper(parent string, step int, question string) {
-	w := a.rev.AddWalk(parent, step, question)
-	a.nav.goTo(page{kindWalk, w.ID})
-	a.runWalk(a.rev, w)
+func (app *app) deeper(parent string, step int, question string) {
+	walk := app.rev.AddWalk(parent, step, question)
+	app.nav.goTo(page{kindWalk, walk.ID})
+	app.runWalk(app.rev, walk)
 }
 
 // askQuestion starts a question's conversation about a step of parent, or about
 // parent as a whole for step -1, in the side panel.
-func (a *app) askQuestion(parent string, step int, question string) {
+func (app *app) askQuestion(parent string, step int, question string) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return
 	}
-	w := a.rev.AddWalk(parent, step, question)
-	a.openQuestion(w.ID)
-	a.runWalk(a.rev, w)
+	walk := app.rev.AddWalk(parent, step, question)
+	app.openQuestion(walk.ID)
+	app.runWalk(app.rev, walk)
 }
 
 // deeperAhead queues a deeper walkthrough of every step of the overview,
 // so that Go deeper opens one that is already written.
-func (a *app) deeperAhead(rev *review.Review) {
-	if !a.cfg.DeeperAhead || rev.Overview == nil || rev.Overview.Walk == nil {
+func (app *app) deeperAhead(rev *review.Review) {
+	if !app.cfg.DeeperAhead || rev.Overview == nil || rev.Overview.Walk == nil {
 		return
 	}
 	var walks []*review.Walk
@@ -181,13 +181,13 @@ func (a *app) deeperAhead(rev *review.Review) {
 			walks = append(walks, rev.AddWalk("", i, ""))
 		}
 	}
-	a.saveReviewOf(rev)
+	app.saveReviewOf(rev)
 	for _, w := range walks {
-		a.runner.ahead(rev, w.ID, func() (*review.Exchange, string, bool) {
+		app.runner.ahead(rev, w.ID, func() (*review.Exchange, string, bool) {
 			if rev.Walk(w.ID) == nil {
 				return nil, "", false
 			}
-			ex, title := a.walkExchange(rev, w, true)
+			ex, title := app.walkExchange(rev, w, true)
 			return ex, title, true
 		})
 	}
@@ -196,98 +196,98 @@ func (a *app) deeperAhead(rev *review.Review) {
 // runWalk asks the agent for a walk's walkthrough. Walks next to each
 // other stay apart, because each forks the session of the walkthrough
 // above.
-func (a *app) runWalk(rev *review.Review, w *review.Walk) {
-	ex, title := a.walkExchange(rev, w, false)
-	a.runner.start(ex, title, "", nil)
+func (app *app) runWalk(rev *review.Review, walk *review.Walk) {
+	ex, title := app.walkExchange(rev, walk, false)
+	app.runner.start(ex, title, "", nil)
 }
 
 // walkExchange is the exchange for a walk's walkthrough and its title in
 // the run log. An auto walk is one the app writes ahead of the reviewer.
-func (a *app) walkExchange(rev *review.Review, w *review.Walk, auto bool) (*review.Exchange, string) {
-	cfg := a.cfg.Agent
+func (app *app) walkExchange(rev *review.Review, walk *review.Walk, auto bool) (*review.Exchange, string) {
+	cfg := app.cfg.Agent
 	if auto {
 		cfg = cfg.Auto()
 	}
-	title := "Deeper: " + rev.WalkTitle(w)
-	if w.Question != "" {
-		title = "Question: " + w.Question
+	title := "Deeper: " + rev.WalkTitle(walk)
+	if walk.Question != "" {
+		title = "Question: " + walk.Question
 	}
-	return review.DeeperExchange(rev, w, cfg, a.prompts(rev.Repo), a.diffstatOf(rev)), title
+	return review.DeeperExchange(rev, walk, cfg, app.prompts(rev.Repo), app.diffstatOf(rev)), title
 }
 
 // askMore asks a follow-up question in a question's conversation.
-func (a *app) askMore(rev *review.Review, w *review.Walk, q string) {
-	q = strings.TrimSpace(q)
-	if q == "" || a.runner.busy(rev, w.ID) {
+func (app *app) askMore(rev *review.Review, walk *review.Walk, question string) {
+	question = strings.TrimSpace(question)
+	if question == "" || app.runner.busy(rev, walk.ID) {
 		return
 	}
-	cfg := a.cfg.Agent
-	ex := review.FollowupExchange(rev, w, cfg, a.prompts(rev.Repo), a.diffstatOf(rev), q)
-	a.runner.start(ex, "Follow-up: "+q, "", nil)
+	cfg := app.cfg.Agent
+	ex := review.FollowupExchange(rev, walk, cfg, app.prompts(rev.Repo), app.diffstatOf(rev), question)
+	app.runner.start(ex, "Follow-up: "+question, "", nil)
 }
 
 // diffstatOf is the diffstat of rev's changes. The app only reads it for
 // the review on screen, so it is empty for any other review.
-func (a *app) diffstatOf(rev *review.Review) string {
-	if rev != a.rev {
+func (app *app) diffstatOf(rev *review.Review) string {
+	if rev != app.rev {
 		return ""
 	}
-	return a.diffstat
+	return app.diffstat
 }
 
 // deleteWalk deletes a walk and the walks under it, and goes to its
 // parent.
-func (a *app) deleteWalk(w *review.Walk) {
-	walks := slices.Clone(a.rev.Walks)
-	a.rev.DeleteWalk(w.ID)
+func (app *app) deleteWalk(walk *review.Walk) {
+	walks := slices.Clone(app.rev.Walks)
+	app.rev.DeleteWalk(walk.ID)
 	var gone []string
 	for _, x := range walks {
-		if a.rev.Walk(x.ID) == nil {
+		if app.rev.Walk(x.ID) == nil {
 			gone = append(gone, x.ID)
 		}
 	}
-	a.runner.stop(a.rev, gone...)
-	a.closeGoneQuestion()
-	if w.Parent != "" {
-		a.nav.replace(page{kindWalk, w.Parent})
+	app.runner.stop(app.rev, gone...)
+	app.closeGoneQuestion()
+	if walk.Parent != "" {
+		app.nav.replace(page{kindWalk, walk.Parent})
 	}
-	a.leaveGone()
-	a.saveReview()
+	app.leaveGone()
+	app.saveReview()
 }
 
 // comment adds the reviewer's words to a thread without asking anyone.
-func (a *app) comment(t *review.Thread, text string) {
+func (app *app) comment(thread *review.Thread, text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return
 	}
-	t.Messages = append(t.Messages, review.Message{Role: review.RoleUser, Text: text, Time: time.Now()})
-	a.saveReview()
+	thread.Messages = append(thread.Messages, review.Message{Role: review.RoleUser, Text: text, Time: time.Now()})
+	app.saveReview()
 }
 
 // ask sends a thread's question to the agent, in the repository and the
 // scope of rev.
-func (a *app) ask(rev *review.Review, t *review.Thread, text string) {
+func (app *app) ask(rev *review.Review, thread *review.Thread, text string) {
 	text = strings.TrimSpace(text)
-	if text == "" || a.runner.busy(rev, t.ID) {
+	if text == "" || app.runner.busy(rev, thread.ID) {
 		return
 	}
-	cfg := a.cfg.Agent
-	ex := review.ThreadExchange(rev, t, cfg, a.prompts(rev.Repo), a.diffstatOf(rev), text)
-	a.runner.start(ex, t.Anchor.Label(), excerpt(text, 160), nil)
+	cfg := app.cfg.Agent
+	ex := review.ThreadExchange(rev, thread, cfg, app.prompts(rev.Repo), app.diffstatOf(rev), text)
+	app.runner.start(ex, thread.Anchor.Label(), excerpt(text, 160), nil)
 }
 
 // release forgets rev: it stops every run of rev and the walks queued
 // for it without writing into rev, and drops its run log from memory.
-func (a *app) release(rev *review.Review) {
-	a.runner.release(rev)
-	delete(a.logs, rev)
-	a.targets.forget(rev)
+func (app *app) release(rev *review.Review) {
+	app.runner.release(rev)
+	delete(app.logs, rev)
+	app.targets.forget(rev)
 }
 
 // state is the state of target of the review on screen.
-func (a *app) state(target string) targetState { return a.targets.state(a.rev, target) }
+func (app *app) state(target string) targetState { return app.targets.state(app.rev, target) }
 
 // busy reports whether a run writes into the review on screen for
 // target, or waits in the queue to.
-func (a *app) busy(target string) bool { return a.state(target).busy() }
+func (app *app) busy(target string) bool { return app.state(target).busy() }

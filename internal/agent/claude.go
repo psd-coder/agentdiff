@@ -48,30 +48,30 @@ type claudeParser struct {
 	needSep   bool
 }
 
-func (p *claudeParser) streamError() error { return nil }
+func (parser *claudeParser) streamError() error { return nil }
 
-func (p *claudeParser) parse(raw []byte) []Event {
+func (parser *claudeParser) parse(raw []byte) []Event {
 	var line claudeLine
 	if json.Unmarshal(raw, &line) != nil {
 		return nil
 	}
 	var events []Event
-	if p.sessionID == "" && line.SessionID != "" {
-		p.sessionID = line.SessionID
-		events = append(events, Event{Kind: EventSession, SessionID: p.sessionID})
+	if parser.sessionID == "" && line.SessionID != "" {
+		parser.sessionID = line.SessionID
+		events = append(events, Event{Kind: EventSession, SessionID: parser.sessionID})
 	}
 	switch line.Type {
 	case "stream_event":
-		events = append(events, p.streamEvent(line)...)
+		events = append(events, parser.streamEvent(line)...)
 	case "assistant":
-		events = append(events, p.assistant(line)...)
+		events = append(events, parser.assistant(line)...)
 	case "result":
-		events = append(events, p.result(line))
+		events = append(events, parser.result(line))
 	}
 	return events
 }
 
-func (p *claudeParser) streamEvent(line claudeLine) []Event {
+func (parser *claudeParser) streamEvent(line claudeLine) []Event {
 	if line.Event == nil || line.ParentToolUseID != nil {
 		return nil
 	}
@@ -79,16 +79,16 @@ func (p *claudeParser) streamEvent(line claudeLine) []Event {
 	switch ev.Type {
 	case "message_start":
 		if ev.Message != nil {
-			p.messageID = ev.Message.ID
+			parser.messageID = ev.Message.ID
 		}
 	case "content_block_start":
 		if ev.ContentBlock.Type == "text" {
-			p.needSep = p.wroteText
+			parser.needSep = parser.wroteText
 		}
 	case "content_block_delta":
 		if ev.Delta.Type == "text_delta" && ev.Delta.Text != "" {
-			p.markStreamed(firstNonEmpty(line.APIMessageID, p.messageID))
-			return []Event{p.text(ev.Delta.Text)}
+			parser.markStreamed(firstNonEmpty(line.APIMessageID, parser.messageID))
+			return []Event{parser.text(ev.Delta.Text)}
 		}
 	}
 	return nil
@@ -96,51 +96,51 @@ func (p *claudeParser) streamEvent(line claudeLine) []Event {
 
 // Text deltas already streamed this message, so its full copy is used only for tool calls.
 // Without --include-partial-messages there are no deltas and the full text is the only source.
-func (p *claudeParser) assistant(line claudeLine) []Event {
+func (parser *claudeParser) assistant(line claudeLine) []Event {
 	if line.Message == nil {
 		return nil
 	}
-	skipText := line.ParentToolUseID != nil || p.streamed[line.Message.ID]
+	skipText := line.ParentToolUseID != nil || parser.streamed[line.Message.ID]
 	var events []Event
 	for _, block := range line.Message.Content {
 		switch {
 		case block.Type == "tool_use":
-			events = append(events, Event{Kind: EventActivity, Text: toolActivity(block, p.dir)})
+			events = append(events, Event{Kind: EventActivity, Text: toolActivity(block, parser.dir)})
 		case block.Type == "text" && block.Text != "" && !skipText:
-			p.needSep = p.wroteText
-			events = append(events, p.text(block.Text))
+			parser.needSep = parser.wroteText
+			events = append(events, parser.text(block.Text))
 		}
 	}
 	return events
 }
 
-func (p *claudeParser) result(line claudeLine) Event {
+func (parser *claudeParser) result(line claudeLine) Event {
 	if line.IsError || strings.HasPrefix(line.Subtype, "error") {
-		return Event{Kind: EventError, SessionID: p.sessionID, Err: errors.New(firstNonEmpty(line.Result, line.Subtype, "claude reported an error"))}
+		return Event{Kind: EventError, SessionID: parser.sessionID, Err: errors.New(firstNonEmpty(line.Result, line.Subtype, "claude reported an error"))}
 	}
-	return Event{Kind: EventDone, Text: line.Result, SessionID: p.sessionID}
+	return Event{Kind: EventDone, Text: line.Result, SessionID: parser.sessionID}
 }
 
-func (p *claudeParser) text(s string) Event {
-	if p.needSep {
-		s = "\n\n" + s
-		p.needSep = false
+func (parser *claudeParser) text(text string) Event {
+	if parser.needSep {
+		text = "\n\n" + text
+		parser.needSep = false
 	}
-	p.wroteText = true
-	return Event{Kind: EventText, Text: s}
+	parser.wroteText = true
+	return Event{Kind: EventText, Text: text}
 }
 
-func (p *claudeParser) markStreamed(id string) {
-	if p.streamed == nil {
-		p.streamed = map[string]bool{}
+func (parser *claudeParser) markStreamed(id string) {
+	if parser.streamed == nil {
+		parser.streamed = map[string]bool{}
 	}
-	p.streamed[id] = true
+	parser.streamed[id] = true
 }
 
 func toolActivity(block claudeBlock, dir string) string {
 	str := func(key string) string {
-		s, _ := block.Input[key].(string)
-		return oneLine(s)
+		value, _ := block.Input[key].(string)
+		return oneLine(value)
 	}
 	var detail string
 	switch block.Name {
@@ -171,8 +171,8 @@ func relPath(dir, path string) string {
 	return rel
 }
 
-func oneLine(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+func oneLine(text string) string {
+	return strings.Join(strings.Fields(text), " ")
 }
 
 func firstNonEmpty(values ...string) string {
@@ -237,8 +237,8 @@ func claudePrompt(req Request) string { return req.Prompt }
 
 // claudeResumed takes the session after --resume.
 func claudeResumed(words []string) string {
-	if i := slices.Index(words, "--resume"); i >= 0 && i+1 < len(words) {
-		return words[i+1]
+	if index := slices.Index(words, "--resume"); index >= 0 && index+1 < len(words) {
+		return words[index+1]
 	}
 	return ""
 }

@@ -34,9 +34,9 @@ type Config struct {
 
 // Auto is the config for the runs the app starts on its own: the
 // overview and the walkthroughs it writes ahead.
-func (c Config) Auto() Config {
-	c.Model, c.Effort = cmp.Or(c.AutoModel, c.Model), cmp.Or(c.AutoEffort, c.Effort)
-	return c
+func (config Config) Auto() Config {
+	config.Model, config.Effort = cmp.Or(config.AutoModel, config.Model), cmp.Or(config.AutoEffort, config.Effort)
+	return config
 }
 
 type Request struct {
@@ -67,8 +67,8 @@ type Event struct {
 	Err       error
 }
 
-func (e Event) terminal() bool {
-	return e.Kind == EventDone || e.Kind == EventError
+func (event Event) terminal() bool {
+	return event.Kind == EventDone || event.Kind == EventError
 }
 
 const (
@@ -83,7 +83,7 @@ type lineParser interface {
 	streamError() error
 }
 
-func newParser(p Provider, dir string) lineParser { return specOf(p).parser(dir) }
+func newParser(provider Provider, dir string) lineParser { return specOf(provider).parser(dir) }
 
 func Run(ctx context.Context, cfg Config, req Request) <-chan Event {
 	ch := make(chan Event, 16)
@@ -152,8 +152,8 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 	ch <- Event{Kind: EventError, Err: failure(cfg.Provider, streamErr, exitErr, stderr.String())}
 }
 
-func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Event, log *logger) (bool, error) {
-	scanner := bufio.NewScanner(r)
+func forward(ctx context.Context, output io.Reader, parser lineParser, ch chan<- Event, log *logger) (bool, error) {
+	scanner := bufio.NewScanner(output)
 	scanner.Buffer(make([]byte, 0, 64<<10), maxLineSize)
 	for scanner.Scan() {
 		log.add(LogStdout, scanner.Text())
@@ -174,16 +174,16 @@ func forward(ctx context.Context, r io.Reader, parser lineParser, ch chan<- Even
 	return false, nil
 }
 
-func failure(p Provider, streamErr, exitErr error, stderr string) error {
-	msg := fmt.Sprintf("%s exited without a result", p)
+func failure(provider Provider, streamErr, exitErr error, stderr string) error {
+	msg := fmt.Sprintf("%s exited without a result", provider)
 	if exitErr != nil {
-		msg = fmt.Sprintf("%s failed: %v", p, exitErr)
+		msg = fmt.Sprintf("%s failed: %v", provider, exitErr)
 	}
 	if streamErr != nil {
 		msg += ": " + streamErr.Error()
 	}
-	if s := strings.TrimSpace(stderr); s != "" {
-		msg += "\n" + s
+	if stderrText := strings.TrimSpace(stderr); stderrText != "" {
+		msg += "\n" + stderrText
 	}
 	return errors.New(msg)
 }
@@ -253,18 +253,18 @@ type tailBuffer struct {
 	buf []byte
 }
 
-func (b *tailBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.buf = append(b.buf, p...)
-	if over := len(b.buf) - b.max; over > 0 {
-		b.buf = append(b.buf[:0], b.buf[over:]...)
+func (buffer *tailBuffer) Write(data []byte) (int, error) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	buffer.buf = append(buffer.buf, data...)
+	if over := len(buffer.buf) - buffer.max; over > 0 {
+		buffer.buf = append(buffer.buf[:0], buffer.buf[over:]...)
 	}
-	return len(p), nil
+	return len(data), nil
 }
 
-func (b *tailBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return string(b.buf)
+func (buffer *tailBuffer) String() string {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return string(buffer.buf)
 }

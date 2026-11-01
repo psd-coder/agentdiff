@@ -66,34 +66,34 @@ func FormatText(name PromptName, newRev string) string {
 	if name == PromptOverview {
 		schema = overviewSchema
 	}
-	var b strings.Builder
-	b.WriteString("Answer with exactly one fenced JSON block and nothing else:\n\n```json\n" + schema + "\n```\n\n")
-	b.WriteString(`- "summary": the answer in short. Inline Markdown such as ` + "`code`" + ` is fine.
+	var builder strings.Builder
+	builder.WriteString("Answer with exactly one fenced JSON block and nothing else:\n\n```json\n" + schema + "\n```\n\n")
+	builder.WriteString(`- "summary": the answer in short. Inline Markdown such as ` + "`code`" + ` is fine.
 - "steps": the steps in the order the reviewer reads them. A "title" is plain text. A "text" may hold inline Markdown, but no code blocks and no headings.
 - "sections": the other parts of the answer that the instructions ask for, shown after the steps in this order. A section has a "title" and "items". An item has a "title", a "text" and "refs", written as a step is. Leave "sections" out when the instructions ask for no other parts.
 - "refs": the lines that show a step or an item best, at most 15 lines each. "side" is "new" for lines of the reviewed version and "old" for removed lines. "start" and "end" are 1-based line numbers on that side. Take them from the hunk headers of git diff (` + "`@@ -old +new @@`" + `) or ` + read + `. Check them: the app shows exactly these lines next to your text. "why" says in at most 10 words what to look at.
 `)
 	if name == PromptOverview {
-		b.WriteString(`- "groups": the changed files in groups, in the order the reviewer reads them. A "title" is short, a "summary" is one sentence, and "files" holds the paths as the list of changed files writes them.
+		builder.WriteString(`- "groups": the changed files in groups, in the order the reviewer reads them. A "title" is short, a "summary" is one sentence, and "files" holds the paths as the list of changed files writes them.
 `)
 	}
-	return b.String()
+	return builder.String()
 }
 
 // FileList is the {{files}} block: the changed files, one per line.
 func FileList(files []string) string {
-	var b strings.Builder
+	var builder strings.Builder
 	for _, f := range files {
-		b.WriteString("- " + f + "\n")
+		builder.WriteString("- " + f + "\n")
 	}
-	return b.String()
+	return builder.String()
 }
 
 // overviewPrompt asks for the walkthrough of the whole change set, its
 // sections and the files grouped by intent, all in one JSON block that
 // readOverview takes apart.
-func overviewPrompt(p Prompts, scope, diffstat, newRev string, files []string) string {
-	return p.render(PromptOverview, map[string]string{
+func overviewPrompt(prompts Prompts, scope, diffstat, newRev string, files []string) string {
+	return prompts.render(PromptOverview, map[string]string{
 		"scope":    scope,
 		"diffstat": diffstat,
 		"files":    FileList(files),
@@ -117,32 +117,32 @@ type deeperRequest struct {
 	NewRev  string
 }
 
-func deeperPrompt(p Prompts, d deeperRequest) string {
-	values := map[string]string{"format": FormatText(PromptDeeper, d.NewRev)}
-	if !d.Known {
-		var b strings.Builder
-		b.WriteString(d.Context)
-		b.WriteString("The reviewer reads a walkthrough of these changes")
-		if len(d.Path) > 0 {
-			b.WriteString(" and went deeper into: " + strings.Join(d.Path, " > "))
+func deeperPrompt(prompts Prompts, deeper deeperRequest) string {
+	values := map[string]string{"format": FormatText(PromptDeeper, deeper.NewRev)}
+	if !deeper.Known {
+		var builder strings.Builder
+		builder.WriteString(deeper.Context)
+		builder.WriteString("The reviewer reads a walkthrough of these changes")
+		if len(deeper.Path) > 0 {
+			builder.WriteString(" and went deeper into: " + strings.Join(deeper.Path, " > "))
 		}
-		b.WriteString(".")
-		values["context"] = b.String()
+		builder.WriteString(".")
+		values["context"] = builder.String()
 	}
-	if s := d.Step; s != nil {
-		var b strings.Builder
-		b.WriteString("Go one level deeper into this step of the walkthrough:\n\n")
-		fmt.Fprintf(&b, "### %s\n%s\n", s.Title, s.Text)
-		for _, r := range s.Refs {
-			fmt.Fprintf(&b, "- %s: %s\n", r.Label(), r.Why)
+	if step := deeper.Step; step != nil {
+		var builder strings.Builder
+		builder.WriteString("Go one level deeper into this step of the walkthrough:\n\n")
+		fmt.Fprintf(&builder, "### %s\n%s\n", step.Title, step.Text)
+		for _, r := range step.Refs {
+			fmt.Fprintf(&builder, "- %s: %s\n", r.Label(), r.Why)
 		}
-		values["step"] = b.String()
+		values["step"] = builder.String()
 	}
 	values["question"] = "The reviewer wants to know how it works in more detail."
-	if d.Question != "" {
-		values["question"] = "The reviewer asks: " + d.Question
+	if deeper.Question != "" {
+		values["question"] = "The reviewer asks: " + deeper.Question
 	}
-	return p.render(PromptDeeper, values)
+	return prompts.render(PromptDeeper, values)
 }
 
 // followupRequest is a follow-up question in a question's conversation.
@@ -157,34 +157,34 @@ type followupRequest struct {
 	NewRev  string
 }
 
-func followupPrompt(p Prompts, f followupRequest) string {
+func followupPrompt(prompts Prompts, followup followupRequest) string {
 	values := map[string]string{
-		"format":   FormatText(PromptFollowup, f.NewRev),
-		"question": "The reviewer asks a follow-up question: " + f.Question,
+		"format":   FormatText(PromptFollowup, followup.NewRev),
+		"question": "The reviewer asks a follow-up question: " + followup.Question,
 	}
-	if !f.Known {
-		var b strings.Builder
-		b.WriteString(f.Context)
-		b.WriteString("The reviewer asked about these changes before:\n\n")
-		for _, t := range f.Earlier {
-			fmt.Fprintf(&b, "Q: %s\n", t.Question)
+	if !followup.Known {
+		var builder strings.Builder
+		builder.WriteString(followup.Context)
+		builder.WriteString("The reviewer asked about these changes before:\n\n")
+		for _, t := range followup.Earlier {
+			fmt.Fprintf(&builder, "Q: %s\n", t.Question)
 			if t.Content != nil {
-				fmt.Fprintf(&b, "A: %s\n", t.Content.Summary)
+				fmt.Fprintf(&builder, "A: %s\n", t.Content.Summary)
 			}
-			b.WriteString("\n")
+			builder.WriteString("\n")
 		}
-		values["context"] = b.String()
+		values["context"] = builder.String()
 	}
-	return p.render(PromptFollowup, values)
+	return prompts.render(PromptFollowup, values)
 }
 
 // readOverview turns the agent's answer into an overview: a walkthrough
 // when the answer holds one, else the Markdown and its groups block.
 func readOverview(answer string, files []string) Overview {
-	if w, ok := parseWalkthrough(answer); ok {
-		groups := NormalizeGroups(w.Groups, files)
-		w.Groups = nil
-		return Overview{Walk: w, Groups: groups}
+	if walkthrough, ok := parseWalkthrough(answer); ok {
+		groups := NormalizeGroups(walkthrough.Groups, files)
+		walkthrough.Groups = nil
+		return Overview{Walk: walkthrough, Groups: groups}
 	}
 	body, groups := ParseOverview(answer, files)
 	return Overview{Markdown: body, Groups: groups}
@@ -198,8 +198,8 @@ var groupsBlock = regexp.MustCompile("(?s)```json\\s*(\\{.*?\"groups\".*?\\})\\s
 func ParseOverview(md string, files []string) (string, []Group) {
 	var groups []Group
 	body := md
-	if m := groupsBlock.FindAllStringSubmatchIndex(md, -1); len(m) > 0 {
-		last := m[len(m)-1]
+	if matches := groupsBlock.FindAllStringSubmatchIndex(md, -1); len(matches) > 0 {
+		last := matches[len(matches)-1]
 		var parsed struct {
 			Groups []Group `json:"groups"`
 		}
@@ -253,14 +253,14 @@ func DirectoryGroups(files []string) []Group {
 	byDir := map[string][]string{}
 	var dirs []string
 	for _, f := range files {
-		d := path.Dir(f)
-		if d == "." {
-			d = "Repository root"
+		dir := path.Dir(f)
+		if dir == "." {
+			dir = "Repository root"
 		}
-		if _, ok := byDir[d]; !ok {
-			dirs = append(dirs, d)
+		if _, ok := byDir[dir]; !ok {
+			dirs = append(dirs, dir)
 		}
-		byDir[d] = append(byDir[d], f)
+		byDir[dir] = append(byDir[dir], f)
 	}
 	slices.Sort(dirs)
 	out := make([]Group, 0, len(dirs))
@@ -315,20 +315,20 @@ func contextPrompt(scope, diffstat string) string {
 // threadPrompt starts the session of a thread, a new or a forked one,
 // with what the thread is about and what was said in it so far. context
 // is empty for a session that forks the overview's.
-func threadPrompt(p Prompts, t *Thread, text, context string) string {
+func threadPrompt(prompts Prompts, thread *Thread, text, context string) string {
 	var anchor strings.Builder
-	switch t.Anchor.Kind {
+	switch thread.Anchor.Kind {
 	case AnchorLines:
-		fmt.Fprintf(&anchor, "It is about %s.\n", t.Anchor.Label())
-		if t.Anchor.Quote != "" {
-			fmt.Fprintf(&anchor, "\n```\n%s\n```\n", t.Anchor.Quote)
+		fmt.Fprintf(&anchor, "It is about %s.\n", thread.Anchor.Label())
+		if thread.Anchor.Quote != "" {
+			fmt.Fprintf(&anchor, "\n```\n%s\n```\n", thread.Anchor.Quote)
 		}
 	case AnchorFile:
-		fmt.Fprintf(&anchor, "It is about the changes in the file %s.\n", t.Anchor.File)
+		fmt.Fprintf(&anchor, "It is about the changes in the file %s.\n", thread.Anchor.File)
 	case AnchorSection:
-		fmt.Fprintf(&anchor, "It is about this part of your overview: %q.\n", t.Anchor.Section)
-		if t.Anchor.Quote != "" {
-			fmt.Fprintf(&anchor, "\n%s\n", quote(t.Anchor.Quote))
+		fmt.Fprintf(&anchor, "It is about this part of your overview: %q.\n", thread.Anchor.Section)
+		if thread.Anchor.Quote != "" {
+			fmt.Fprintf(&anchor, "\n%s\n", quote(thread.Anchor.Quote))
 		}
 	default:
 		anchor.WriteString("It is about the change set as a whole.\n")
@@ -338,20 +338,20 @@ func threadPrompt(p Prompts, t *Thread, text, context string) string {
 		"anchor":   anchor.String(),
 		"question": "The reviewer asks:\n\n" + text,
 	}
-	if earlier := history(t); earlier != "" {
+	if earlier := history(thread); earlier != "" {
 		values["history"] = "The thread so far:\n\n" + earlier
 	}
-	return p.render(PromptThread, values)
+	return prompts.render(PromptThread, values)
 }
 
 // history is the thread's messages before the last one, which is the
 // question being sent.
-func history(t *Thread) string {
-	if len(t.Messages) < 2 {
+func history(thread *Thread) string {
+	if len(thread.Messages) < 2 {
 		return ""
 	}
-	var b strings.Builder
-	for _, m := range t.Messages[:len(t.Messages)-1] {
+	var builder strings.Builder
+	for _, m := range thread.Messages[:len(thread.Messages)-1] {
 		if strings.TrimSpace(m.Text) == "" {
 			continue
 		}
@@ -359,13 +359,13 @@ func history(t *Thread) string {
 		if m.Role == RoleAgent {
 			who = "Agent"
 		}
-		fmt.Fprintf(&b, "%s: %s\n\n", who, strings.TrimSpace(m.Text))
+		fmt.Fprintf(&builder, "%s: %s\n\n", who, strings.TrimSpace(m.Text))
 	}
-	return b.String()
+	return builder.String()
 }
 
-func quote(s string) string {
-	lines := strings.Split(strings.TrimSpace(s), "\n")
+func quote(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
 	for i, l := range lines {
 		lines[i] = "> " + l
 	}

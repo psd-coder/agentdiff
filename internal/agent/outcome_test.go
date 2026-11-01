@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func withExit(items []LogItem, p Provider, text string) []LogItem {
-	return append(items, Summarize(p, LogEntry{Kind: LogExit, Text: text})...)
+func withExit(items []LogItem, provider Provider, text string) []LogItem {
+	return append(items, Summarize(provider, LogEntry{Kind: LogExit, Text: text})...)
 }
 
 func TestStatus(t *testing.T) {
@@ -62,7 +62,7 @@ func TestOwnCost(t *testing.T) {
 	parent := &Usage{Session: "p", SessionCost: 0.5}
 	tests := []struct {
 		name    string
-		u       Usage
+		usage   Usage
 		resumed bool
 		parent  *Usage
 		want    float64
@@ -76,7 +76,7 @@ func TestOwnCost(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := OwnCost(tt.u, tt.resumed, tt.parent); math.Abs(got-tt.want) > 1e-9 {
+			if got := OwnCost(tt.usage, tt.resumed, tt.parent); math.Abs(got-tt.want) > 1e-9 {
 				t.Errorf("cost %v, want %v", got, tt.want)
 			}
 		})

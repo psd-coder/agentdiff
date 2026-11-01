@@ -175,21 +175,21 @@ func (panelQuestion) isSidePanel() {}
 func (panelAsk) isSidePanel()      {}
 
 // threadID is the thread the side panel shows, or "".
-func (a *app) threadID() string {
-	id, _ := a.panel.(panelThread)
+func (app *app) threadID() string {
+	id, _ := app.panel.(panelThread)
 	return string(id)
 }
 
 // questionID is the question walk the side panel shows, or "".
-func (a *app) questionID() string {
-	id, _ := a.panel.(panelQuestion)
+func (app *app) questionID() string {
+	id, _ := app.panel.(panelQuestion)
 	return string(id)
 }
 
 // asking is the target of the new question the side panel asks, or nil.
-func (a *app) asking() *askTarget {
-	if t, ok := a.panel.(panelAsk); ok {
-		return (*askTarget)(&t)
+func (app *app) asking() *askTarget {
+	if target, ok := app.panel.(panelAsk); ok {
+		return (*askTarget)(&target)
 	}
 	return nil
 }
@@ -220,14 +220,14 @@ func newPerLoad() perLoad {
 	return perLoad{diffs: map[string]*fileDiff{}, extra: map[string]*extraFile{}}
 }
 
-func newApp(s store.Store) *app {
-	a := &app{
-		store:       s,
-		cfg:         s.LoadConfig(),
+func newApp(storage store.Store) *app {
+	app := &app{
+		store:       storage,
+		cfg:         storage.LoadConfig(),
 		startAgent:  agent.Run,
 		perLoad:     newPerLoad(),
 		perReview:   newPerReview(),
-		reviews:     continuity.New(s),
+		reviews:     continuity.New(storage),
 		logPct:      50,
 		drafts:      map[string]string{},
 		logs:        map[*review.Review][]*logRun{},
@@ -237,142 +237,142 @@ func newApp(s store.Store) *app {
 		mainPct:     62,
 		exportAgent: true,
 	}
-	a.runner = newRunner(a.stream, a.saveReviewOf)
-	a.loader = newScopeLoader(a.reviews, a.async, a.update, a)
-	a.targets = newTargets(a.runner, a.onScreen)
-	return a
+	app.runner = newRunner(app.stream, app.saveReviewOf)
+	app.loader = newScopeLoader(app.reviews, app.async, app.update, app)
+	app.targets = newTargets(app.runner, app.onScreen)
+	return app
 }
 
 // update runs fn on the main thread. Tests have no window and run it at
 // once, or put it on queue.
-func (a *app) update(fn func()) {
+func (app *app) update(fn func()) {
 	switch {
-	case a.win != nil:
-		a.win.Update(fn)
-	case a.queue != nil:
-		a.queue <- fn
+	case app.win != nil:
+		app.win.Update(fn)
+	case app.queue != nil:
+		app.queue <- fn
 	default:
 		fn()
 	}
 }
 
-func (a *app) async(fn func()) {
-	if a.win == nil {
+func (app *app) async(fn func()) {
+	if app.win == nil {
 		fn()
 		return
 	}
 	go fn()
 }
 
-func (a *app) openRepo(path string) {
-	r, err := gitx.Open(path)
+func (app *app) openRepo(path string) {
+	repo, err := gitx.Open(path)
 	if err != nil {
-		a.repoErr = err.Error()
+		app.repoErr = err.Error()
 		return
 	}
-	a.repo, a.repoErr = r, ""
-	a.prompts(r.Root)
-	a.watch(r)
-	a.cfg.AddRecent(r.Root)
-	a.saveConfig()
-	a.cmpr = comparison{}
-	a.commits.reset()
-	a.loader.reset()
-	if a.win != nil {
-		a.win.SetTitle("AgentDiff: " + r.Name())
+	app.repo, app.repoErr = repo, ""
+	app.prompts(repo.Root)
+	app.watch(repo)
+	app.cfg.AddRecent(repo.Root)
+	app.saveConfig()
+	app.cmpr = comparison{}
+	app.commits.reset()
+	app.loader.reset()
+	if app.win != nil {
+		app.win.SetTitle("AgentDiff: " + repo.Name())
 	}
-	a.async(func() {
+	app.async(func() {
 		ctx := context.Background()
-		branch, err := r.CurrentBranch(ctx)
-		base := r.DefaultBase(ctx)
-		branches, trees, lerr := readBranches(ctx, r)
+		branch, err := repo.CurrentBranch(ctx)
+		base := repo.DefaultBase(ctx)
+		branches, trees, lerr := readBranches(ctx, repo)
 		err = cmp.Or(err, lerr)
-		a.update(func() {
-			if a.repo != r {
+		app.update(func() {
+			if app.repo != repo {
 				return
 			}
-			a.cmpr.branch, a.cmpr.base, a.cmpr.branches, a.cmpr.worktrees = branch, base, branches, trees
-			a.cmpr.err = errText(err)
-			a.loadCommits()
+			app.cmpr.branch, app.cmpr.base, app.cmpr.branches, app.cmpr.worktrees = branch, base, branches, trees
+			app.cmpr.err = errText(err)
+			app.loadCommits()
 		})
 	})
-	a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 }
 
 // closeRepo goes back to the welcome screen.
-func (a *app) closeRepo() {
-	a.repo, a.promptProblems = nil, nil
-	a.unwatch()
-	a.loader.reset()
-	a.perLoad = newPerLoad()
-	a.projectsOpen = false
-	a.commits.reset()
-	if a.win != nil {
-		a.win.SetTitle("AgentDiff")
+func (app *app) closeRepo() {
+	app.repo, app.promptProblems = nil, nil
+	app.unwatch()
+	app.loader.reset()
+	app.perLoad = newPerLoad()
+	app.projectsOpen = false
+	app.commits.reset()
+	if app.win != nil {
+		app.win.SetTitle("AgentDiff")
 	}
 }
 
 // compare reviews branch against base, as picked in the Compare dialog.
-func (a *app) compare(branch, base string) {
-	s, all := a.cmpr.compare(branch, base)
-	a.showComparison(s, all)
+func (app *app) compare(branch, base string) {
+	scope, all := app.cmpr.compare(branch, base)
+	app.showComparison(scope, all)
 }
 
 // pickBranch lists the commits of branch and opens all its changes.
 // Without a base to compare with, it opens the uncommitted changes of
 // the checked-out branch, or the newest commit of another one.
-func (a *app) pickBranch(branch string) {
-	s, all := a.cmpr.pick(branch)
-	a.showComparison(s, all)
+func (app *app) pickBranch(branch string) {
+	scope, all := app.cmpr.pick(branch)
+	app.showComparison(scope, all)
 }
 
-func (a *app) showComparison(s gitx.Scope, all bool) {
-	a.commits.newest = !all && a.cmpr.head != ""
-	a.loadCommits()
+func (app *app) showComparison(scope gitx.Scope, all bool) {
+	app.commits.newest = !all && app.cmpr.head != ""
+	app.loadCommits()
 	switch {
 	case all:
-		a.setScope(s)
-	case a.cmpr.head == "":
-		a.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+		app.setScope(scope)
+	case app.cmpr.head == "":
+		app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	}
 }
 
 // setRange reviews the changes between two revisions.
-func (a *app) setRange(from, to string) {
-	s := a.cmpr.setRange(from, to)
-	a.loadCommits()
-	a.setScope(s)
+func (app *app) setRange(from, to string) {
+	scope := app.cmpr.setRange(from, to)
+	app.loadCommits()
+	app.setScope(scope)
 }
 
 // syncBranch reads the checked-out branch again, to follow a checkout
 // made outside the app.
-func (a *app) syncBranch() {
-	r := a.repo
-	if r == nil {
+func (app *app) syncBranch() {
+	repo := app.repo
+	if repo == nil {
 		return
 	}
-	a.async(func() {
+	app.async(func() {
 		ctx := context.Background()
-		branch, err := r.CurrentBranch(ctx)
+		branch, err := repo.CurrentBranch(ctx)
 		if err != nil {
-			a.update(func() {
-				if a.repo == r {
-					a.cmpr.err = err.Error()
+			app.update(func() {
+				if app.repo == repo {
+					app.cmpr.err = err.Error()
 				}
 			})
 			return
 		}
-		branches, trees, err := readBranches(ctx, r)
-		a.update(func() {
-			if a.repo != r {
+		branches, trees, err := readBranches(ctx, repo)
+		app.update(func() {
+			if app.repo != repo {
 				return
 			}
-			a.cmpr.err = errText(err)
-			a.cmpr.worktrees = trees
-			if branch != a.cmpr.branch {
-				a.checkedOut(branch, branches)
+			app.cmpr.err = errText(err)
+			app.cmpr.worktrees = trees
+			if branch != app.cmpr.branch {
+				app.checkedOut(branch, branches)
 			} else {
-				a.cmpr.branches = branches
+				app.cmpr.branches = branches
 			}
 		})
 	})
@@ -380,9 +380,9 @@ func (a *app) syncBranch() {
 
 // readBranches lists the branches and the worktrees of r, and returns
 // the first error.
-func readBranches(ctx context.Context, r *gitx.Repo) ([]string, []gitx.Worktree, error) {
-	branches, err := r.Branches(ctx)
-	trees, terr := r.Worktrees(ctx)
+func readBranches(ctx context.Context, repo *gitx.Repo) ([]string, []gitx.Worktree, error) {
+	branches, err := repo.Branches(ctx)
+	trees, terr := repo.Worktrees(ctx)
 	return branches, trees, cmp.Or(err, terr)
 }
 
@@ -396,31 +396,31 @@ func errText(err error) string {
 
 // checkedOut moves the app to a newly checked-out branch. A branch scope
 // keeps reviewing the same branch, so its review stays.
-func (a *app) checkedOut(branch string, branches []string) {
-	if to, ok := a.cmpr.checkedOut(branch, branches, a.scope); ok && a.reviews.Rescope(a.rev, to) {
-		a.scope = to
+func (app *app) checkedOut(branch string, branches []string) {
+	if to, ok := app.cmpr.checkedOut(branch, branches, app.scope); ok && app.reviews.Rescope(app.rev, to) {
+		app.scope = to
 	}
-	a.loadCommits()
-	a.reload()
+	app.loadCommits()
+	app.reload()
 }
 
-func (a *app) refresh() {
-	if a.repo == nil {
+func (app *app) refresh() {
+	if app.repo == nil {
 		return
 	}
-	a.reload()
-	a.loadCommits()
-	a.syncBranch()
+	app.reload()
+	app.loadCommits()
+	app.syncBranch()
 }
 
 // loadCommits reads the commit list again, for the range in view.
-func (a *app) loadCommits() {
-	r := a.repo
-	base, head := a.cmpr.listRange()
-	gen, limit := a.commits.read(r.Root + "\x00" + base + ".." + cmp.Or(head, a.cmpr.branch))
-	a.async(func() {
+func (app *app) loadCommits() {
+	repo := app.repo
+	base, head := app.cmpr.listRange()
+	gen, limit := app.commits.read(repo.Root + "\x00" + base + ".." + cmp.Or(head, app.cmpr.branch))
+	app.async(func() {
 		ctx := context.Background()
-		cl, err := r.CommitLog(ctx, base, head)
+		cl, err := repo.CommitLog(ctx, base, head)
 		total := 0
 		var commits []gitx.Commit
 		if err == nil {
@@ -429,9 +429,9 @@ func (a *app) loadCommits() {
 		if err == nil {
 			commits, err = cl.Page(ctx, 0, limit)
 		}
-		a.update(func() {
-			if sha := a.commits.listed(gen, cl, commits, total, err); sha != "" {
-				a.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha})
+		app.update(func() {
+			if sha := app.commits.listed(gen, cl, commits, total, err); sha != "" {
+				app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: sha})
 			}
 		})
 	})
@@ -439,100 +439,100 @@ func (a *app) loadCommits() {
 
 // readCommitPage reads the page after the commits read, unless a read
 // runs. last is the last commit in view.
-func (a *app) readCommitPage(last int) {
-	gen, from, ok := a.commits.readPage(last)
+func (app *app) readCommitPage(last int) {
+	gen, from, ok := app.commits.readPage(last)
 	if !ok {
 		return
 	}
-	cl := a.commits.log
-	a.async(func() {
+	cl := app.commits.log
+	app.async(func() {
 		page, err := cl.Page(context.Background(), from, commitPage)
-		a.update(func() { a.commits.paged(gen, page, err) })
+		app.update(func() { app.commits.paged(gen, page, err) })
 	})
 }
 
-func (a *app) setScope(s gitx.Scope) {
-	a.commits.newest = false
-	a.chosen = s
-	a.load(s, true)
+func (app *app) setScope(scope gitx.Scope) {
+	app.commits.newest = false
+	app.chosen = scope
+	app.load(scope, true)
 }
 
 // reload reads the changes of the scope again, keeping the review: of
 // the scope being loaded, if one is.
-func (a *app) reload() {
-	t := a.loader.again(a.scope)
-	a.load(t.scope, t.fresh)
+func (app *app) reload() {
+	loadAgain := app.loader.again(app.scope)
+	app.load(loadAgain.scope, loadAgain.fresh)
 }
 
 // enterScope makes s, with its review rev, the scope the window shows.
-func (a *app) enterScope(s gitx.Scope, rev *review.Review) {
-	if a.leaveReview() {
-		a.saveReview()
+func (app *app) enterScope(scope gitx.Scope, rev *review.Review) {
+	if app.leaveReview() {
+		app.saveReview()
 	}
-	a.reviews.ClearAdopted()
-	a.scope, a.rev = s, rev
-	a.targets.seen(rev, review.TargetOverview)
+	app.reviews.ClearAdopted()
+	app.scope, app.rev = scope, rev
+	app.targets.seen(rev, review.TargetOverview)
 }
 
 // load reads the changes of s, with the files the first page shows.
 // Until they land the window keeps what it shows, under a spinner. A new
 // scope opens with its own review on its overview.
-func (a *app) load(s gitx.Scope, fresh bool) {
-	rev, page := a.rev, a.nav.page
+func (app *app) load(scope gitx.Scope, fresh bool) {
+	rev, page := app.rev, app.nav.page
 	if fresh {
-		rev, page = a.reviews.Of(a.repo.Root, s), overview
+		rev, page = app.reviews.Of(app.repo.Root, scope), overview
 	}
-	if !a.loader.shown {
+	if !app.loader.shown {
 		if fresh {
-			a.enterScope(s, rev)
+			app.enterScope(scope, rev)
 		}
-		a.perLoad = newPerLoad()
+		app.perLoad = newPerLoad()
 	}
-	a.loader.start(loadRequest{
-		repo: a.repo, scopeLoad: scopeLoad{s, fresh}, rev: rev,
-		first: a.firstPaint(rev, page, fresh),
+	app.loader.start(loadRequest{
+		repo: app.repo, scopeLoad: scopeLoad{scope, fresh}, rev: rev,
+		first: app.firstPaint(rev, page, fresh),
 	})
 }
 
 // scopeLanded shows the changes a load read.
-func (a *app) scopeLanded(ld landing) {
+func (app *app) scopeLanded(ld landing) {
 	if ld.enter {
-		a.enterScope(ld.scope, ld.rev)
+		app.enterScope(ld.scope, ld.rev)
 	}
-	a.perLoad = ld.perLoad
-	if a.loadErr != "" {
+	app.perLoad = ld.perLoad
+	if app.loadErr != "" {
 		return
 	}
-	a.settle(ld.cont.Decide(a.rev, a.runner.reviewBusy))
+	app.settle(ld.cont.Decide(app.rev, app.runner.reviewBusy))
 	for p, c := range ld.first {
-		if a.diffs[p] != nil {
-			a.setContents(c.change, c.oldText, c.newText, c.err)
+		if app.diffs[p] != nil {
+			app.setContents(c.change, c.oldText, c.newText, c.err)
 		} else {
-			a.extra[p] = newExtraFile(c.newText, c.err)
+			app.extra[p] = newExtraFile(c.newText, c.err)
 		}
 	}
-	a.leaveGone()
+	app.leaveGone()
 }
 
-func (a *app) commitsLocated(movedTo string) { a.movedTo = movedTo }
+func (app *app) commitsLocated(movedTo string) { app.movedTo = movedTo }
 
 // fileRead shows a file a load read after it landed: a changed file, or
 // a file outside the changes that a code snippet shows.
-func (a *app) fileRead(c contents) {
-	if a.diffs[c.change.Path] != nil {
-		a.setContents(c.change, c.oldText, c.newText, c.err)
+func (app *app) fileRead(fileRead contents) {
+	if app.diffs[fileRead.change.Path] != nil {
+		app.setContents(fileRead.change, fileRead.oldText, fileRead.newText, fileRead.err)
 		return
 	}
-	a.extra[c.change.Path] = newExtraFile(c.newText, c.err)
-	if a.keepSnippets() {
-		a.saveReview()
+	app.extra[fileRead.change.Path] = newExtraFile(fileRead.newText, fileRead.err)
+	if app.keepSnippets() {
+		app.saveReview()
 	}
 }
 
 // firstPaint are the files the page shows first: the code snippets of
 // an overview or a walkthrough, the file of a file page, the files of a
 // group page.
-func (a *app) firstPaint(rev *review.Review, page page, fresh bool) []string {
+func (app *app) firstPaint(rev *review.Review, page page, fresh bool) []string {
 	var paths []string
 	walk := func(w *review.Walkthrough) {
 		if w == nil {
@@ -555,13 +555,13 @@ func (a *app) firstPaint(rev *review.Review, page page, fresh bool) []string {
 	case page.kind == kindOverview && rev.Overview != nil:
 		walk(rev.Overview.Walk)
 	case page.kind == kindWalk:
-		if w := rev.Walk(page.key); w != nil {
-			walk(w.Content)
+		if deeperWalk := rev.Walk(page.key); deeperWalk != nil {
+			walk(deeperWalk.Content)
 		}
 	case page.kind == kindFile:
 		paths = append(paths, page.key)
 	case page.kind == kindGroup && !fresh:
-		paths = append(paths, a.groupFiles(page.key)...)
+		paths = append(paths, app.groupFiles(page.key)...)
 	}
 	slices.Sort(paths)
 	return slices.Compact(paths)
@@ -570,86 +570,86 @@ func (a *app) firstPaint(rev *review.Review, page page, fresh bool) []string {
 // settle applies a decision on the review of the scope. It runs while
 // a.rev is still the review the decision started from. A failure goes to
 // the notice, which stays, because a load runs it each time.
-func (a *app) settle(out continuity.Outcome) {
+func (app *app) settle(out continuity.Outcome) {
 	for _, r := range out.Dropped {
-		a.release(r)
+		app.release(r)
 	}
 	if old := out.Archived; old != nil {
-		if a.leaveReview() {
-			a.saved(a.store.SaveReview(old))
+		if app.leaveReview() {
+			app.saved(app.store.SaveReview(old))
 		}
 	}
-	a.rev = out.Rev
+	app.rev = out.Rev
 	if out.Err != nil {
-		a.saveErr = out.Err.Error()
+		app.saveErr = out.Err.Error()
 	}
 }
 
 // restoreArchived brings an archived review back to the uncommitted
 // scope, which keeps it from then on.
-func (a *app) restoreArchived(e *continuity.Earlier) {
-	a.showNext(a.reviews.Restore(e, a.rev, a.runner.reviewBusy), "Could not restore the review")
+func (app *app) restoreArchived(earlier *continuity.Earlier) {
+	app.showNext(app.reviews.Restore(earlier, app.rev, app.runner.reviewBusy), "Could not restore the review")
 }
 
 // moveArchived moves an archived review to the commit that probably
 // holds its changes, when that commit has no review of its own, and
 // opens the commit.
-func (a *app) moveArchived(e *continuity.Earlier) {
-	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: e.Probably}
-	a.showNext(a.reviews.MoveTo(a.repo.Root, e, to, a.runner.reviewBusy), "Could not move the review")
+func (app *app) moveArchived(earlier *continuity.Earlier) {
+	to := gitx.Scope{Kind: gitx.ScopeCommit, Commit: earlier.Probably}
+	app.showNext(app.reviews.MoveTo(app.repo.Root, earlier, to, app.runner.reviewBusy), "Could not move the review")
 }
 
-func (a *app) deleteArchived(e *continuity.Earlier) {
-	a.showNext(a.reviews.Delete(a.repo.Root, e), "Could not delete the review")
+func (app *app) deleteArchived(earlier *continuity.Earlier) {
+	app.showNext(app.reviews.Delete(app.repo.Root, earlier), "Could not delete the review")
 }
 
 // showNext shows what an action on an archived review did. When the
 // action replaced the review of the scope, its error goes to the notice
 // with the other save errors. Any other error goes to a dialog that says
 // failed.
-func (a *app) showNext(next continuity.Next, failed string) {
+func (app *app) showNext(next continuity.Next, failed string) {
 	if next.Rev != nil {
-		a.settle(next.Outcome)
+		app.settle(next.Outcome)
 	} else if next.Err != nil {
-		a.showError(failed, next.Err)
+		app.showError(failed, next.Err)
 	}
 	if next.Left {
-		a.leaveGone()
+		app.leaveGone()
 	}
 	if next.Open == nil {
 		return
 	}
-	if *next.Open == a.scope {
-		a.openPage(overview)
+	if *next.Open == app.scope {
+		app.openPage(overview)
 	} else {
-		a.setScope(*next.Open)
+		app.setScope(*next.Open)
 	}
 }
 
-func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error) {
-	d := a.diffs[f.Path]
-	if d == nil {
+func (app *app) setContents(change gitx.FileChange, oldText, newText string, err error) {
+	diff := app.diffs[change.Path]
+	if diff == nil {
 		return
 	}
-	d.loading = false
+	diff.loading = false
 	switch {
 	case errors.Is(err, gitx.ErrBinary):
-		d.err = "Binary file"
+		diff.err = "Binary file"
 		return
 	case errors.Is(err, gitx.ErrTooLarge):
-		d.err = "File too large to show"
+		diff.err = "File too large to show"
 		return
 	case err != nil:
-		d.err = err.Error()
+		diff.err = err.Error()
 		return
 	}
-	lang := editor.LanguageFor(f.Path)
+	lang := editor.LanguageFor(change.Path)
 	before, after := editor.NewBuffer(oldText), editor.NewBuffer(newText)
 	before.SetLanguage(lang)
 	after.SetLanguage(lang)
-	d.state = &editor.DiffState{Old: before, New: after, LineSelection: true, Wrap: false}
-	if a.keepSnippets() {
-		a.saveReview()
+	diff.state = &editor.DiffState{Old: before, New: after, LineSelection: true, Wrap: false}
+	if app.keepSnippets() {
+		app.saveReview()
 	}
 }
 
@@ -657,90 +657,90 @@ func (a *app) setContents(f gitx.FileChange, oldText, newText string, err error)
 // while the changes are the ones the review was written for. An archived
 // review shows this code after the changes are gone. It reports whether
 // it saved any.
-func (a *app) keepSnippets() bool {
-	if a.freshness() != overviewFresh {
+func (app *app) keepSnippets() bool {
+	if app.freshness() != overviewFresh {
 		return false
 	}
 	kept := false
-	a.rev.EachRef(func(r *review.Ref) {
+	app.rev.EachRef(func(r *review.Ref) {
 		if len(r.Code) > 0 {
 			return
 		}
-		s, ok := a.loadedSnippet(*r)
-		if !ok || s.loading || s.missing != "" || len(s.lines) == 0 {
+		loaded, ok := app.loadedSnippet(*r)
+		if !ok || loaded.loading || loaded.missing != "" || len(loaded.lines) == 0 {
 			return
 		}
-		for i, line := range s.lines {
-			r.Code = append(r.Code, review.CodeLine{Text: line, Changed: s.changed[i]})
+		for i, line := range loaded.lines {
+			r.Code = append(r.Code, review.CodeLine{Text: line, Changed: loaded.changed[i]})
 		}
 		kept = true
 	})
 	return kept
 }
 
-func (a *app) fileNames() []string {
-	out := make([]string, len(a.files))
-	for i, f := range a.files {
+func (app *app) fileNames() []string {
+	out := make([]string, len(app.files))
+	for i, f := range app.files {
 		out[i] = f.Path
 	}
 	return out
 }
 
 // fileOrder is the order the sidebar lists the files in.
-func (a *app) fileOrder() []string {
-	if a.cfg.FlatFiles {
-		return a.fileNames()
+func (app *app) fileOrder() []string {
+	if app.cfg.FlatFiles {
+		return app.fileNames()
 	}
 	var files []string
-	for _, g := range a.groups() {
+	for _, g := range app.groups() {
 		files = append(files, g.Files...)
 	}
 	return files
 }
 
 // listed tells whether the sidebar lists the file.
-func (a *app) listed(file string) bool {
-	return !a.cfg.HideViewed || !a.rev.Viewed[file]
+func (app *app) listed(file string) bool {
+	return !app.cfg.HideViewed || !app.rev.Viewed[file]
 }
 
 // setViewed marks the files viewed and folds them, or marks them not
 // viewed and unfolds them, except big files, which stay folded.
-func (a *app) setViewed(files []string, viewed bool) {
+func (app *app) setViewed(files []string, viewed bool) {
 	for _, f := range files {
-		delete(a.folded, f)
-		a.rev.Viewed[f] = viewed
+		delete(app.folded, f)
+		app.rev.Viewed[f] = viewed
 	}
-	a.saveReview()
+	app.saveReview()
 }
 
 // isFolded reports whether the card of the file shows only its header.
-func (a *app) isFolded(file string) bool {
-	if f, ok := a.folded[file]; ok {
-		return f
+func (app *app) isFolded(file string) bool {
+	if folded, ok := app.folded[file]; ok {
+		return folded
 	}
-	if d := a.diffs[file]; d != nil && d.change.Additions+d.change.Deletions > bigFileLines {
+	if diff := app.diffs[file]; diff != nil && diff.change.Additions+diff.change.Deletions > bigFileLines {
 		return true
 	}
-	return a.rev.Viewed[file]
+	return app.rev.Viewed[file]
 }
 
 // groups are the groups the sidebar lists the files in. Callers must
 // not change the slice they get.
-func (a *app) groups() []review.Group {
+func (app *app) groups() []review.Group {
 	var from []review.Group
-	if a.rev.Overview != nil {
-		from = a.rev.Overview.Groups
+	if app.rev.Overview != nil {
+		from = app.rev.Overview.Groups
 	}
-	if g := &a.grouped; sameSlice(g.from, from) && sameSlice(g.files, a.files) {
-		return g.groups
+	if cache := &app.grouped; sameSlice(cache.from, from) && sameSlice(cache.files, app.files) {
+		return cache.groups
 	}
 	var groups []review.Group
 	if len(from) > 0 {
-		groups = review.NormalizeGroups(from, a.fileNames())
+		groups = review.NormalizeGroups(from, app.fileNames())
 	} else {
-		groups = review.DirectoryGroups(a.fileNames())
+		groups = review.DirectoryGroups(app.fileNames())
 	}
-	a.grouped = groupsCache{groups: groups, ids: groupIDs(groups), from: from, files: a.files}
+	app.grouped = groupsCache{groups: groups, ids: groupIDs(groups), from: from, files: app.files}
 	return groups
 }
 
@@ -763,9 +763,9 @@ func groupIDs(groups []review.Group) []string {
 }
 
 // groupID is the id of the group at index i of groups().
-func (a *app) groupID(i int) string {
-	a.groups()
-	return a.grouped.ids[i]
+func (app *app) groupID(index int) string {
+	app.groups()
+	return app.grouped.ids[index]
 }
 
 // groupsCache holds the groups made from the groups of an overview and
@@ -783,151 +783,151 @@ type groupsCache struct {
 
 // sameSlice reports whether x and y are the same elements of the same
 // array.
-func sameSlice[T any](x, y []T) bool {
-	return len(x) == len(y) && (len(x) == 0 || &x[0] == &y[0])
+func sameSlice[Element any](first, second []Element) bool {
+	return len(first) == len(second) && (len(first) == 0 || &first[0] == &second[0])
 }
 
 // startOver forgets the review of the current scope: its overview,
 // threads and viewed files.
-func (a *app) startOver() {
-	rev, err := a.reviews.StartOver(a.repo.Root, a.scope)
+func (app *app) startOver() {
+	rev, err := app.reviews.StartOver(app.repo.Root, app.scope)
 	if err != nil {
-		a.showError("Could not start the review over", err)
+		app.showError("Could not start the review over", err)
 		return
 	}
-	a.release(a.rev)
-	a.leaveReview()
-	a.rev = rev
-	a.drafts = map[string]string{}
+	app.release(app.rev)
+	app.leaveReview()
+	app.rev = rev
+	app.drafts = map[string]string{}
 }
 
-func (a *app) confirmStartOver() {
-	a.confirm("Start this review over?", "The overview, the deeper walkthroughs, all comments and threads, and the viewed marks of this scope are deleted.", "Start Over", a.startOver)
+func (app *app) confirmStartOver() {
+	app.confirm("Start this review over?", "The overview, the deeper walkthroughs, all comments and threads, and the viewed marks of this scope are deleted.", "Start Over", app.startOver)
 }
 
 // confirm runs fn after the user agrees in a warning dialog. A test can
 // set askConfirm in place of the dialog. Without both, fn runs at once.
-func (a *app) confirm(message, detail, button string, fn func()) {
-	if a.askConfirm != nil {
-		a.askConfirm(message, detail, button, fn)
+func (app *app) confirm(message, detail, button string, fn func()) {
+	if app.askConfirm != nil {
+		app.askConfirm(message, detail, button, fn)
 		return
 	}
-	if a.win == nil {
+	if app.win == nil {
 		fn()
 		return
 	}
 	go func() {
 		res, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: a.win, Type: mygo.MessageWarning,
+			Parent: app.win, Type: mygo.MessageWarning,
 			Message: message, Detail: detail,
 			Buttons: []string{button, "Cancel"},
 		})
 		if err == nil && res.Button == 0 {
-			a.update(fn)
+			app.update(fn)
 		}
 	}()
 }
 
 // showError tells the user that an action failed, in an error dialog.
 // Without a window, in tests, it logs the error.
-func (a *app) showError(message string, err error) {
-	if a.win == nil {
+func (app *app) showError(message string, err error) {
+	if app.win == nil {
 		log.Printf("%s: %v", message, err)
 		return
 	}
 	go func() {
 		_, _ = mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: a.win, Type: mygo.MessageError,
+			Parent: app.win, Type: mygo.MessageError,
 			Message: message, Detail: err.Error(),
 		})
 	}()
 }
 
-func (a *app) saveReview() {
-	if a.rev != nil {
-		a.saveReviewOf(a.rev)
+func (app *app) saveReview() {
+	if app.rev != nil {
+		app.saveReviewOf(app.rev)
 	}
 }
 
 // saveReviewOf saves r while it is the review of its scope. A review that
 // was started over or replaced is obsolete, and a late agent answer must
 // not write it back.
-func (a *app) saveReviewOf(r *review.Review) {
-	if a.reviews.Obsolete(r) {
+func (app *app) saveReviewOf(rev *review.Review) {
+	if app.reviews.Obsolete(rev) {
 		return
 	}
-	if r == a.rev {
-		a.keepSnippets()
+	if rev == app.rev {
+		app.keepSnippets()
 	}
-	a.saved(a.store.SaveReview(r))
+	app.saved(app.store.SaveReview(rev))
 }
 
-func (a *app) saveConfig() {
-	a.saved(a.store.SaveConfig(a.cfg))
+func (app *app) saveConfig() {
+	app.saved(app.store.SaveConfig(app.cfg))
 }
 
 // saved keeps the error of a write for the notice, or clears the notice
 // when the write worked.
-func (a *app) saved(err error) {
-	a.saveErr = errText(err)
+func (app *app) saved(err error) {
+	app.saveErr = errText(err)
 }
 
-func (a *app) scopeLabel() string {
-	if a.scope.Kind == gitx.ScopeCommit {
-		for _, c := range a.commits.rows {
-			if c.SHA == a.scope.Commit {
+func (app *app) scopeLabel() string {
+	if app.scope.Kind == gitx.ScopeCommit {
+		for _, c := range app.commits.rows {
+			if c.SHA == app.scope.Commit {
 				return fmt.Sprintf("%s %s", c.Short, c.Subject)
 			}
 		}
 	}
-	return a.scope.Label()
+	return app.scope.Label()
 }
 
-func (a *app) openThread(id string) {
-	a.closeEmptyThread(id)
-	a.panel = panelThread(id)
+func (app *app) openThread(id string) {
+	app.closeEmptyThread(id)
+	app.panel = panelThread(id)
 }
 
 // closeEmptyThread drops a thread the user opened and left without
 // writing anything, unless it is the one being opened. It reports whether
 // it dropped one.
-func (a *app) closeEmptyThread(keep string) bool {
-	id := a.threadID()
-	if id == "" || id == keep || a.rev == nil {
+func (app *app) closeEmptyThread(keep string) bool {
+	id := app.threadID()
+	if id == "" || id == keep || app.rev == nil {
 		return false
 	}
-	t := a.rev.Thread(id)
-	if t == nil || len(t.Messages) > 0 {
+	thread := app.rev.Thread(id)
+	if thread == nil || len(thread.Messages) > 0 {
 		return false
 	}
-	a.rev.DeleteThread(t.ID)
-	delete(a.drafts, t.ID)
+	app.rev.DeleteThread(thread.ID)
+	delete(app.drafts, thread.ID)
 	return true
 }
 
 // leaveReview resets perReview before another review takes the place of
 // the one the window shows. It reports whether it dropped an empty thread.
 // Then the caller saves the review.
-func (a *app) leaveReview() bool {
-	dropped := a.closeEmptyThread("")
-	a.perReview = newPerReview()
+func (app *app) leaveReview() bool {
+	dropped := app.closeEmptyThread("")
+	app.perReview = newPerReview()
 	return dropped
 }
 
-func (a *app) newThread(anchor review.Anchor) {
-	t := a.rev.AddThread(anchor)
-	a.openThread(t.ID)
+func (app *app) newThread(anchor review.Anchor) {
+	thread := app.rev.AddThread(anchor)
+	app.openThread(thread.ID)
 }
 
 // quoteLines returns lines start..end (1-based) of a side of a file.
-func (a *app) quoteLines(path string, side review.Side, start, end int) string {
-	d := a.diffs[path]
-	if d == nil || d.state == nil {
+func (app *app) quoteLines(path string, side review.Side, start, end int) string {
+	diff := app.diffs[path]
+	if diff == nil || diff.state == nil {
 		return ""
 	}
-	buf := d.state.New
+	buf := diff.state.New
 	if side == review.SideOld {
-		buf = d.state.Old
+		buf = diff.state.Old
 	}
 	var lines []string
 	for i := start - 1; i < end && i < buf.LineCount(); i++ {
@@ -938,15 +938,15 @@ func (a *app) quoteLines(path string, side review.Side, start, end int) string {
 	return strings.Join(lines, "\n")
 }
 
-func sideOf(s editor.DiffSide) review.Side {
-	if s == editor.DiffOld {
+func sideOf(side editor.DiffSide) review.Side {
+	if side == editor.DiffOld {
 		return review.SideOld
 	}
 	return review.SideNew
 }
 
-func diffSide(s review.Side) editor.DiffSide {
-	if s == review.SideOld {
+func diffSide(side review.Side) editor.DiffSide {
+	if side == review.SideOld {
 		return editor.DiffOld
 	}
 	return editor.DiffNew

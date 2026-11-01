@@ -52,9 +52,9 @@ var specs = []spec{
 	},
 }
 
-func lookup(p Provider) (spec, bool) {
+func lookup(provider Provider) (spec, bool) {
 	for _, sp := range specs {
-		if sp.id == p {
+		if sp.id == provider {
 			return sp, true
 		}
 	}
@@ -63,8 +63,8 @@ func lookup(p Provider) (spec, bool) {
 
 // specOf is the spec of p. An unknown provider, as the empty one of an old
 // review, reads as Claude, the default provider.
-func specOf(p Provider) spec {
-	if sp, ok := lookup(p); ok {
+func specOf(provider Provider) spec {
+	if sp, ok := lookup(provider); ok {
 		return sp
 	}
 	return specs[0]
@@ -80,11 +80,11 @@ func Providers() []Provider {
 }
 
 // Name is the name of the provider's CLI, as the app shows it.
-func (p Provider) Name() string { return specOf(p).name }
+func (provider Provider) Name() string { return specOf(provider).name }
 
 // Efforts lists the effort levels the CLI of the provider takes.
-func (p Provider) Efforts() []string { return specOf(p).efforts }
+func (provider Provider) Efforts() []string { return specOf(provider).efforts }
 
 // WithoutUserSetup says what a run of the provider leaves out when the
 // user's own setup is off.
-func (p Provider) WithoutUserSetup() string { return specOf(p).withoutSetup }
+func (provider Provider) WithoutUserSetup() string { return specOf(provider).withoutSetup }

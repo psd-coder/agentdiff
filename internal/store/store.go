@@ -50,24 +50,24 @@ func DefaultConfig() Config {
 	return Config{Agent: agent.Config{Provider: agent.Claude, AutoEffort: "low"}, DeeperAhead: true}
 }
 
-func (c *Config) AddRecent(repo string) {
-	c.Recent = slices.DeleteFunc(slices.Clone(c.Recent), func(r string) bool { return r == repo })
-	c.Recent = append([]string{repo}, c.Recent...)
-	if len(c.Recent) > maxRecent {
-		c.Recent = c.Recent[:maxRecent]
+func (config *Config) AddRecent(repo string) {
+	config.Recent = slices.DeleteFunc(slices.Clone(config.Recent), func(r string) bool { return r == repo })
+	config.Recent = append([]string{repo}, config.Recent...)
+	if len(config.Recent) > maxRecent {
+		config.Recent = config.Recent[:maxRecent]
 	}
 }
 
-func (c *Config) RemoveRecent(repo string) {
-	c.Recent = slices.DeleteFunc(slices.Clone(c.Recent), func(r string) bool { return r == repo })
+func (config *Config) RemoveRecent(repo string) {
+	config.Recent = slices.DeleteFunc(slices.Clone(config.Recent), func(r string) bool { return r == repo })
 }
 
 type Store struct{ Dir string }
 
 // LoadConfig returns the saved config, or the default one. A config file
 // it cannot read is moved to config.json.bad.
-func (s Store) LoadConfig() Config {
-	path := filepath.Join(s.Dir, "config.json")
+func (store Store) LoadConfig() Config {
+	path := filepath.Join(store.Dir, "config.json")
 	file := struct {
 		Config
 		Questions string `json:"questions"`
@@ -80,11 +80,11 @@ func (s Store) LoadConfig() Config {
 	if cfg.Agent.Provider == "" {
 		cfg.Agent.Provider = agent.Claude
 	}
-	if q := strings.TrimSpace(file.Questions); q != "" && q != oldDefaultQuestions && q != legacyQuestions && cfg.Prompts[review.PromptOverview] == "" {
+	if questions := strings.TrimSpace(file.Questions); questions != "" && questions != oldDefaultQuestions && questions != legacyQuestions && cfg.Prompts[review.PromptOverview] == "" {
 		if cfg.Prompts == nil {
 			cfg.Prompts = review.Prompts{}
 		}
-		cfg.Prompts[review.PromptOverview] = review.DefaultOverview(q)
+		cfg.Prompts[review.PromptOverview] = review.DefaultOverview(questions)
 	}
 	return cfg
 }
@@ -108,57 +108,57 @@ const (
 6. Tell about assumptions and rules which force non-beautiful changes.`
 )
 
-func (s Store) SaveConfig(cfg Config) error {
-	return writeJSON(filepath.Join(s.Dir, "config.json"), cfg)
+func (store Store) SaveConfig(cfg Config) error {
+	return writeJSON(filepath.Join(store.Dir, "config.json"), cfg)
 }
 
-func (s Store) reviewPath(repo string, scope gitx.Scope) string {
+func (store Store) reviewPath(repo string, scope gitx.Scope) string {
 	sum := sha256.Sum256([]byte(repo))
-	return filepath.Join(s.Dir, "reviews", hex.EncodeToString(sum[:8]), scope.Key()+".json")
+	return filepath.Join(store.Dir, "reviews", hex.EncodeToString(sum[:8]), scope.Key()+".json")
 }
 
 // LoadReview returns the saved review of a scope, or a new one. A review
 // file it cannot read is moved to the same path with ".bad" added.
-func (s Store) LoadReview(repo string, scope gitx.Scope) *review.Review {
-	path := s.reviewPath(repo, scope)
-	r := review.New(repo, scope)
-	if err := readJSON(path, r); err != nil {
+func (store Store) LoadReview(repo string, scope gitx.Scope) *review.Review {
+	path := store.reviewPath(repo, scope)
+	loaded := review.New(repo, scope)
+	if err := readJSON(path, loaded); err != nil {
 		setAside(path, err)
 		return review.New(repo, scope)
 	}
-	if r.Viewed == nil {
-		r.Viewed = map[string]bool{}
+	if loaded.Viewed == nil {
+		loaded.Viewed = map[string]bool{}
 	}
-	r.Repo, r.Scope = repo, scope
-	return r
+	loaded.Repo, loaded.Scope = repo, scope
+	return loaded
 }
 
-func (s Store) SaveReview(r *review.Review) error {
-	r.Updated = time.Now()
-	return writeJSON(s.reviewPath(r.Repo, r.Scope), r)
+func (store Store) SaveReview(saving *review.Review) error {
+	saving.Updated = time.Now()
+	return writeJSON(store.reviewPath(saving.Repo, saving.Scope), saving)
 }
 
 // DeleteReview deletes a review together with the logs of its agent runs.
-func (s Store) DeleteReview(repo string, scope gitx.Scope) error {
-	err := os.Remove(s.reviewPath(repo, scope))
+func (store Store) DeleteReview(repo string, scope gitx.Scope) error {
+	err := os.Remove(store.reviewPath(repo, scope))
 	if IsNotExist(err) {
 		err = nil
 	}
-	return errors.Join(err, os.RemoveAll(s.runDir(repo, scope)))
+	return errors.Join(err, os.RemoveAll(store.runDir(repo, scope)))
 }
 
 // FindReview returns the newest saved review of repo, other than the one
 // of scope, whose overview was written for the changes with patchID.
-func (s Store) FindReview(repo string, scope gitx.Scope, patchID string) (*review.Review, bool) {
-	paths, _ := filepath.Glob(filepath.Join(filepath.Dir(s.reviewPath(repo, scope)), "*.json"))
+func (store Store) FindReview(repo string, scope gitx.Scope, patchID string) (*review.Review, bool) {
+	paths, _ := filepath.Glob(filepath.Join(filepath.Dir(store.reviewPath(repo, scope)), "*.json"))
 	var found *review.Review
 	for _, path := range paths {
-		r, ok := readReview(path, repo)
-		if !ok || r.Overview == nil || r.Overview.PatchID != patchID || r.Scope.Key() == scope.Key() {
+		saved, ok := readReview(path, repo)
+		if !ok || saved.Overview == nil || saved.Overview.PatchID != patchID || saved.Scope.Key() == scope.Key() {
 			continue
 		}
-		if found == nil || r.Updated.After(found.Updated) {
-			found = r
+		if found == nil || saved.Updated.After(found.Updated) {
+			found = saved
 		}
 	}
 	return found, found != nil
@@ -166,49 +166,49 @@ func (s Store) FindReview(repo string, scope gitx.Scope, patchID string) (*revie
 
 // MoveReview moves a review and the logs of its runs to another scope.
 // It replaces what the other scope had.
-func (s Store) MoveReview(repo string, from, to gitx.Scope) error {
-	if err := s.DeleteReview(repo, to); err != nil {
+func (store Store) MoveReview(repo string, from, to gitx.Scope) error {
+	if err := store.DeleteReview(repo, to); err != nil {
 		return err
 	}
-	if err := os.Rename(s.reviewPath(repo, from), s.reviewPath(repo, to)); err != nil {
+	if err := os.Rename(store.reviewPath(repo, from), store.reviewPath(repo, to)); err != nil {
 		return err
 	}
-	if err := os.Rename(s.runDir(repo, from), s.runDir(repo, to)); err != nil && !IsNotExist(err) {
+	if err := os.Rename(store.runDir(repo, from), store.runDir(repo, to)); err != nil && !IsNotExist(err) {
 		return err
 	}
-	return s.rescope(repo, to)
+	return store.rescope(repo, to)
 }
 
 // CopyReview copies a review and the logs of its runs to another scope.
 // It replaces what the other scope had.
-func (s Store) CopyReview(repo string, from, to gitx.Scope) error {
-	if err := s.DeleteReview(repo, to); err != nil {
+func (store Store) CopyReview(repo string, from, to gitx.Scope) error {
+	if err := store.DeleteReview(repo, to); err != nil {
 		return err
 	}
-	if err := copyFile(s.reviewPath(repo, from), s.reviewPath(repo, to)); err != nil {
+	if err := copyFile(store.reviewPath(repo, from), store.reviewPath(repo, to)); err != nil {
 		return err
 	}
-	runs, err := os.ReadDir(s.runDir(repo, from))
+	runs, err := os.ReadDir(store.runDir(repo, from))
 	if err != nil && !IsNotExist(err) {
 		return err
 	}
 	if len(runs) > 0 {
-		if err := os.MkdirAll(s.runDir(repo, to), 0o755); err != nil {
+		if err := os.MkdirAll(store.runDir(repo, to), 0o755); err != nil {
 			return err
 		}
 	}
 	for _, e := range runs {
-		if err := copyFile(filepath.Join(s.runDir(repo, from), e.Name()), filepath.Join(s.runDir(repo, to), e.Name())); err != nil {
+		if err := copyFile(filepath.Join(store.runDir(repo, from), e.Name()), filepath.Join(store.runDir(repo, to), e.Name())); err != nil {
 			return err
 		}
 	}
-	return s.rescope(repo, to)
+	return store.rescope(repo, to)
 }
 
 // rescope writes the scope into a review that moved or was copied there,
 // so FindReview reads where it is.
-func (s Store) rescope(repo string, scope gitx.Scope) error {
-	return writeJSON(s.reviewPath(repo, scope), s.LoadReview(repo, scope))
+func (store Store) rescope(repo string, scope gitx.Scope) error {
+	return writeJSON(store.reviewPath(repo, scope), store.LoadReview(repo, scope))
 }
 
 // maxArchived is how many archived reviews a repository keeps.
@@ -216,38 +216,38 @@ const maxArchived = 20
 
 // ArchiveReview moves the review of the uncommitted changes, which are
 // gone from the working tree, under id.
-func (s Store) ArchiveReview(repo, id string) (gitx.Scope, error) {
+func (store Store) ArchiveReview(repo, id string) (gitx.Scope, error) {
 	to := gitx.ArchivedScope(id)
-	if err := s.MoveReview(repo, gitx.Scope{Kind: gitx.ScopeUncommitted}, to); err != nil {
+	if err := store.MoveReview(repo, gitx.Scope{Kind: gitx.ScopeUncommitted}, to); err != nil {
 		return to, err
 	}
 	// Saving marks the time of archiving, which orders the archive.
-	return to, s.SaveReview(s.LoadReview(repo, to))
+	return to, store.SaveReview(store.LoadReview(repo, to))
 }
 
 // PruneArchive deletes the oldest archived reviews of repo past
 // maxArchived.
-func (s Store) PruneArchive(repo string) error {
-	archived := s.Archived(repo)
+func (store Store) PruneArchive(repo string) error {
+	archived := store.Archived(repo)
 	var errs []error
 	for _, r := range archived[min(len(archived), maxArchived):] {
-		errs = append(errs, s.DeleteReview(repo, r.Scope))
+		errs = append(errs, store.DeleteReview(repo, r.Scope))
 	}
 	return errors.Join(errs...)
 }
 
 // Archived returns the archived reviews of repo that have an overview,
 // the newest first.
-func (s Store) Archived(repo string) []*review.Review {
-	pattern := filepath.Join(filepath.Dir(s.reviewPath(repo, gitx.Scope{})), "archived-*.json")
+func (store Store) Archived(repo string) []*review.Review {
+	pattern := filepath.Join(filepath.Dir(store.reviewPath(repo, gitx.Scope{})), "archived-*.json")
 	paths, _ := filepath.Glob(pattern)
 	var out []*review.Review
 	for _, path := range paths {
-		r, ok := readReview(path, repo)
-		if !ok || r.Scope.Kind != gitx.ScopeArchived || r.Overview == nil {
+		saved, ok := readReview(path, repo)
+		if !ok || saved.Scope.Kind != gitx.ScopeArchived || saved.Overview == nil {
 			continue
 		}
-		out = append(out, r)
+		out = append(out, saved)
 	}
 	slices.SortFunc(out, func(a, b *review.Review) int { return b.Updated.Compare(a.Updated) })
 	return out
@@ -257,15 +257,15 @@ func (s Store) Archived(repo string) []*review.Review {
 // which skips a file it cannot read. The review keeps the scope its file
 // names.
 func readReview(path, repo string) (*review.Review, bool) {
-	r := &review.Review{}
-	if readJSON(path, r) != nil {
+	saved := &review.Review{}
+	if readJSON(path, saved) != nil {
 		return nil, false
 	}
-	if r.Viewed == nil {
-		r.Viewed = map[string]bool{}
+	if saved.Viewed == nil {
+		saved.Viewed = map[string]bool{}
 	}
-	r.Repo = repo
-	return r, true
+	saved.Repo = repo
+	return saved, true
 }
 
 // setAside moves a file that failed to load with err to path.bad, so the
@@ -278,25 +278,25 @@ func setAside(path string, err error) {
 }
 
 func copyFile(from, to string) error {
-	b, err := os.ReadFile(from)
+	data, err := os.ReadFile(from)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(to, b, 0o600)
+	return os.WriteFile(to, data, 0o600)
 }
 
-func readJSON(path string, v any) error {
-	b, err := os.ReadFile(path)
+func readJSON(path string, value any) error {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(b, v)
+	return json.Unmarshal(data, value)
 }
 
 // writeJSON writes through a temporary file, so a crash never leaves a
 // half-written file behind.
-func writeJSON(path string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
+func writeJSON(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -307,7 +307,7 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	_, err = tmp.Write(b)
+	_, err = tmp.Write(data)
 	err = errors.Join(err, tmp.Close())
 	if err == nil {
 		err = os.Rename(tmp.Name(), path)

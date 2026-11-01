@@ -98,15 +98,15 @@ var Templates = []Template{
 
 // TemplateOf returns the template of a prompt.
 func TemplateOf(name PromptName) Template {
-	i := slices.IndexFunc(Templates, func(t Template) bool { return t.Name == name })
-	return Templates[i]
+	index := slices.IndexFunc(Templates, func(t Template) bool { return t.Name == name })
+	return Templates[index]
 }
 
 var blockRef = regexp.MustCompile(`\{\{\s*([A-Za-z_]+)\s*\}\}`)
 
 // Check reports what keeps text from working as the prompt: blocks the
 // prompt does not have and required blocks that text leaves out.
-func (t Template) Check(text string) error {
+func (template Template) Check(text string) error {
 	used := map[string]bool{}
 	var problems []string
 	for _, m := range blockRef.FindAllStringSubmatch(text, -1) {
@@ -115,11 +115,11 @@ func (t Template) Check(text string) error {
 			continue
 		}
 		used[name] = true
-		if !slices.ContainsFunc(t.Blocks, func(b Block) bool { return b.Name == name }) {
-			problems = append(problems, fmt.Sprintf("The %s prompt has no block {{%s}}.", strings.ToLower(t.Title), name))
+		if !slices.ContainsFunc(template.Blocks, func(b Block) bool { return b.Name == name }) {
+			problems = append(problems, fmt.Sprintf("The %s prompt has no block {{%s}}.", strings.ToLower(template.Title), name))
 		}
 	}
-	for _, b := range t.Blocks {
+	for _, b := range template.Blocks {
 		if b.Required && !used[b.Name] {
 			problems = append(problems, fmt.Sprintf("The block {{%s}} is missing.", b.Name))
 		}
@@ -134,12 +134,12 @@ func (t Template) Check(text string) error {
 // A prompt that is missing, blank or broken gets its default text.
 type Prompts map[PromptName]string
 
-func (p Prompts) text(name PromptName) string {
-	t := TemplateOf(name)
-	if text := p[name]; strings.TrimSpace(text) != "" && t.Check(text) == nil {
+func (prompts Prompts) text(name PromptName) string {
+	template := TemplateOf(name)
+	if text := prompts[name]; strings.TrimSpace(text) != "" && template.Check(text) == nil {
 		return text
 	}
-	return t.Default
+	return template.Default
 }
 
 var blankLines = regexp.MustCompile(`\n{3,}`)
@@ -147,12 +147,12 @@ var blankLines = regexp.MustCompile(`\n{3,}`)
 // render puts the values of the blocks into the prompt in one pass, so a
 // value that holds {{name}} stays as it is. A block that is empty leaves
 // no gap: more than one blank line becomes one.
-func (p Prompts) render(name PromptName, values map[string]string) string {
-	out := blockRef.ReplaceAllStringFunc(p.text(name), func(ref string) string {
+func (prompts Prompts) render(name PromptName, values map[string]string) string {
+	out := blockRef.ReplaceAllStringFunc(prompts.text(name), func(ref string) string {
 		return strings.TrimSpace(values[blockRef.FindStringSubmatch(ref)[1]])
 	})
 	return strings.TrimSpace(blankLines.ReplaceAllString(out, "\n\n")) + "\n"
 }
 
 // System is the system prompt of every run.
-func (p Prompts) System() string { return strings.TrimSpace(p.text(PromptSystem)) }
+func (prompts Prompts) System() string { return strings.TrimSpace(prompts.text(PromptSystem)) }

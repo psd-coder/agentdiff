@@ -48,56 +48,56 @@ func menuShortcuts(menu *mygo.Menu) (menus []string, keys [][]shortcut) {
 
 // moreShortcuts are the shortcuts of the commands the menu bar does not
 // hold, which they run where they apply.
-func (a *app) moreShortcuts() []shortcut {
-	inMenu := a.menuIDs()
+func (app *app) moreShortcuts() []shortcut {
+	inMenu := app.menuIDs()
 	var out []shortcut
-	for _, cm := range a.cachedCommands() {
-		if keys := a.keymap().of(cm.id); keys != "" && !inMenu[cm.id] {
+	for _, cm := range app.cachedCommands() {
+		if keys := app.keymap().of(cm.id); keys != "" && !inMenu[cm.id] {
 			out = append(out, shortcut{keyLabel(keys), strings.TrimSuffix(cm.title, "…")})
 		}
 	}
 	return out
 }
 
-func (a *app) shortcutsModal(c *ui.Context) {
-	if !a.shortcutsOpen {
+func (app *app) shortcutsModal(ctx *ui.Context) {
+	if !app.shortcutsOpen {
 		return
 	}
-	t := c.Theme()
+	theme := ctx.Theme()
 	section := func(title string, list []shortcut) {
-		ui.Column(c.Key(title)).Gap(6).Children(func() {
-			ui.Text(c, title).FontSize(12).Bold().TextColor(t.TextMuted)
+		ui.Column(ctx.Key(title)).Gap(6).Children(func() {
+			ui.Text(ctx, title).FontSize(12).Bold().TextColor(theme.TextMuted)
 			for _, s := range list {
-				ui.Row(c.Key(s.keys + s.does)).Gap(16).AlignItems(ui.Start).Children(func() {
-					ui.Text(c, s.does).Grow(1).Shrink(1)
-					ui.Text(c, s.keys).Font("monospace").FontSize(12).Shrink(0)
+				ui.Row(ctx.Key(s.keys + s.does)).Gap(16).AlignItems(ui.Start).Children(func() {
+					ui.Text(ctx, s.does).Grow(1).Shrink(1)
+					ui.Text(ctx, s.keys).Font("monospace").FontSize(12).Shrink(0)
 				})
 			}
 		})
 	}
-	ui.Modal(c, &a.shortcutsOpen, func() {
-		ui.Column(c).Width(560).Shrink(1).MinHeight(0).Children(func() {
-			ui.Text(c, "Keyboard shortcuts").FontSize(18).Bold().Padding(0, 0, 14, 0)
-			ui.Scroll(c).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-				ui.Column(c).Gap(18).PaddingEnd(4).Children(func() {
-					menus, keys := menuShortcuts(a.menu())
+	ui.Modal(ctx, &app.shortcutsOpen, func() {
+		ui.Column(ctx).Width(560).Shrink(1).MinHeight(0).Children(func() {
+			ui.Text(ctx, "Keyboard shortcuts").FontSize(18).Bold().Padding(0, 0, 14, 0)
+			ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
+				ui.Column(ctx).Gap(18).PaddingEnd(4).Children(func() {
+					menus, keys := menuShortcuts(app.menu())
 					for i, m := range menus {
 						section(m+" menu", keys[i])
 					}
-					if more := a.moreShortcuts(); len(more) > 0 {
+					if more := app.moreShortcuts(); len(more) > 0 {
 						section("Other commands", more)
 					}
 					section("In the window", otherKeys)
 				})
 			})
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
-				if ui.Button(c, "Change shortcuts…").Clicked() {
-					a.shortcutsOpen = false
-					a.openSettings()
-					a.settings.tab = shortcutsTab
+			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
+				if ui.Button(ctx, "Change shortcuts…").Clicked() {
+					app.shortcutsOpen = false
+					app.openSettings()
+					app.settings.tab = shortcutsTab
 				}
-				ui.Spacer(c)
-				a.takeFocus(ui.PrimaryButton(c, "Done").Tooltip("Escape").AutoFocus().OnClick(func() { a.shortcutsOpen = false }), "shortcuts")
+				ui.Spacer(ctx)
+				app.takeFocus(ui.PrimaryButton(ctx, "Done").Tooltip("Escape").AutoFocus().OnClick(func() { app.shortcutsOpen = false }), "shortcuts")
 			})
 		})
 	})

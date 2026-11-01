@@ -9,13 +9,13 @@ import (
 
 // menu is the menu bar. Its shortcuts work wherever the keyboard focus
 // is, and the menus show them.
-func (a *app) menu() *mygo.Menu { return a.menuBar(a.keymap().of) }
+func (app *app) menu() *mygo.Menu { return app.menuBar(app.keymap().of) }
 
 // menuBar is the menu bar with the keys of each command from keys.
-func (a *app) menuBar(keys func(id string) string) *mygo.Menu {
+func (app *app) menuBar(keys func(id string) string) *mygo.Menu {
 	item := func(id string) *mygo.MenuItem {
-		cm := a.cmd(id)
-		return &mygo.MenuItem{ID: id, Label: cm.title, Accelerator: keys(id), Click: func(*mygo.MenuItem, *mygo.Window) { a.queueCommand(id) }}
+		cm := app.cmd(id)
+		return &mygo.MenuItem{ID: id, Label: cm.title, Accelerator: keys(id), Click: func(*mygo.MenuItem, *mygo.Window) { app.queueCommand(id) }}
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
 		{Role: mygo.RoleAppMenu},
@@ -62,9 +62,9 @@ func (a *app) menuBar(keys func(id string) string) *mygo.Menu {
 }
 
 // menuIDs are the commands the menu bar holds.
-func (a *app) menuIDs() map[string]bool {
-	if a.inMenu != nil {
-		return a.inMenu
+func (app *app) menuIDs() map[string]bool {
+	if app.inMenu != nil {
+		return app.inMenu
 	}
 	ids := map[string]bool{}
 	var walk func(items []*mygo.MenuItem)
@@ -76,64 +76,64 @@ func (a *app) menuIDs() map[string]bool {
 			walk(it.Submenu)
 		}
 	}
-	walk(a.menu().Items())
-	a.inMenu = ids
+	walk(app.menu().Items())
+	app.inMenu = ids
 	return ids
 }
 
 // keys handles the keys that stay out of the menu: Escape, which dialogs
 // and text fields also use, and the back and forward buttons of a mouse.
-func (a *app) keys(c *ui.Context) {
-	a.commandKeys(c)
-	if c.Shortcut(0, ui.KeyEscape) {
-		a.escape()
+func (app *app) keys(ctx *ui.Context) {
+	app.commandKeys(ctx)
+	if ctx.Shortcut(0, ui.KeyEscape) {
+		app.escape()
 	}
-	if c.Shortcut(0, ui.KeyBack) {
-		a.goBack()
+	if ctx.Shortcut(0, ui.KeyBack) {
+		app.goBack()
 	}
-	if c.Shortcut(0, ui.KeyForward) {
-		a.goForward()
+	if ctx.Shortcut(0, ui.KeyForward) {
+		app.goForward()
 	}
 }
 
 // escape closes the side panel on top: a thread or question, then the
 // agent log.
-func (a *app) escape() {
+func (app *app) escape() {
 	switch {
-	case a.threadID() != "":
-		a.closeThread()
-	case a.questionOpen():
-		a.closeQuestion()
-	case a.logOpen:
-		a.logOpen = false
+	case app.threadID() != "":
+		app.closeThread()
+	case app.questionOpen():
+		app.closeQuestion()
+	case app.logOpen:
+		app.logOpen = false
 	}
 }
 
-func (a *app) toggleLog() {
-	if a.logOpen && a.logTarget == "" {
-		a.logOpen = false
+func (app *app) toggleLog() {
+	if app.logOpen && app.logTarget == "" {
+		app.logOpen = false
 		return
 	}
-	a.showLog("")
+	app.showLog("")
 }
 
 // stepFile opens the next or the previous file in review order, or the
 // first one from a page that shows no file.
-func (a *app) stepFile(delta int) {
-	files := a.fileOrder()
-	i := -1
-	if p := a.nav.page; p.kind == kindFile {
-		i = slices.Index(files, p.key)
+func (app *app) stepFile(delta int) {
+	files := app.fileOrder()
+	index := -1
+	if openPage := app.nav.page; openPage.kind == kindFile {
+		index = slices.Index(files, openPage.key)
 	}
-	if i < 0 {
+	if index < 0 {
 		// From before the first file, the next one is the first listed.
 		delta = 1
 	}
 	// The open file can be hidden, so the step starts from its place in
 	// the full order and skips the files the sidebar hides.
-	for i += delta; i >= 0 && i < len(files); i += delta {
-		if a.listed(files[i]) {
-			a.nav.goTo(page{kindFile, files[i]})
+	for index += delta; index >= 0 && index < len(files); index += delta {
+		if app.listed(files[index]) {
+			app.nav.goTo(page{kindFile, files[index]})
 			return
 		}
 	}

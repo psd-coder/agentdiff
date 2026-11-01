@@ -22,24 +22,24 @@ func TestLoadsSessionOfOldReview(t *testing.T) {
 			{"id": "t2", "sessionId": "orphan"}
 		]
 	}`
-	var r Review
-	if err := json.Unmarshal([]byte(old), &r); err != nil {
+	var review Review
+	if err := json.Unmarshal([]byte(old), &review); err != nil {
 		t.Fatal(err)
 	}
-	got := []Sessions{r.Overview.Sessions, r.Walks[0].Sessions, r.Threads[0].Sessions, r.Threads[1].Sessions}
+	got := []Sessions{review.Overview.Sessions, review.Walks[0].Sessions, review.Threads[0].Sessions, review.Threads[1].Sessions}
 	want := []Sessions{{agent.Claude: "ov"}, {agent.Codex: "walk"}, {agent.Claude: "thread"}, nil}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("sessions = %v, want %v", got, want)
 	}
-	if r.Overview.Markdown != "x" || r.Walks[0].ID != "w1" {
-		t.Errorf("review = %+v", r)
+	if review.Overview.Markdown != "x" || review.Walks[0].ID != "w1" {
+		t.Errorf("review = %+v", review)
 	}
-	b, err := json.Marshal(r)
+	data, err := json.Marshal(review)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(b), "sessionId") || !strings.Contains(string(b), `"sessions":{"claude":"ov"}`) {
-		t.Errorf("saved again = %s", b)
+	if strings.Contains(string(data), "sessionId") || !strings.Contains(string(data), `"sessions":{"claude":"ov"}`) {
+		t.Errorf("saved again = %s", data)
 	}
 }
 
@@ -148,8 +148,8 @@ func TestSectionsEdges(t *testing.T) {
 
 func TestAnchorLabel(t *testing.T) {
 	tests := []struct {
-		a    Anchor
-		want string
+		anchor Anchor
+		want   string
 	}{
 		{Anchor{Kind: AnchorLines, File: "h.go", Side: SideNew, Start: 43, End: 43}, "h.go:43 (+)"},
 		{Anchor{Kind: AnchorLines, File: "h.go", Side: SideNew, Start: 43, End: 67}, "h.go:43-67 (+)"},
@@ -159,32 +159,32 @@ func TestAnchorLabel(t *testing.T) {
 		{Anchor{}, "General"},
 	}
 	for _, tt := range tests {
-		if got := tt.a.Label(); got != tt.want {
+		if got := tt.anchor.Label(); got != tt.want {
 			t.Errorf("Label() = %q, want %q", got, tt.want)
 		}
 	}
 }
 
 func TestExport(t *testing.T) {
-	r := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	line := r.AddThread(Anchor{Kind: AnchorLines, File: "h.go", Side: SideNew, Start: 43, End: 44, Quote: "if err == x {\n}\n"})
+	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
+	line := review.AddThread(Anchor{Kind: AnchorLines, File: "h.go", Side: SideNew, Start: 43, End: 44, Quote: "if err == x {\n}\n"})
 	line.Messages = []Message{{Role: RoleUser, Text: "use errors.Is"}}
-	disc := r.AddThread(Anchor{Kind: AnchorFile, File: "s.go"})
+	disc := review.AddThread(Anchor{Kind: AnchorFile, File: "s.go"})
 	disc.Messages = []Message{
 		{Role: RoleUser, Text: "why remove validation?"},
 		{Role: RoleAgent, Text: "It moved to the caller."},
 		{Role: RoleUser, Text: "keep it here too"},
 		{Role: RoleAgent},
 	}
-	resolved := r.AddThread(Anchor{Kind: AnchorGeneral})
+	resolved := review.AddThread(Anchor{Kind: AnchorGeneral})
 	resolved.Messages = []Message{{Role: RoleUser, Text: "done"}}
 	resolved.Resolved = true
-	excluded := r.AddThread(Anchor{Kind: AnchorGeneral})
+	excluded := review.AddThread(Anchor{Kind: AnchorGeneral})
 	excluded.Messages = []Message{{Role: RoleUser, Text: "skip"}}
 	excluded.Excluded = true
-	r.AddThread(Anchor{Kind: AnchorGeneral})
+	review.AddThread(Anchor{Kind: AnchorGeneral})
 
-	got := Export(r, "uncommitted changes", ExportOptions{Agent: true})
+	got := Export(review, "uncommitted changes", ExportOptions{Agent: true})
 	want := "# Code review feedback\n\nScope: uncommitted changes\n\n" +
 		"Lines are 1-based. (+) marks lines of the new version, (-) lines of the old version. Address each item, or explain why not.\n" +
 		"\n## h.go:43-44 (+)\n```\nif err == x {\n}\n```\nuse errors.Is\n" +
@@ -193,7 +193,7 @@ func TestExport(t *testing.T) {
 		t.Errorf("Export =\n%s\nwant\n%s", got, want)
 	}
 
-	plain := Export(r, "x", ExportOptions{Resolved: true})
+	plain := Export(review, "x", ExportOptions{Resolved: true})
 	if strings.Contains(plain, "Review agent") || !strings.Contains(plain, "## General\ndone") || strings.Contains(plain, "skip") {
 		t.Errorf("Export without agent =\n%s", plain)
 	}
@@ -207,44 +207,44 @@ func TestExportEmpty(t *testing.T) {
 }
 
 func TestThreadCounts(t *testing.T) {
-	r := New("/r", gitx.Scope{})
-	r.AddThread(Anchor{Kind: AnchorLines, File: "a.go"})
-	r.AddThread(Anchor{Kind: AnchorFile, File: "a.go"})
-	r.AddThread(Anchor{Kind: AnchorLines, File: "b.go"})
-	r.AddThread(Anchor{Kind: AnchorSection, Section: "S"})
-	r.AddThread(Anchor{Kind: AnchorGeneral})
+	review := New("/r", gitx.Scope{})
+	review.AddThread(Anchor{Kind: AnchorLines, File: "a.go"})
+	review.AddThread(Anchor{Kind: AnchorFile, File: "a.go"})
+	review.AddThread(Anchor{Kind: AnchorLines, File: "b.go"})
+	review.AddThread(Anchor{Kind: AnchorSection, Section: "S"})
+	review.AddThread(Anchor{Kind: AnchorGeneral})
 	want := map[string]int{"a.go": 2, "b.go": 1}
-	if got := r.ThreadCounts(); !reflect.DeepEqual(got, want) {
+	if got := review.ThreadCounts(); !reflect.DeepEqual(got, want) {
 		t.Errorf("ThreadCounts = %v, want %v", got, want)
 	}
 }
 
 func TestThreads(t *testing.T) {
-	r := New("/r", gitx.Scope{})
-	a := r.AddThread(Anchor{Kind: AnchorLines, File: "a.go"})
-	r.AddThread(Anchor{Kind: AnchorFile, File: "a.go"})
-	r.AddThread(Anchor{Kind: AnchorSection, Section: "S"})
-	if n := len(r.ThreadsOn("a.go")); n != 2 {
-		t.Errorf("ThreadsOn = %d, want 2", n)
+	review := New("/r", gitx.Scope{})
+	thread := review.AddThread(Anchor{Kind: AnchorLines, File: "a.go"})
+	review.AddThread(Anchor{Kind: AnchorFile, File: "a.go"})
+	review.AddThread(Anchor{Kind: AnchorSection, Section: "S"})
+	if count := len(review.ThreadsOn("a.go")); count != 2 {
+		t.Errorf("ThreadsOn = %d, want 2", count)
 	}
-	if n := len(r.ThreadsOnSection("S")); n != 1 {
-		t.Errorf("ThreadsOnSection = %d, want 1", n)
+	if count := len(review.ThreadsOnSection("S")); count != 1 {
+		t.Errorf("ThreadsOnSection = %d, want 1", count)
 	}
-	if r.Thread(a.ID) != a {
+	if review.Thread(thread.ID) != thread {
 		t.Error("Thread lookup failed")
 	}
-	r.DeleteThread(a.ID)
-	if r.Thread(a.ID) != nil || len(r.Threads) != 2 {
+	review.DeleteThread(thread.ID)
+	if review.Thread(thread.ID) != nil || len(review.Threads) != 2 {
 		t.Error("DeleteThread failed")
 	}
-	a.Messages = []Message{{Role: RoleUser}, {Role: RoleAgent}}
-	if !a.Discussed() {
+	thread.Messages = []Message{{Role: RoleUser}, {Role: RoleAgent}}
+	if !thread.Discussed() {
 		t.Error("Discussed wrong")
 	}
 }
 
 func TestOverviewStale(t *testing.T) {
-	o := &Overview{Groups: []Group{{Files: []string{"a", "b"}}}}
+	overview := &Overview{Groups: []Group{{Files: []string{"a", "b"}}}}
 	tests := []struct {
 		files []string
 		want  bool
@@ -255,7 +255,7 @@ func TestOverviewStale(t *testing.T) {
 		{[]string{"a", "b", "c"}, true},
 	}
 	for _, tt := range tests {
-		if got := o.Stale("", tt.files); got != tt.want {
+		if got := overview.Stale("", tt.files); got != tt.want {
 			t.Errorf("Stale(%v) = %v, want %v", tt.files, got, tt.want)
 		}
 	}
@@ -263,29 +263,29 @@ func TestOverviewStale(t *testing.T) {
 	if none.Stale("", []string{"a"}) || (&Overview{}).Stale("", []string{"a"}) {
 		t.Error("overview without groups is stale")
 	}
-	o.PatchID = "p1"
-	if o.Stale("p1", []string{"c"}) || !o.Stale("p2", []string{"a", "b"}) || !o.Stale("", nil) {
+	overview.PatchID = "p1"
+	if overview.Stale("p1", []string{"c"}) || !overview.Stale("p2", []string{"a", "b"}) || !overview.Stale("", nil) {
 		t.Error("an overview with a patch ID does not compare it")
 	}
 }
 
 func TestDrift(t *testing.T) {
 	ov := &Overview{Files: map[string]string{"a.go": "1", "b.go": "2", "c.go": "3", "bin": ""}}
-	d := ov.Drift(map[string]string{"a.go": "1", "b.go": "9", "bin": "", "new.go": "4"})
-	if d != (Drift{Written: 4, Changed: 2, Gone: 1, New: 1, Known: true}) || d.Disjoint() {
-		t.Errorf("drift = %+v", d)
+	drift := ov.Drift(map[string]string{"a.go": "1", "b.go": "9", "bin": "", "new.go": "4"})
+	if drift != (Drift{Written: 4, Changed: 2, Gone: 1, New: 1, Known: true}) || drift.Disjoint() {
+		t.Errorf("drift = %+v", drift)
 	}
-	if d := ov.Drift(map[string]string{"output.json": "5"}); !d.Disjoint() || d.New != 1 {
-		t.Errorf("other files: %+v", d)
+	if otherFiles := ov.Drift(map[string]string{"output.json": "5"}); !otherFiles.Disjoint() || otherFiles.New != 1 {
+		t.Errorf("other files: %+v", otherFiles)
 	}
-	if d := ov.Drift(nil); !d.Disjoint() {
-		t.Errorf("clean tree: %+v", d)
+	if cleanTree := ov.Drift(nil); !cleanTree.Disjoint() {
+		t.Errorf("clean tree: %+v", cleanTree)
 	}
 	old := &Overview{Groups: []Group{{Files: []string{"a.go", "b.go"}}}}
-	if d := old.Drift(map[string]string{"a.go": "1"}); d != (Drift{Written: 2, Gone: 1}) {
-		t.Errorf("overview without file IDs: %+v", d)
+	if withoutFileIDs := old.Drift(map[string]string{"a.go": "1"}); withoutFileIDs != (Drift{Written: 2, Gone: 1}) {
+		t.Errorf("overview without file IDs: %+v", withoutFileIDs)
 	}
-	if d := (&Overview{Markdown: "x"}).Drift(nil); d.Disjoint() {
-		t.Errorf("an overview without files is disjoint: %+v", d)
+	if withoutFiles := (&Overview{Markdown: "x"}).Drift(nil); withoutFiles.Disjoint() {
+		t.Errorf("an overview without files is disjoint: %+v", withoutFiles)
 	}
 }

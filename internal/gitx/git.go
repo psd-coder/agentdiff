@@ -29,15 +29,15 @@ type Error struct {
 	Err    error
 }
 
-func (e *Error) Error() string {
-	msg := e.Stderr
+func (gitError *Error) Error() string {
+	msg := gitError.Stderr
 	if msg == "" {
-		msg = e.Err.Error()
+		msg = gitError.Err.Error()
 	}
-	return fmt.Sprintf("git %s: %s", e.Args[0], msg)
+	return fmt.Sprintf("git %s: %s", gitError.Args[0], msg)
 }
 
-func (e *Error) Unwrap() error { return e.Err }
+func (gitError *Error) Unwrap() error { return gitError.Err }
 
 func exitCode(err error) int {
 	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
@@ -72,24 +72,24 @@ func runIn(ctx context.Context, dir string, stdin io.Reader, stdout io.Writer, a
 	return nil
 }
 
-func (r *Repo) run(ctx context.Context, stdout io.Writer, args ...string) error {
-	return runIn(ctx, r.Root, nil, stdout, args...)
+func (repo *Repo) run(ctx context.Context, stdout io.Writer, args ...string) error {
+	return runIn(ctx, repo.Root, nil, stdout, args...)
 }
 
-func (r *Repo) output(ctx context.Context, args ...string) ([]byte, error) {
+func (repo *Repo) output(ctx context.Context, args ...string) ([]byte, error) {
 	var out bytes.Buffer
-	err := r.run(ctx, &out, args...)
+	err := repo.run(ctx, &out, args...)
 	return out.Bytes(), err
 }
 
-func (r *Repo) line(ctx context.Context, args ...string) (string, error) {
-	out, err := r.output(ctx, args...)
+func (repo *Repo) line(ctx context.Context, args ...string) (string, error) {
+	out, err := repo.output(ctx, args...)
 	return strings.TrimSpace(string(out)), err
 }
 
 // optionalLine treats exit code 1 as "no value", which is how `-q` queries report absence.
-func (r *Repo) optionalLine(ctx context.Context, args ...string) (string, bool, error) {
-	out, err := r.line(ctx, args...)
+func (repo *Repo) optionalLine(ctx context.Context, args ...string) (string, bool, error) {
+	out, err := repo.line(ctx, args...)
 	if exitCode(err) == 1 {
 		return "", false, nil
 	}

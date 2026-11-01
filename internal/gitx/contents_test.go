@@ -20,9 +20,9 @@ type reader struct {
 // readers gives the three ways to read the files of s: Snapshot.Contents,
 // a ContentReader, and a ContentReader whose git process cannot start.
 // All must give the same result.
-func readers(t *testing.T, r *Repo, s Scope) []reader {
+func readers(t *testing.T, repo *Repo, scope Scope) []reader {
 	t.Helper()
-	snap := snapshot(t, r, s)
+	snap := snapshot(t, repo, scope)
 	batch := contentReader(t, snap)
 	fallback := brokenReader(t, snap)
 	ctx := context.Background()
@@ -59,8 +59,8 @@ func brokenReader(t *testing.T, snap *Snapshot) *ContentReader {
 }
 
 func TestContentReaderFallsBackWhenBatchReaderExits(t *testing.T) {
-	r := uncommittedFixture(t).open()
-	cr := brokenReader(t, snapshot(t, r, Scope{Kind: ScopeUncommitted}))
+	repo := uncommittedFixture(t).open()
+	cr := brokenReader(t, snapshot(t, repo, Scope{Kind: ScopeUncommitted}))
 	if cr.cmd != nil {
 		t.Fatal("the reader kept a git process that cannot read")
 	}
@@ -71,9 +71,9 @@ func TestContentReaderFallsBackWhenBatchReaderExits(t *testing.T) {
 }
 
 func TestFileOutsideChanges(t *testing.T) {
-	h := newHistoryFixture(t)
-	h.write("readme.md", "edited\n")
-	r := h.open()
+	history := newHistoryFixture(t)
+	history.write("readme.md", "edited\n")
+	repo := history.open()
 	tests := []struct {
 		name  string
 		scope Scope
@@ -81,12 +81,12 @@ func TestFileOutsideChanges(t *testing.T) {
 		want  string
 	}{
 		{"uncommitted reads the working tree", Scope{Kind: ScopeUncommitted}, "src/app.go", "package app\n\nfunc A() {}\n\nfunc B() {}\n"},
-		{"commit reads its own tree", Scope{Kind: ScopeCommit, Commit: h.featureB}, "src/app.go", "package app\n\nfunc A() {}\n\nfunc B() {}\n"},
-		{"range reads its end", Scope{Kind: ScopeRange, From: h.second, To: h.featureA}, "rename me.txt", ""},
-		{"range reads an older end", Scope{Kind: ScopeRange, From: h.root, To: h.second}, "readme.md", "hello\n"},
+		{"commit reads its own tree", Scope{Kind: ScopeCommit, Commit: history.featureB}, "src/app.go", "package app\n\nfunc A() {}\n\nfunc B() {}\n"},
+		{"range reads its end", Scope{Kind: ScopeRange, From: history.second, To: history.featureA}, "rename me.txt", ""},
+		{"range reads an older end", Scope{Kind: ScopeRange, From: history.root, To: history.second}, "readme.md", "hello\n"},
 	}
 	for _, tt := range tests {
-		for _, rd := range readers(t, r, tt.scope) {
+		for _, rd := range readers(t, repo, tt.scope) {
 			t.Run(rd.name+"/"+tt.name, func(t *testing.T) {
 				got, err := rd.file(tt.path)
 				if tt.want == "" {
@@ -101,7 +101,7 @@ func TestFileOutsideChanges(t *testing.T) {
 			})
 		}
 	}
-	for _, rd := range readers(t, r, Scope{Kind: ScopeUncommitted}) {
+	for _, rd := range readers(t, repo, Scope{Kind: ScopeUncommitted}) {
 		if got, err := rd.file("../outside.txt"); !errors.Is(err, ErrInvalidPath) {
 			t.Errorf("%s: File(../outside.txt) = %q, %v, want ErrInvalidPath", rd.name, got, err)
 		}
@@ -109,8 +109,8 @@ func TestFileOutsideChanges(t *testing.T) {
 }
 
 func TestContentsUncommitted(t *testing.T) {
-	r := uncommittedFixture(t).open()
-	s := Scope{Kind: ScopeUncommitted}
+	repo := uncommittedFixture(t).open()
+	scope := Scope{Kind: ScopeUncommitted}
 	tests := []struct {
 		name     string
 		file     FileChange
@@ -122,7 +122,7 @@ func TestContentsUncommitted(t *testing.T) {
 		{"staged", FileChange{Path: "staged.txt", Status: StatusAdded}, "", "staged\n"},
 		{"untracked", FileChange{Path: "dir/untracked file.txt", Status: StatusAdded, Untracked: true}, "", "x\ny"},
 	}
-	for _, rd := range readers(t, r, s) {
+	for _, rd := range readers(t, repo, scope) {
 		for _, tt := range tests {
 			t.Run(rd.name+"/"+tt.name, func(t *testing.T) {
 				old, new, err := rd.read(tt.file)
@@ -138,8 +138,8 @@ func TestContentsUncommitted(t *testing.T) {
 }
 
 func TestContentsCommitted(t *testing.T) {
-	h := newHistoryFixture(t)
-	r := h.open()
+	history := newHistoryFixture(t)
+	repo := history.open()
 	tests := []struct {
 		name     string
 		scope    Scope
@@ -147,11 +147,11 @@ func TestContentsCommitted(t *testing.T) {
 		old, new string
 	}{
 		{
-			"root commit", Scope{Kind: ScopeCommit, Commit: h.root},
+			"root commit", Scope{Kind: ScopeCommit, Commit: history.root},
 			FileChange{Path: "readme.md", Status: StatusAdded}, "", "hello\n",
 		},
 		{
-			"commit rename", Scope{Kind: ScopeCommit, Commit: h.featureA},
+			"commit rename", Scope{Kind: ScopeCommit, Commit: history.featureA},
 			FileChange{Path: "renamed.txt", OldPath: "rename me.txt", Status: StatusRenamed},
 			"line one\nline two\nline three\n", "line one\nline two\nline three\n",
 		},
@@ -169,13 +169,13 @@ func TestContentsCommitted(t *testing.T) {
 			FileChange{Path: "feature.txt", Status: StatusAdded}, "", "feature\n",
 		},
 		{
-			"range modified", Scope{Kind: ScopeRange, From: h.root, To: h.second},
+			"range modified", Scope{Kind: ScopeRange, From: history.root, To: history.second},
 			FileChange{Path: "src/app.go", Status: StatusModified},
 			"package app\n", "package app\n\nfunc A() {}\n",
 		},
 	}
 	for _, tt := range tests {
-		for _, rd := range readers(t, r, tt.scope) {
+		for _, rd := range readers(t, repo, tt.scope) {
 			t.Run(rd.name+"/"+tt.name, func(t *testing.T) {
 				old, new, err := rd.read(tt.file)
 				if err != nil {
@@ -193,8 +193,8 @@ func TestContentsErrors(t *testing.T) {
 	tr := uncommittedFixture(t)
 	tr.write("big.txt", strings.Repeat("x", maxContentSize+1))
 	tr.write("late-nul.txt", "text\x00")
-	r := tr.open()
-	s := Scope{Kind: ScopeUncommitted}
+	repo := tr.open()
+	scope := Scope{Kind: ScopeUncommitted}
 	tests := []struct {
 		name string
 		file FileChange
@@ -208,7 +208,7 @@ func TestContentsErrors(t *testing.T) {
 		{"absolute", FileChange{Path: "/etc/hosts", Status: StatusAdded}, ErrInvalidPath},
 		{"old path escapes", FileChange{Path: "a", OldPath: "../b", Status: StatusRenamed}, ErrInvalidPath},
 	}
-	for _, rd := range readers(t, r, s) {
+	for _, rd := range readers(t, repo, scope) {
 		for _, tt := range tests {
 			t.Run(rd.name+"/"+tt.name, func(t *testing.T) {
 				_, _, err := rd.read(tt.file)
@@ -266,8 +266,8 @@ func TestContentsUnusualPaths(t *testing.T) {
 }
 
 func TestContentsNULPath(t *testing.T) {
-	r := uncommittedFixture(t).open()
-	for _, rd := range readers(t, r, Scope{Kind: ScopeUncommitted}) {
+	repo := uncommittedFixture(t).open()
+	for _, rd := range readers(t, repo, Scope{Kind: ScopeUncommitted}) {
 		if _, _, err := rd.read(FileChange{Path: "mod.txt\x00info HEAD", Status: StatusModified}); !errors.Is(err, ErrInvalidPath) {
 			t.Errorf("%s: Contents() error = %v, want ErrInvalidPath", rd.name, err)
 		}
@@ -304,9 +304,9 @@ func TestContentsUnbornHead(t *testing.T) {
 }
 
 func TestContentReaderCancelled(t *testing.T) {
-	r := uncommittedFixture(t).open()
+	repo := uncommittedFixture(t).open()
 	ctx, cancel := context.WithCancel(t.Context())
-	cr := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
+	cr := snapshot(t, repo, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
 	cancel()
 	if _, _, err := cr.Contents(FileChange{Path: "mod.txt", Status: StatusModified}); !errors.Is(err, context.Canceled) {
 		t.Errorf("Contents() error = %v, want context.Canceled", err)
@@ -320,10 +320,10 @@ func TestContentReaderCancelled(t *testing.T) {
 }
 
 func TestContentReaderCancelledMidRead(t *testing.T) {
-	r := uncommittedFixture(t).open()
+	repo := uncommittedFixture(t).open()
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
-	cr := snapshot(t, r, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
+	cr := snapshot(t, repo, Scope{Kind: ScopeUncommitted}).NewContentReader(ctx)
 	pid := cr.cmd.Process.Pid
 	t.Cleanup(func() {
 		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
@@ -363,12 +363,12 @@ func TestContentsSymlink(t *testing.T) {
 	if err := os.Symlink("target.txt", filepath.Join(tr.dir, "link")); err != nil {
 		t.Fatal(err)
 	}
-	r := tr.open()
-	changes := changesByPath(t, r, Scope{Kind: ScopeUncommitted})
-	if c := changes["link"]; !c.Untracked || c.Additions != 1 {
-		t.Errorf("symlink change = %+v", c)
+	repo := tr.open()
+	changes := changesByPath(t, repo, Scope{Kind: ScopeUncommitted})
+	if linkChange := changes["link"]; !linkChange.Untracked || linkChange.Additions != 1 {
+		t.Errorf("symlink change = %+v", linkChange)
 	}
-	for _, rd := range readers(t, r, Scope{Kind: ScopeUncommitted}) {
+	for _, rd := range readers(t, repo, Scope{Kind: ScopeUncommitted}) {
 		_, new, err := rd.read(changes["link"])
 		if err != nil || new != "target.txt" {
 			t.Errorf("%s: Contents(link) = %q, %v", rd.name, new, err)

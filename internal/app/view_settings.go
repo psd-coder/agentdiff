@@ -33,33 +33,33 @@ type agentForm struct {
 }
 
 func newAgentForm(cfg agent.Config) agentForm {
-	f := agentForm{
+	form := agentForm{
 		model: cfg.Model, effort: cmp.Or(cfg.Effort, defaultEffort),
 		autoModel: cfg.AutoModel, autoEffort: cmp.Or(cfg.AutoEffort, sameEffort),
 		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), userSetup: cfg.UserSetup,
 		provider: max(slices.Index(providers, cfg.Provider), 0),
 	}
-	return f
+	return form
 }
 
-func (f agentForm) config() agent.Config {
-	p := providers[f.provider]
+func (form agentForm) config() agent.Config {
+	provider := providers[form.provider]
 	return agent.Config{
-		Provider:   p,
-		Model:      strings.TrimSpace(f.model),
-		Effort:     effortOf(p, f.effort),
-		AutoModel:  strings.TrimSpace(f.autoModel),
-		AutoEffort: effortOf(p, f.autoEffort),
-		Binary:     strings.TrimSpace(f.binary),
-		ExtraArgs:  strings.Fields(f.extraArgs),
-		UserSetup:  f.userSetup,
+		Provider:   provider,
+		Model:      strings.TrimSpace(form.model),
+		Effort:     effortOf(provider, form.effort),
+		AutoModel:  strings.TrimSpace(form.autoModel),
+		AutoEffort: effortOf(provider, form.autoEffort),
+		Binary:     strings.TrimSpace(form.binary),
+		ExtraArgs:  strings.Fields(form.extraArgs),
+		UserSetup:  form.userSetup,
 	}
 }
 
 // effortOf is the effort picked in the form, empty when it is the
 // default choice or a level the provider's CLI does not take.
-func effortOf(p agent.Provider, picked string) string {
-	if slices.Contains(p.Efforts(), picked) {
+func effortOf(provider agent.Provider, picked string) string {
+	if slices.Contains(provider.Efforts(), picked) {
 		return picked
 	}
 	return ""
@@ -100,112 +100,112 @@ func themeIndex(saved string) int {
 }
 
 // applyTheme gives the window the saved theme.
-func (a *app) applyTheme() {
-	mygo.Theme.SetSource(themes[themeIndex(a.cfg.Theme)])
+func (app *app) applyTheme() {
+	mygo.Theme.SetSource(themes[themeIndex(app.cfg.Theme)])
 }
 
-func (a *app) openSettings() {
-	f := &settingsForm{
+func (app *app) openSettings() {
+	form := &settingsForm{
 		open:      true,
 		status:    map[agent.Provider]string{},
-		prompts:   a.newPromptForm(),
-		agent:     newAgentForm(a.cfg.Agent),
-		ahead:     a.cfg.DeeperAhead,
-		theme:     themeIndex(a.cfg.Theme),
-		codeTheme: codeThemeNamed(a.cfg.CodeTheme).name,
+		prompts:   app.newPromptForm(),
+		agent:     newAgentForm(app.cfg.Agent),
+		ahead:     app.cfg.DeeperAhead,
+		theme:     themeIndex(app.cfg.Theme),
+		codeTheme: codeThemeNamed(app.cfg.CodeTheme).name,
 	}
-	f.saved = f.settingsValues
-	a.settings = f
-	if a.win == nil {
+	form.saved = form.settingsValues
+	app.settings = form
+	if app.win == nil {
 		return
 	}
 	for _, p := range providers {
-		f.status[p] = "Checking…"
-		a.async(func() {
+		form.status[p] = "Checking…"
+		app.async(func() {
 			path, version, err := agent.Available(context.Background(), agent.Config{Provider: p})
 			msg := fmt.Sprintf("%s (%s)", version, path)
 			if err != nil {
 				msg = "Not found: " + err.Error()
 			}
-			a.update(func() { f.status[p] = msg })
+			app.update(func() { form.status[p] = msg })
 		})
 	}
 }
 
 // saveSettings saves what the settings form holds, as the user changes it.
-func (a *app) saveSettings() {
-	f := a.settings
-	themeChanged := f.theme != f.saved.theme
-	f.saved = f.settingsValues
-	a.cfg.Agent, a.cfg.DeeperAhead = f.agent.config(), f.ahead
-	a.cfg.Theme = ""
-	if f.theme > 0 {
-		a.cfg.Theme = string(themes[f.theme])
+func (app *app) saveSettings() {
+	form := app.settings
+	themeChanged := form.theme != form.saved.theme
+	form.saved = form.settingsValues
+	app.cfg.Agent, app.cfg.DeeperAhead = form.agent.config(), form.ahead
+	app.cfg.Theme = ""
+	if form.theme > 0 {
+		app.cfg.Theme = string(themes[form.theme])
 	}
-	a.cfg.CodeTheme = ""
-	if f.codeTheme != codeThemes[0].name {
-		a.cfg.CodeTheme = f.codeTheme
+	app.cfg.CodeTheme = ""
+	if form.codeTheme != codeThemes[0].name {
+		app.cfg.CodeTheme = form.codeTheme
 	}
-	a.saveConfig()
-	if themeChanged && a.win != nil {
-		a.applyTheme()
+	app.saveConfig()
+	if themeChanged && app.win != nil {
+		app.applyTheme()
 	}
 }
 
-func (a *app) settingsModal(c *ui.Context) {
-	f := a.settings
-	if f == nil {
+func (app *app) settingsModal(ctx *ui.Context) {
+	form := app.settings
+	if form == nil {
 		return
 	}
-	t := c.Theme()
-	ui.DialogBase(c, &f.open, func(back, panel ui.Element) {
+	theme := ctx.Theme()
+	ui.DialogBase(ctx, &form.open, func(back, panel ui.Element) {
 		// The top stays in place as the tab changes, and the dialog is as
 		// tall as the tab needs, leaving as much room under it as above.
-		_, h := c.Size()
-		gap := max(48, h*0.15)
+		_, height := ctx.Size()
+		gap := max(48, height*0.15)
 		back.Background(ui.RGBA(0, 0, 0, 0.4)).Justify(ui.Start).Padding(gap, 16, gap, 16)
-		panel.Width(640).Shrink(1).MinHeight(0).Padding(20).Radius(10).Background(t.Background).
+		panel.Width(640).Shrink(1).MinHeight(0).Padding(20).Radius(10).Background(theme.Background).
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
-		ui.Column(c).Gap(14).Padding(0, 0, 14, 0).Children(func() {
-			ui.Text(c, "Settings").FontSize(18).Bold()
-			a.takeFocus(ui.Tabs(c, &f.tab, "Appearance", "Agent", "Prompts", "Shortcuts").Label("Settings"), "settings")
+		ui.Column(ctx).Gap(14).Padding(0, 0, 14, 0).Children(func() {
+			ui.Text(ctx, "Settings").FontSize(18).Bold()
+			app.takeFocus(ui.Tabs(ctx, &form.tab, "Appearance", "Agent", "Prompts", "Shortcuts").Label("Settings"), "settings")
 		})
-		ui.Column(c).Gap(14).Shrink(1).MinHeight(0).Children(func() {
-			switch f.tab {
+		ui.Column(ctx).Gap(14).Shrink(1).MinHeight(0).Children(func() {
+			switch form.tab {
 			case agentTab:
-				ui.Scroll(c).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-					ui.Column(c).Gap(14).PaddingEnd(4).Children(func() {
-						a.agentFields(c, &f.agent, f.status)
-						ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Switch(c, &f.ahead).Label("Write the deeper walkthrough of every step with the overview")
-							ui.Text(c, "Write the deeper walkthrough of every step with the overview")
+				ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
+					ui.Column(ctx).Gap(14).PaddingEnd(4).Children(func() {
+						app.agentFields(ctx, &form.agent, form.status)
+						ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+							ui.Switch(ctx, &form.ahead).Label("Write the deeper walkthrough of every step with the overview")
+							ui.Text(ctx, "Write the deeper walkthrough of every step with the overview")
 						})
-						ui.Text(c, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(t.TextMuted)
+						ui.Text(ctx, fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead)).FontSize(11).TextColor(theme.TextMuted)
 					})
 				})
 			case promptsTab:
-				a.promptsTab(c, &f.prompts)
+				app.promptsTab(ctx, &form.prompts)
 			case shortcutsTab:
-				a.shortcutsTab(c)
+				app.shortcutsTab(ctx)
 			case appearanceTab:
-				a.appearanceTab(c, f)
+				app.appearanceTab(ctx, form)
 			}
 		})
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
-			ui.Text(c, "Changes are saved as you make them.").FontSize(11).TextColor(t.TextMuted).Grow(1)
-			ui.PrimaryButton(c, "Done").Tooltip("Escape").OnClick(func() { f.open = false })
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
+			ui.Text(ctx, "Changes are saved as you make them.").FontSize(11).TextColor(theme.TextMuted).Grow(1)
+			ui.PrimaryButton(ctx, "Done").Tooltip("Escape").OnClick(func() { form.open = false })
 		})
 	})
-	if !f.open && a.recording != "" {
+	if !form.open && app.recording != "" {
 		// Escape cancels the recording, and the dialog stays.
-		f.open, a.recording = true, ""
+		form.open, app.recording = true, ""
 	}
-	if f.settingsValues != f.saved {
-		a.saveSettings()
+	if form.settingsValues != form.saved {
+		app.saveSettings()
 	}
-	a.savePrompts(&f.prompts)
-	if !f.open {
-		a.settings = nil
+	app.savePrompts(&form.prompts)
+	if !form.open {
+		app.settings = nil
 	}
 }
 
@@ -213,27 +213,27 @@ func (a *app) settingsModal(c *ui.Context) {
 // theme.
 const codePreview = "```go\n// greet says hello to each name.\nfunc greet(names []string) int {\n\tfor i, n := range names {\n\t\tfmt.Printf(\"%d: hello, %s\\n\", i, n)\n\t}\n\treturn len(names)\n}\n```"
 
-func (a *app) appearanceTab(c *ui.Context, f *settingsForm) {
-	t := c.Theme()
-	ui.Column(c).Gap(14).Children(func() {
-		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, "Theme").FontSize(12).Bold()
-			ui.Segmented(c, &f.theme, "System", "Light", "Dark").Label("Theme")
+func (app *app) appearanceTab(ctx *ui.Context, form *settingsForm) {
+	theme := ctx.Theme()
+	ui.Column(ctx).Gap(14).Children(func() {
+		ui.Column(ctx).Gap(4).Children(func() {
+			ui.Text(ctx, "Theme").FontSize(12).Bold()
+			ui.Segmented(ctx, &form.theme, "System", "Light", "Dark").Label("Theme")
 		})
-		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, "Code theme").FontSize(12).Bold()
-			ui.Select(c, &f.codeTheme, codeThemeNames()).Label("Code theme")
-			ui.Text(c, "Colors code in diffs and in answers. A theme with only dark colors, as Dracula, also brings its own background.").FontSize(11).TextColor(t.TextMuted)
-			markdown.View(c, codePreview, &a.md)
+		ui.Column(ctx).Gap(4).Children(func() {
+			ui.Text(ctx, "Code theme").FontSize(12).Bold()
+			ui.Select(ctx, &form.codeTheme, codeThemeNames()).Label("Code theme")
+			ui.Text(ctx, "Colors code in diffs and in answers. A theme with only dark colors, as Dracula, also brings its own background.").FontSize(11).TextColor(theme.TextMuted)
+			markdown.View(ctx, codePreview, &app.md)
 		})
 	})
 }
 
-func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider]string) {
-	t := c.Theme()
+func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.Provider]string) {
+	theme := ctx.Theme()
 	field := func(label string, build func()) {
-		ui.Column(c).Gap(4).Children(func() {
-			ui.Text(c, label).FontSize(12).Bold()
+		ui.Column(ctx).Gap(4).Children(func() {
+			ui.Text(ctx, label).FontSize(12).Bold()
 			build()
 		})
 	}
@@ -242,80 +242,80 @@ func (a *app) agentFields(c *ui.Context, f *agentForm, status map[agent.Provider
 		for i, p := range providers {
 			names[i] = p.Name()
 		}
-		ui.Segmented(c, &f.provider, names...).Label("Agent")
-		ui.Text(c, status[providers[f.provider]]).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		ui.Segmented(ctx, &form.provider, names...).Label("Agent")
+		ui.Text(ctx, status[providers[form.provider]]).FontSize(11).TextColor(theme.TextMuted).SingleLine()
 	})
-	efforts := providers[f.provider].Efforts()
+	efforts := providers[form.provider].Efforts()
 	pair := func(left, right func()) {
-		ui.Row(c).Gap(12).Children(func() {
-			ui.Column(c).Grow(1).Basis(0).Children(left)
-			ui.Column(c).Grow(1).Basis(0).Children(right)
+		ui.Row(ctx).Gap(12).Children(func() {
+			ui.Column(ctx).Grow(1).Basis(0).Children(left)
+			ui.Column(ctx).Grow(1).Basis(0).Children(right)
 		})
 	}
 	pair(func() {
 		field("Model", func() {
-			ui.TextInput(c, &f.model).Placeholder("CLI default").Label("Model")
+			ui.TextInput(ctx, &form.model).Placeholder("CLI default").Label("Model")
 		})
 	}, func() {
 		field("Effort", func() {
-			ui.Select(c, &f.effort, append([]string{defaultEffort}, efforts...)).Label("Effort")
+			ui.Select(ctx, &form.effort, append([]string{defaultEffort}, efforts...)).Label("Effort")
 		})
 	})
 	pair(func() {
 		field("Model for automatic runs", func() {
-			ui.TextInput(c, &f.autoModel).Placeholder("Same as above").Label("Model for automatic runs")
+			ui.TextInput(ctx, &form.autoModel).Placeholder("Same as above").Label("Model for automatic runs")
 		})
 	}, func() {
 		field("Effort for automatic runs", func() {
-			ui.Select(c, &f.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs")
+			ui.Select(ctx, &form.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs")
 		})
 	})
-	ui.Text(c, "Automatic runs are the ones the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions and Go deeper use the model and effort above.").FontSize(11).TextColor(t.TextMuted)
+	ui.Text(ctx, "Automatic runs are the ones the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions and Go deeper use the model and effort above.").FontSize(11).TextColor(theme.TextMuted)
 	field("Binary", func() {
-		ui.TextInput(c, &f.binary).Placeholder("Found on your shell's PATH").Label("Binary")
+		ui.TextInput(ctx, &form.binary).Placeholder("Found on your shell's PATH").Label("Binary")
 	})
 	field("Extra arguments", func() {
-		ui.TextInput(c, &f.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
+		ui.TextInput(ctx, &form.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
 	})
-	ui.Column(c).Gap(4).Children(func() {
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Switch(c, &f.userSetup).Label("Load my own instructions, skills, hooks and MCP servers")
-			ui.Text(c, "Load my own instructions, skills, hooks and MCP servers")
+	ui.Column(ctx).Gap(4).Children(func() {
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Switch(ctx, &form.userSetup).Label("Load my own instructions, skills, hooks and MCP servers")
+			ui.Text(ctx, "Load my own instructions, skills, hooks and MCP servers")
 		})
 		note := "The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app."
-		if !f.userSetup {
-			note = providers[f.provider].WithoutUserSetup() + " The Prompts tab holds the instructions it gets."
+		if !form.userSetup {
+			note = providers[form.provider].WithoutUserSetup() + " The Prompts tab holds the instructions it gets."
 		}
-		ui.Text(c, note).FontSize(11).TextColor(t.TextMuted)
+		ui.Text(ctx, note).FontSize(11).TextColor(theme.TextMuted)
 	})
 }
 
-func (a *app) chooseRepo() {
+func (app *app) chooseRepo() {
 	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: "Open a git repository", Directory: true})
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: app.win, Title: "Open a git repository", Directory: true})
 		if err != nil || len(paths) == 0 {
 			return
 		}
-		a.update(func() { a.openRepo(paths[0]) })
+		app.update(func() { app.openRepo(paths[0]) })
 	}()
 }
 
-func (a *app) welcome(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Fill().Center().Gap(16).Padding(32).Background(t.Background).Children(func() {
-		ui.Text(c, "AgentDiff").FontSize(30).Bold()
-		ui.Text(c, "Review what your coding agent changed: an explanation first, then the diff, grouped, with comments you send back.").TextColor(t.TextMuted).MaxWidth(480).TextAlign(ui.Center)
-		ui.PrimaryButton(c, "Open repository…").OnClick(a.chooseRepo)
-		if a.repoErr != "" {
-			ui.Text(c, a.repoErr).TextColor(t.Danger).MaxWidth(480).Selectable()
+func (app *app) welcome(ctx *ui.Context) {
+	theme := ctx.Theme()
+	ui.Column(ctx).Fill().Center().Gap(16).Padding(32).Background(theme.Background).Children(func() {
+		ui.Text(ctx, "AgentDiff").FontSize(30).Bold()
+		ui.Text(ctx, "Review what your coding agent changed: an explanation first, then the diff, grouped, with comments you send back.").TextColor(theme.TextMuted).MaxWidth(480).TextAlign(ui.Center)
+		ui.PrimaryButton(ctx, "Open repository…").OnClick(app.chooseRepo)
+		if app.repoErr != "" {
+			ui.Text(ctx, app.repoErr).TextColor(theme.Danger).MaxWidth(480).Selectable()
 		}
-		if a.saveErr != "" {
-			ui.Text(c, "Could not save the settings: "+a.saveErr).TextColor(t.Danger).MaxWidth(480).Selectable()
+		if app.saveErr != "" {
+			ui.Text(ctx, "Could not save the settings: "+app.saveErr).TextColor(theme.Danger).MaxWidth(480).Selectable()
 		}
-		if len(a.cfg.Recent) > 0 {
-			ui.Column(c).Gap(4).Width(420).Margin(12, 0, 0, 0).Children(func() {
-				ui.Text(c, "Recent").FontSize(12).Bold().TextColor(t.TextMuted).Padding(0, 8)
-				a.projectList(c, &a.projectNav, "", false, func(i int) { a.openRepo(a.cfg.Recent[i]) })
+		if len(app.cfg.Recent) > 0 {
+			ui.Column(ctx).Gap(4).Width(420).Margin(12, 0, 0, 0).Children(func() {
+				ui.Text(ctx, "Recent").FontSize(12).Bold().TextColor(theme.TextMuted).Padding(0, 8)
+				app.projectList(ctx, &app.projectNav, "", false, func(i int) { app.openRepo(app.cfg.Recent[i]) })
 			})
 		}
 	})
