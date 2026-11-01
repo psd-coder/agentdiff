@@ -37,7 +37,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 	}
 	events := a.startAgent(ctx, cfg, req)
 	repo, scope := rev.Repo, rev.Scope
-	go func() {
+	a.streams.Go(func() {
 		w, err := a.store.CreateRun(repo, scope, info)
 		file.opened(w)
 		a.update(func() {
@@ -98,7 +98,7 @@ func (a *app) stream(ctx context.Context, cfg agent.Config, req agent.Request, r
 				}
 			}
 		})
-	}()
+	})
 }
 
 func (a *app) generateOverview() {

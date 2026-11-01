@@ -63,6 +63,7 @@ func fixtureRepo(t *testing.T) string {
 func newTestApp(t *testing.T) *app {
 	t.Helper()
 	a := newApp(store.Store{Dir: t.TempDir()})
+	t.Cleanup(a.streams.Wait)
 	a.openRepo(fixtureRepo(t))
 	if a.repo == nil {
 		t.Fatalf("open: %s", a.repoErr)
