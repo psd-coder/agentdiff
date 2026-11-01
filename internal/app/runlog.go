@@ -88,7 +88,7 @@ func fillCosts(runs []*logRun) {
 }
 
 func (r *logRun) label() string {
-	parts := []string{r.info.Title, providerName(r.info.Agent)}
+	parts := []string{r.info.Title, r.info.Agent.Name()}
 	if r.info.Model != "" {
 		parts = append(parts, r.info.Model)
 	}

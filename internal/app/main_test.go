@@ -235,6 +235,9 @@ func TestSettings(t *testing.T) {
 	if got := a.store.LoadConfig(); got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.DeeperAhead {
 		t.Errorf("not saved as changed: %+v", got)
 	}
+	if got := newAgentForm(a.store.LoadConfig().Agent, "").provider; got != 1 {
+		t.Errorf("settings opened again on provider %d, want Codex", got)
+	}
 
 	// The tabs start at the same place, and each is as tall as it needs.
 	if err := tt.Click("Shortcuts"); err != nil {

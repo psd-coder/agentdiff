@@ -86,7 +86,7 @@ func messageHeader(c *ui.Context, who string, at time.Time) {
 func (a *app) pendingReply(c *ui.Context, th *review.Thread, run *agentRun) {
 	t := c.Theme()
 	ui.Column(c.Key("pending")).Gap(4).Children(func() {
-		messageHeader(c, providerName(th.Agent), run.started)
+		messageHeader(c, th.Agent.Name(), run.started)
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Size(12, 12)
 			ui.Text(c, run.activity).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(1)
@@ -103,7 +103,7 @@ func (a *app) message(c *ui.Context, th *review.Thread, i int) {
 	ui.Column(c.Key(i)).Gap(4).Children(func() {
 		who := "You"
 		if m.Role == review.RoleAgent {
-			who = providerName(th.Agent)
+			who = th.Agent.Name()
 		}
 		messageHeader(c, who, m.Time)
 		if m.Role == review.RoleUser {

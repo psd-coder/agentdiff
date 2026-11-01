@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -179,6 +180,60 @@ func firstNonEmpty(values ...string) string {
 		if v != "" {
 			return v
 		}
+	}
+	return ""
+}
+
+var readOnlyCommands = []string{
+	"git diff", "git show", "git log", "git status", "git blame", "git ls-files", "git rev-parse",
+	"grep", "rg", "ls", "cat", "head", "tail", "wc",
+}
+
+// readOnlyRules allows each command also with an rtk prefix: rtk's hook
+// rewrites commands before Claude checks its rules.
+func readOnlyRules() []string {
+	rules := make([]string, 0, 2*len(readOnlyCommands))
+	for _, c := range readOnlyCommands {
+		rules = append(rules, "Bash("+c+":*)", "Bash(rtk "+c+":*)")
+	}
+	return rules
+}
+
+// claudeArgs keeps Claude read-only: in dontAsk mode a tool call that no
+// allow rule matches is refused instead of asked about, so the allow list
+// below, plus the user's own rules, is all that Bash may run.
+func claudeArgs(cfg Config, req Request) []string {
+	args := []string{
+		"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+		"--tools", "Read,Grep,Glob,Bash",
+		"--permission-mode", "dontAsk",
+		"--allowedTools",
+	}
+	args = append(args, readOnlyRules()...)
+	if cfg.Model != "" {
+		args = append(args, "--model", cfg.Model)
+	}
+	if cfg.Effort != "" {
+		args = append(args, "--effort", cfg.Effort)
+	}
+	if req.SystemPrompt != "" {
+		args = append(args, "--append-system-prompt", req.SystemPrompt)
+	}
+	if req.ResumeID != "" {
+		args = append(args, "--resume", req.ResumeID)
+		if req.Fork {
+			args = append(args, "--fork-session")
+		}
+	}
+	return append(args, cfg.ExtraArgs...)
+}
+
+func claudePrompt(req Request) string { return req.Prompt }
+
+// claudeResumed takes the session after --resume.
+func claudeResumed(words []string) string {
+	if i := slices.Index(words, "--resume"); i >= 0 && i+1 < len(words) {
+		return words[i+1]
 	}
 	return ""
 }

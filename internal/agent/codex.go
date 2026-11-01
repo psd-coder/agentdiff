@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -156,4 +157,43 @@ func unescapeDouble(s string) string {
 		b.WriteByte(s[i])
 	}
 	return b.String()
+}
+
+func codexArgs(cfg Config, req Request) []string {
+	args := []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check"}
+	if req.Dir != "" {
+		args = append(args, "-C", req.Dir)
+	}
+	if cfg.Model != "" {
+		args = append(args, "-m", cfg.Model)
+	}
+	if cfg.Effort != "" {
+		args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(cfg.Effort))
+	}
+	args = append(args, cfg.ExtraArgs...)
+	switch {
+	case req.ResumeID != "" && req.Fork:
+		args = append(args, "fork", req.ResumeID)
+	case req.ResumeID != "":
+		args = append(args, "resume", req.ResumeID)
+	}
+	return append(args, "-")
+}
+
+// codexPrompt puts the system prompt before the prompt, because the CLI
+// takes no system prompt of its own.
+func codexPrompt(req Request) string {
+	if req.SystemPrompt == "" {
+		return req.Prompt
+	}
+	return "<instructions>\n" + req.SystemPrompt + "\n</instructions>\n\n" + req.Prompt
+}
+
+// codexResumed takes the session after resume or fork near the end, before
+// "-".
+func codexResumed(words []string) string {
+	if n := len(words); n >= 3 && words[n-1] == "-" && (words[n-3] == "resume" || words[n-3] == "fork") {
+		return words[n-2]
+	}
+	return ""
 }
