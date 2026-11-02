@@ -1,16 +1,22 @@
 # agentdiff
 
-A native macOS app for reviewing the code your coding agent wrote. You read a short walkthrough of the changes first and go deeper wherever you need to. Then you read the diff grouped by intent and hand a feedback file back to the agent.
+A native desktop app for macOS, Windows and Linux, for reviewing the code your coding agent wrote. You read a short walkthrough of the changes first and go deeper wherever you need to. Then you read the diff grouped by intent and hand a feedback file back to the agent.
 
 ![AgentDiff shows a walkthrough of a branch: the steps of the change with code snippets, and the changed files in the sidebar](docs/screenshot.png)
 
 ## Install
 
-You need macOS 12 or later, on Apple silicon or Intel. You also need at least one of the agent CLIs, installed and signed in:
+You need git and at least one of the agent CLIs, installed and signed in:
 
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), tested with 2.1.310
 - [Codex](https://github.com/openai/codex) (`codex`), tested with 0.162.1
 - [OpenCode](https://opencode.ai) (`opencode`), tested with 1.18.25. It accepts the keys of Anthropic, OpenAI, OpenRouter and many other providers, see [Use an API key](#use-an-api-key)
+
+Settings shows the version of each CLI the app found, or why it found none.
+
+### macOS
+
+You need macOS 12 or later, on Apple silicon or Intel.
 
 1. Download `AgentDiff.dmg` from the [latest release](https://github.com/psd-coder/agentdiff/releases/latest).
 2. Open the disk image and drag AgentDiff to Applications.
@@ -29,11 +35,43 @@ curl -fL -o /tmp/AgentDiff.dmg https://github.com/psd-coder/agentdiff/releases/l
 hdiutil detach -quiet /tmp/AgentDiff
 ```
 
-The app reads the `PATH` of your login shell (`$SHELL -l -i`), so it finds the CLIs when you start it from the Dock too. Settings shows the version of each CLI it found, or why it found none. Open a repository from the app with Cmd+O or File > Open Recent. The Dock menu also lists the recent repositories, and you can drop a folder on the Dock icon. To start the app on the repository you are in, run this from a terminal:
+The app reads the `PATH` of your login shell (`$SHELL -l -i`), so it finds the CLIs when you start it from the Dock too. Open a repository from the app with Cmd+O or File > Open Recent. The Dock menu also lists the recent repositories, and you can drop a folder on the Dock icon. To start the app on the repository you are in, run this from a terminal:
 
 ```bash
 open -n /Applications/AgentDiff.app --args "$PWD"
 ```
+
+### Windows
+
+You need Windows 10 or 11 on x64.
+
+1. Download `AgentDiff-Setup-amd64.exe` from the [latest release](https://github.com/psd-coder/agentdiff/releases/latest).
+2. Run it. The installer is not signed yet, so SmartScreen says that it protected your PC. Click More info, then Run anyway.
+3. The installer puts the app in `%LOCALAPPDATA%\Programs\AgentDiff` and adds it to the Start menu. It needs no administrator rights. Settings > Apps uninstalls it.
+
+To update, run the installer of the new release. The app finds the CLIs on the `PATH` of Windows and in `%USERPROFILE%\.local\bin`, where the installer of Claude Code puts `claude.exe`. It only runs `.exe` files, so it does not find a CLI that npm installed as a `.cmd` file, as `codex.cmd`. Download `codex.exe` from the [Codex releases](https://github.com/openai/codex/releases) instead, and set Command in Settings > Agent to its full path. Install OpenCode with `scoop install opencode` or `choco install opencode`, which put an `opencode.exe` on the `PATH`. To start the app on the repository you are in, run this from PowerShell:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\AgentDiff\AgentDiff.exe" $PWD
+```
+
+### Linux
+
+The app runs on x64 and ARM64 distributions with glibc and GTK 3, as Debian, Ubuntu, Fedora, Arch and openSUSE. It does not run on distributions with musl, as Alpine. On NixOS it needs `nix-ld`.
+
+On Debian and Ubuntu, download `agentdiff_amd64.deb` (`agentdiff_arm64.deb` on ARM64) from the [latest release](https://github.com/psd-coder/agentdiff/releases/latest) and install it:
+
+```bash
+sudo apt install ./agentdiff_amd64.deb
+```
+
+On other distributions, download `agentdiff-linux-amd64.tar.gz` (`agentdiff-linux-arm64.tar.gz` on ARM64) and `install.sh` into one folder, and run the script there. It needs no root. It installs the app in `~/.local/agentdiff.app`, adds it to the applications menu and links the `agentdiff` command in `~/.local/bin`. `sh install.sh --uninstall` removes the app and keeps your reviews.
+
+```bash
+sh install.sh agentdiff-linux-amd64.tar.gz
+```
+
+To update, install the new release in the same way. The app reads the `PATH` of your login shell, as on macOS. To start the app on the repository you are in, run `agentdiff "$PWD"`.
 
 ## Use an API key
 
@@ -41,7 +79,7 @@ Instead of a subscription, the agent can use your API key, and the provider char
 
 OpenCode is the simplest way, because one CLI takes the keys of many providers:
 
-1. Install OpenCode with `brew install opencode` or `npm install -g opencode-ai`.
+1. Install OpenCode with `brew install opencode` or `npm install -g opencode-ai`. On Windows, use `scoop install opencode` or `choco install opencode`, because the app does not run the `opencode.cmd` that npm installs.
 2. Give OpenCode your key. Run `opencode auth login` and pick the provider, or export the key in your shell profile, such as `~/.zshrc`: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. AgentDiff reads the variables of your login shell, so the key reaches OpenCode when you start the app from the Dock too.
 3. In Settings > Agent, pick OpenCode and set Model to `provider/model`, for example `anthropic/claude-sonnet-5-5`, `openai/gpt-5.5` or a model of `openrouter`. A model name without its provider fails with "Model not found". `opencode models` lists the models of every provider that has a key. To try OpenCode without a key, use one of its free models, such as `opencode/glm-5.3-flash-free`.
 
@@ -53,10 +91,10 @@ Claude Code and Codex take a key too. Claude Code uses `ANTHROPIC_API_KEY` when 
 
 When the agent CLI lives in a dev container, set Command in Settings > Agent to the command that runs it there, for example `dev claude`, `devcontainer exec --workspace-folder . claude` or `docker exec -i -w /workspaces/app box opencode`. The last word is the CLI, and the words before it are the launcher. Put a word with spaces in quotes.
 
-- The CLI must start in the folder of the repository inside the container. The app starts the launcher in the folder of the repository on your Mac. `devcontainer exec --workspace-folder .` finds the matching folder in the container itself. `docker exec` starts in the working directory of the image, so give it the folder of the repository in the container with `-w`.
+- The CLI must start in the folder of the repository inside the container. The app starts the launcher in the folder of the repository on your computer. `devcontainer exec --workspace-folder .` finds the matching folder in the container itself. `docker exec` starts in the working directory of the image, so give it the folder of the repository in the container with `-w`.
 - The launcher must pass the arguments on as a list and keep stdin open, as `docker exec -i` does. `ssh` joins the arguments into one line for the remote shell, so it does not work.
 - A launcher may not pass the app's environment variables on. So the app gives OpenCode its config through `env`, which the image must have. Alpine and other usual images have it.
-- The macOS sandbox of OpenCode does not reach into the container. There, only OpenCode's permission rules keep it read-only, and a shell redirect at the end of a pipeline gets past them.
+- On macOS, the sandbox of OpenCode does not reach into the container. There, only OpenCode's permission rules keep it read-only, and a shell redirect at the end of a pipeline gets past them.
 - Settings > Agent checks the command with `--version`, through the launcher, a moment after you stop typing.
 
 ## Features
@@ -72,10 +110,10 @@ When the agent CLI lives in a dev container, set Command in Settings > Agent to 
 - **Separate discussion threads**: the first question of a thread forks the agent session that wrote the explanation, so it starts with that context. Later questions go on in the thread's own session, and threads never mix.
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
 - **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, and how the run ended. Each run shows its context size, the tokens in its last request, as Claude Code does. Codex does not report the context size, so a Codex run shows the tokens it processed. Every request reads the whole conversation again, so this number is much larger. The run details list the processed tokens (input, cache read, cache write, output) and the cost at API prices that Claude reports. The panel shows the context its runs built up. A run that resumes or forks an earlier session, as a deeper walkthrough or a follow-up question does, starts with that session's context, so it counts only the context it added. When no run reports a context size, the panel shows the processed total. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
-- **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused. OpenCode gets the same allow list, and it refuses a command with a `>` redirect or `--output`. OpenCode also runs in a macOS sandbox that refuses every write in the repository. By default a run also leaves out your own agent setup, so your hooks do not run during a review.
+- **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused. OpenCode gets the same allow list, and it refuses a command with a `>` redirect or `--output`. On macOS, OpenCode also runs in a sandbox that refuses every write in the repository. Windows and Linux have no such sandbox, so there only the permission rules keep OpenCode read-only, and a shell redirect at the end of a pipeline gets past them. By default a run also leaves out your own agent setup, so your hooks do not run during a review.
 - **Settings**: agent, model, effort, a model and effort for automatic runs, the command that runs the CLI, also in a container, extra CLI arguments, prompts.
 - **Your own shortcuts**: any command can get a shortcut in Settings, also the ones outside the menu bar, as Mark File as Viewed.
-- **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
+- **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal on macOS, Direct3D 11 on Windows and OpenGL on Linux, no webview. The macOS app bundle is 10.9 MB.
 
 ## Building from source
 
@@ -91,7 +129,13 @@ It worked when `build/darwin-<arch>/` holds `AgentDiff.app` and a `.dmg`, with `
 open -n build/darwin-arm64/AgentDiff.app --args "$PWD"
 ```
 
-To release a version, add a section for it to `CHANGELOG.md`, set `version` in `mygo.json`, commit, and push a tag with the same version, as `v0.4.0`. The Release workflow builds one app for Apple silicon and Intel on a macOS runner. It fails when the tag and `version` differ, or when `CHANGELOG.md` has no section for the version. Then it publishes a GitHub release with `AgentDiff.dmg` and the changelog section as its notes.
+Any Mac, Windows or Linux machine builds the apps of the other systems. A Windows installer needs [NSIS](https://nsis.sourceforge.io) (`brew install makensis` on macOS). Without NSIS, the build only writes `AgentDiff.exe`. A macOS disk image can only be built on a Mac.
+
+```bash
+go tool mygo build -platform windows/amd64,linux/amd64,linux/arm64
+```
+
+To release a version, add a section for it to `CHANGELOG.md`, set `version` in `mygo.json`, commit, and push a tag with the same version, as `v0.4.0`. The Release workflow fails when the tag and `version` differ, or when `CHANGELOG.md` has no section for the version. Otherwise it creates a draft GitHub release with the changelog section as its notes. A macOS runner builds one app for Apple silicon and Intel. Ubuntu runners build the Windows app for x64 and the Linux app for x64 and ARM64. Each build uploads its files to the draft: `AgentDiff.dmg`, `AgentDiff-Setup-amd64.exe`, `agentdiff-linux-amd64.tar.gz`, `agentdiff-linux-arm64.tar.gz`, `agentdiff_amd64.deb`, `agentdiff_arm64.deb` and `install.sh`. When all builds are done, the workflow publishes the release.
 
 During development, `go run . /path/to/repo` starts the app on a repository. Without an argument the app opens the current directory when that is a git repository, and shows a welcome window otherwise. The welcome window lists the recent projects, which you open with Up, Down and Return, as in the project list. The main window opens with the project, and closing the welcome window quits the app.
 
@@ -143,13 +187,15 @@ Keep keys case-sensitive, callers rely on it.
 Return a typed error here.
 ````
 
-To see what an agent did, click Agent log in the toolbar, Show Log in the ⋯ menu next to the title of the Overview page or of a deeper walkthrough, or Log in a thread. The ⋯ menu also has Regenerate, and Start over on the Overview page or Delete on a deeper walkthrough. Stop shows next to it while the agent writes. Discuss on a step or a section, or in its context menu, starts a thread about it. Runs and their steps are collapsed until you click them. Each run lists its steps in order: Command (a shell command you can paste into a terminal), Prompt, Session started (model and permission mode), Tool call and Tool result, Assistant, Result with turns, time and tokens, and the exit status. Copy puts the readable log on the clipboard. Show file opens the raw log in Finder.
+To see what an agent did, click Agent log in the toolbar, Show Log in the ⋯ menu next to the title of the Overview page or of a deeper walkthrough, or Log in a thread. The ⋯ menu also has Regenerate, and Start over on the Overview page or Delete on a deeper walkthrough. Stop shows next to it while the agent writes. Discuss on a step or a section, or in its context menu, starts a thread about it. Runs and their steps are collapsed until you click them. Each run lists its steps in order: Command (a shell command you can paste into a terminal), Prompt, Session started (model and permission mode), Tool call and Tool result, Assistant, Result with turns, time and tokens, and the exit status. Copy puts the readable log on the clipboard. Show file opens the raw log in Finder, File Explorer or the file manager.
 
-Right-click a file, a group, a walkthrough, a commit, a thread or a recent project for its context menu. It shows the commands that apply to that item, as Mark File as Viewed, Show in Finder, Copy Commit Hash or Delete Walkthrough.
+Right-click a file, a group, a walkthrough, a commit, a thread or a recent project for its context menu. It shows the commands that apply to that item, as Mark File as Viewed, Show in Finder (Show in File Explorer on Windows), Copy Commit Hash or Delete Walkthrough.
 
 Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedback page has the checkboxes Include agent replies and Include resolved threads.
 
 ## Keyboard
+
+This section names the keys of macOS. On Windows and Linux, Ctrl replaces Cmd, Alt replaces Option, and Enter replaces Return. The menus and tooltips there show the keys as Ctrl+Shift+P.
 
 | Keys | What it does |
 | --- | --- |
@@ -173,7 +219,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Enter in the branch list | Opens the worktree of the highlighted branch, when another worktree has it checked out |
 | Cmd+Backspace or Delete in the project list | Removes the highlighted project from the list, after you confirm |
 
-These are the default shortcuts. The menu bar lists them under AgentDiff, File, View and Go. A button, switch or sidebar item that runs a command with a shortcut shows the shortcut in its tooltip, and the context menus show it next to the command. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog, with the shortcuts you gave commands outside the menu bar.
+These are the default shortcuts. The menu bar lists them under AgentDiff, File, View and Go. On Windows and Linux, Settings is in the File menu. On Linux, Alt or F10 shows the menu bar. A button, switch or sidebar item that runs a command with a shortcut shows the shortcut in its tooltip, and the context menus show it next to the command. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog, with the shortcuts you gave commands outside the menu bar.
 
 The command palette lists the commands that apply where you are: the menu bar's commands, and the actions of the open page and side panel, as Mark File as Viewed on a file page or Resolve Thread while a thread is open. While the field is empty, the 5 commands you ran last from it come first. The buttons of the window, the menu bar and the palette run the same commands.
 
@@ -181,7 +227,7 @@ The command palette lists the commands that apply where you are: the menu bar's 
 
 Settings opens in its own window, from AgentDiff > Settings or with Cmd+Comma. It has four tabs: Appearance, Agent, Prompts and Shortcuts. Every change is saved as you make it. Cmd+W closes the window.
 
-Shortcuts lists every command with its shortcut. Click a shortcut and press the new keys, which must include Command or Control. Escape cancels. When another command has those keys, they move to the command you record, and the tab says which command lost them. The standard shortcuts of macOS, as Copy and Quit, and Cmd+Return and Cmd+Backspace stay as they are. A command outside the menu bar runs by its shortcut where it applies, also while you type in a field. A field keeps the keys it edits with: Command with A, C, X, V, Z or Y, with or without Shift, and Control with the letters that move the caret, as A, E and K. Reset gives one command its default back, and Reset all shortcuts gives all of them theirs. `config.json` keeps only the shortcuts you changed, so new defaults still reach you.
+Shortcuts lists every command with its shortcut. Click a shortcut and press the new keys, which must include Command or Control (Ctrl on Windows and Linux). Escape cancels. When another command has those keys, they move to the command you record, and the tab says which command lost them. The standard shortcuts of the system, as Copy and Quit, and Cmd+Return and Cmd+Backspace stay as they are. A command outside the menu bar runs by its shortcut where it applies, also while you type in a field. A field keeps the keys it edits with: Command with A, C, X, V, Z or Y, with or without Shift, and Control with the letters that move the caret, as A, E and K. Reset gives one command its default back, and Reset all shortcuts gives all of them theirs. `config.json` keeps only the shortcuts you changed, so new defaults still reach you.
 
 | Field | Default | Purpose |
 | --- | --- | --- |
@@ -202,11 +248,11 @@ While Load my own instructions, skills, hooks and MCP servers is off, a run gets
 
 Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. The overview, each walkthrough and each thread keep one session for each agent. After you switch agents, the next question goes on in the earlier session of the new agent. That session does not hold what the other agent answered in between. When the new agent has no session yet, the question starts a new one, with the thread's anchor and its earlier messages. Regenerate on a deeper walkthrough drops its sessions of every agent, because they hold the conversation about the old walkthrough.
 
-Appearance sets the theme: System follows the light or dark appearance of macOS, and Light or Dark keeps the app in one of them.
+Appearance sets the theme: System follows the light or dark appearance of the system, and Light or Dark keeps the app in one of them.
 
 Code theme colors code in diffs and in answers. You can choose GitHub, the default, or a popular VS Code theme: VS Code, One, Catppuccin, Solarized, Gruvbox, Rosé Pine, Night Owl, Ayu, Vitesse, Dracula, Monokai, Nord or Tokyo Night. A theme with light and dark colors follows the theme of the app and changes only the colors of the code. Dracula, Monokai, Nord and Tokyo Night have only dark colors, so they also paint the background of the code in their own color. The colors come from the VS Code themes, and the app has fewer kinds of tokens than VS Code, so the code can look a little different from VS Code.
 
-The app saves everything under `~/Library/Application Support/AgentDiff/`.
+The app saves everything under `~/Library/Application Support/AgentDiff/` on macOS, `%APPDATA%\AgentDiff\` on Windows and `~/.config/AgentDiff/` on Linux (`$XDG_CONFIG_HOME`).
 
 | File | Holds |
 | --- | --- |
@@ -257,6 +303,7 @@ A repository can give its own prompts in `.agentdiff/prompts/`, with the file na
 | --- | --- |
 | `go tool mygo dev` | Builds a development app and restarts it on every change. It opens the `agentdiff` repository itself |
 | `go tool mygo build` | Builds `AgentDiff.app` and a `.dmg` into `build/darwin-arm64/` |
+| `go tool mygo build -platform windows/amd64,linux/amd64,linux/arm64` | Builds the Windows app and installer into `build/windows-amd64/`, and the Linux app, archive, `install.sh` and `.deb` into `build/linux-amd64/` and `build/linux-arm64/` |
 | `go test ./...` | Runs all tests, with no network and no agent calls |
 | `AGENTDIFF_SNAPSHOTS=/tmp/snaps go test ./internal/app` | Also writes PNG screenshots of the main screens, rendered without a window, into an existing directory |
 | `AGENTDIFF_E2E=claude go test -run TestEndToEnd -v ./internal/app` | Asks a real agent (`claude`, `codex` or `opencode`) to explain this repository's last commit, then asks a question in a forked session. It uses your subscription or API key. `AGENTDIFF_E2E_MODEL` sets the model |
@@ -269,6 +316,7 @@ internal/app              window, app state, agent runs and streaming
 internal/app/view*.go     one file per screen: overview, files, thread panel, feedback, settings
 internal/gitx             git CLI wrapper: scopes, changed files, file contents, commits
 internal/agent            claude, codex and opencode CLI runner: arguments, stream parsing, login-shell PATH
+internal/proc             child processes: stops them with their children, and hides their console windows on Windows
 internal/review           review model, prompt templates and parsing, feedback export
 internal/store            JSON files for settings and reviews
 ```
@@ -284,7 +332,7 @@ MyGo's native UI ships a diff viewer with gutter buttons and room for comments u
 The agent can read the files around the change, the commit messages and the tests. It also sees the reasons behind a change that a diff does not show, which is what the questions about non-pretty changes ask for.
 
 **Can the review agent change my code?**
-Codex cannot: it runs in its `read-only` sandbox. Claude refuses every Bash call that matches neither the app's allow list nor an allow rule in your own Claude settings. So Claude can only write when your settings allow a write command. OpenCode refuses every tool except reading files and the allowed read commands, and its macOS sandbox stops any change to the files of the repository. In a container, the sandbox does not apply, see [Run the agent in a container](#run-the-agent-in-a-container). Your coding agent applies the feedback, in its own session.
+Codex cannot: it runs in its `read-only` sandbox. Claude refuses every Bash call that matches neither the app's allow list nor an allow rule in your own Claude settings. So Claude can only write when your settings allow a write command. OpenCode refuses every tool except reading files and the allowed read commands, and on macOS its sandbox stops any change to the files of the repository. Windows and Linux have no such sandbox, and on macOS the sandbox does not reach into a container (see [Run the agent in a container](#run-the-agent-in-a-container)). There, a shell redirect at the end of a pipeline gets past the rules of OpenCode. Your coding agent applies the feedback, in its own session.
 
 **When should I not use it?**
 For a two-line change: `git diff` is faster. `agentdiff` does not post to GitHub either. Review pull requests of other people in GitHub.
