@@ -363,7 +363,7 @@ func (app *app) appearanceTab(ctx *ui.Context, form *settingsForm) {
 			ui.Segmented(ctx, &form.theme, "System", "Light", "Dark").Label("Theme").AlignSelf(ui.Start)
 		})
 		ui.Field(ctx, "Code theme:", func() {
-			ui.Select(ctx, &form.codeTheme, codeThemeNames()).Label("Code theme").AlignSelf(ui.Start).MinWidth(200)
+			popUp(ctx, &form.codeTheme, codeThemeNames()).Label("Code theme")
 			ui.Text(ctx, "Colors code in diffs and in answers. A theme with only dark colors, as Dracula, also brings its own background.").FontSize(theme.FontSize - 1).TextColor(theme.TextMuted)
 			markdown.View(ctx, codePreview, &app.md)
 		})
@@ -388,14 +388,14 @@ func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.P
 			ui.TextInput(ctx, &form.model).Placeholder("CLI default").Label("Model")
 		})
 		ui.Field(ctx, "Effort:", func() {
-			ui.Select(ctx, &form.effort, append([]string{defaultEffort}, efforts...)).Label("Effort").AlignSelf(ui.Start).MinWidth(200)
+			popUp(ctx, &form.effort, append([]string{defaultEffort}, efforts...)).Label("Effort")
 		})
 		ui.Divider(ctx)
 		ui.Field(ctx, "Automatic model:", func() {
 			ui.TextInput(ctx, &form.autoModel).Placeholder("Same as above").Label("Model for automatic runs")
 		})
 		ui.Field(ctx, "Automatic effort:", func() {
-			ui.Select(ctx, &form.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs").AlignSelf(ui.Start).MinWidth(200)
+			popUp(ctx, &form.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs")
 		}).Description("Automatic runs are the ones the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions and Go deeper use the model and effort above.")
 		ui.Field(ctx, "Write ahead:", func() {
 			ui.Checkbox(ctx, ahead, "Write the deeper walkthrough of every step with the overview")
