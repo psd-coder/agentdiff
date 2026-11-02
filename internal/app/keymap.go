@@ -8,6 +8,7 @@ import "maps"
 // the form accelerator writes, so keys that name the same keys compare
 // equal.
 type keymap struct {
+	platform platform
 	defaults map[string]string
 	keys     map[string]string
 	// reserved names what uses the keys no command can take.
@@ -37,18 +38,18 @@ type assignment struct {
 // it cannot read. Of two commands with the same keys, the first in cmds
 // keeps them, and the other gets its default back, or no keys when the
 // default is taken.
-func newKeymap(cmds []*command, reserved map[string]string, user map[string]string) *keymap {
-	keymap := &keymap{defaults: map[string]string{}, keys: map[string]string{}, reserved: map[string]string{}}
+func newKeymap(sys platform, cmds []*command, reserved map[string]string, user map[string]string) *keymap {
+	keymap := &keymap{platform: sys, defaults: map[string]string{}, keys: map[string]string{}, reserved: map[string]string{}}
 	for keys, use := range reserved {
-		keymap.reserved[canonical(keys)] = use
+		keymap.reserved[keymap.canonical(keys)] = use
 	}
 	owner := map[string]string{}
 	var lost []string
 	for _, cm := range cmds {
-		keymap.defaults[cm.id] = canonical(cm.keys)
+		keymap.defaults[cm.id] = keymap.canonical(cm.keys)
 		keys := keymap.defaults[cm.id]
-		if override, ok := user[cm.id]; ok && (override == "" || canonical(override) != "") {
-			keys = canonical(override)
+		if override, ok := user[cm.id]; ok && (override == "" || keymap.canonical(override) != "") {
+			keys = keymap.canonical(override)
 		}
 		if keys != "" && (owner[keys] != "" || keymap.reserved[keys] != "") {
 			lost = append(lost, cm.id)
@@ -79,7 +80,7 @@ func (keymap *keymap) changed(id string) bool { return keymap.keys[id] != keymap
 // assign gives the command id the keys, "" for none. Reserved keys stay
 // where they are, and keys another command has move from it.
 func (keymap *keymap) assign(id, keys string) assignment {
-	keys = canonical(keys)
+	keys = keymap.canonical(keys)
 	if keys == keymap.keys[id] {
 		return assignment{kind: assignUnchanged}
 	}
@@ -123,10 +124,10 @@ func (keymap *keymap) overrides() map[string]string {
 
 // canonical writes keys the way accelerator does, or "" for keys it
 // cannot read.
-func canonical(keys string) string {
-	mods, key, ok := parseAccelerator(keys)
+func (keymap *keymap) canonical(keys string) string {
+	mods, key, ok := keymap.platform.parseAccelerator(keys)
 	if !ok {
 		return ""
 	}
-	return accelerator(mods, key)
+	return keymap.platform.accelerator(mods, key)
 }

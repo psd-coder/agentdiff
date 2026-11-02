@@ -143,13 +143,13 @@ func (app *app) composer(ctx *ui.Context, th *review.Thread) {
 		}
 		empty := strings.TrimSpace(draft) == ""
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, "Cmd+Enter asks the agent").FontSize(11).TextColor(theme.TextMuted).Grow(1)
+			ui.Text(ctx, app.platform.cmdEnter()+" asks the agent").FontSize(11).TextColor(theme.TextMuted).Grow(1)
 			app.cmdButton(ctx, "stop-thread", th.ID, "Stop")
 			ui.Button(ctx, "Comment").Disabled(empty).Tooltip("Add to the feedback without asking the agent").OnClick(func() {
 				app.comment(th, draft)
 				app.drafts[th.ID] = ""
 			})
-			ui.PrimaryButton(ctx, "Ask agent").Disabled(empty || busy).Tooltip("Send to the review agent (" + keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() {
+			ui.PrimaryButton(ctx, "Ask agent").Disabled(empty || busy).Tooltip("Send to the review agent (" + app.platform.keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() {
 				app.ask(app.rev, th, draft)
 				app.drafts[th.ID] = ""
 			})

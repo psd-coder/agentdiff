@@ -13,7 +13,7 @@ func testKeymap(user map[string]string) *keymap {
 		{id: "next-file", title: "Next File", keys: "Alt+CmdOrCtrl+Down"},
 	}
 	reserved := map[string]string{"CmdOrCtrl+C": "Copy", "CmdOrCtrl+Enter": "sending a comment"}
-	return newKeymap(cmds, reserved, user)
+	return newKeymap(platformOf("darwin"), cmds, reserved, user)
 }
 
 func TestKeymapAssign(t *testing.T) {

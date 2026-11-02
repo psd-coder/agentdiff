@@ -87,11 +87,11 @@ func (app *app) paletteModal(ctx *ui.Context) {
 					row := addRow(ctx.Key(cm.id), func() {
 						ui.Text(ctx, cm.title).SingleLine().Shrink(1).Grow(1)
 						if keys != "" {
-							ui.Text(ctx, keyLabel(keys)).Font("monospace").FontSize(12).TextColor(theme.TextMuted)
+							ui.Text(ctx, app.platform.keyLabel(keys)).Font("monospace").FontSize(12).TextColor(theme.TextMuted)
 						}
 					}, nil)
 					if keys != "" {
-						row.Label(cm.title + ", " + keyLabel(keys))
+						row.Label(cm.title + ", " + app.platform.keyLabel(keys))
 					}
 					if row.Clicked() {
 						run(cm)

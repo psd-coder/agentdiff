@@ -423,11 +423,16 @@ func (app *app) appearanceTab(ctx *ui.Context, form *settingsForm) {
 	})
 }
 
-// commandHelp says what the Command field takes, and warns when the
-// macOS sandbox of the agent does not reach a CLI that a launcher starts.
-func commandHelp(provider agent.Provider, command []string) string {
+// commandHelp says what the Command field takes. For an agent that needs
+// the macOS sandbox to stay read-only, it warns when the system has no such
+// sandbox, or when the sandbox does not reach a CLI that a launcher starts.
+func commandHelp(sys platform, provider agent.Provider, command []string) string {
 	help := fmt.Sprintf("The name or path of the CLI. To run it in a container, put the command that runs it there in front, as dev %[1]s or devcontainer exec --workspace-folder . %[1]s.", provider)
-	if len(command) > 1 && provider.Sandboxed() {
+	switch {
+	case !provider.Sandboxed():
+	case !sys.mac:
+		help += fmt.Sprintf(" %s runs without a sandbox on this system, so only its permission rules keep it read-only. A shell redirect in a pipeline gets past them.", provider.Name())
+	case len(command) > 1:
 		help += fmt.Sprintf(" The macOS sandbox does not reach into the container, so only the permission rules keep %s read-only there. A shell redirect in a pipeline gets past them.", provider.Name())
 	}
 	return help
@@ -467,7 +472,7 @@ func (app *app) agentFields(ctx *ui.Context, settings *settingsForm) {
 		ui.Divider(ctx)
 		ui.Field(ctx, "Command:", func() {
 			ui.TextInput(ctx, &form.command).Placeholder(string(provider) + ", found on your shell's PATH").Label("Command")
-		}).Description(commandHelp(provider, agent.SplitWords(form.command)))
+		}).Description(commandHelp(app.platform, provider, agent.SplitWords(form.command)))
 		ui.Field(ctx, "Extra arguments:", func() {
 			ui.TextInput(ctx, &form.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
 		})

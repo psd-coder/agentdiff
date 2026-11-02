@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -138,6 +139,7 @@ type app struct {
 	inMenu    map[string]bool
 	menuDirty bool
 	km        *keymap
+	platform  platform
 	pending   string // the command the menu bar queued
 	// deferred are the commands chosen in context menus, which run at the
 	// start of the next frame.
@@ -263,6 +265,7 @@ func newApp(storage store.Store) *app {
 		scopePct:    34,
 		mainPct:     62,
 		exportAgent: true,
+		platform:    platformOf(runtime.GOOS),
 	}
 	app.runner = newRunner(app.stream, app.saveReviewOf)
 	app.loader = newScopeLoader(app.reviews, app.async, app.update, app)

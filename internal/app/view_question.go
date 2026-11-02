@@ -235,11 +235,11 @@ func (app *app) questionComposer(ctx *ui.Context, walk *review.Walk, target *ask
 			app.drafts[key] = draft
 		}
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, "Cmd+Enter asks").FontSize(11).TextColor(theme.TextMuted).Grow(1)
+			ui.Text(ctx, app.platform.cmdEnter()+" asks").FontSize(11).TextColor(theme.TextMuted).Grow(1)
 			if busy {
 				ui.Button(ctx, "Stop").OnClick(func() { app.runner.stop(app.rev, walk.ID) })
 			}
-			ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).Tooltip("Ask (" + keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() { send(draft) })
+			ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).Tooltip("Ask (" + app.platform.keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() { send(draft) })
 		})
 	})
 }

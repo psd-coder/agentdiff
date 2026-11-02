@@ -102,7 +102,7 @@ func (app *app) projectPicker(ctx *ui.Context) {
 // projectList lists the recent projects, open marked as open, and with
 // add, a last row to add one. Up, Down, Home and End move the highlight,
 // Return or Space calls choose with its index, len(cfg.Recent) for the
-// add row, and Cmd+Backspace or Delete removes the highlighted project.
+// add row, and CmdOrCtrl+Backspace or Delete removes the highlighted project.
 func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add bool, choose func(index int)) {
 	theme := ctx.Theme()
 	recent := app.cfg.Recent
@@ -123,7 +123,7 @@ func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add boo
 				}
 			}, nil).Label(filepath.Base(p) + ", " + p)
 			row.ContextMenu(func(m *ui.Menu) {
-				app.menuItem(ctx, m, "Show in Finder", func(*ui.Context) { mygo.Shell.ShowItemInFolder(p) })
+				app.menuItem(ctx, m, "Show in "+app.platform.fileManager, func(*ui.Context) { mygo.Shell.ShowItemInFolder(p) })
 				app.menuItem(ctx, m, "Copy Path", func(ctx *ui.Context) { ctx.WriteClipboard(p) })
 				m.Separator()
 				app.menuItem(ctx, m, "Remove from List…", func(*ui.Context) { app.confirmRemoveProject(p) })
@@ -241,7 +241,7 @@ func (app *app) branchList(ctx *ui.Context) {
 		ui.Scroll(ctx).MaxHeight(380).Children(func() {
 			_, items = nav.list(ctx, "Branches", func(addRow pickRow) {
 				for _, r := range rows {
-					if branchItem(ctx, addRow, r, openTree).Clicked() {
+					if app.branchItem(ctx, addRow, r, openTree).Clicked() {
 						choose(r.name)
 					}
 				}
@@ -254,12 +254,12 @@ func (app *app) branchList(ctx *ui.Context) {
 	})
 }
 
-func branchItem(ctx *ui.Context, addRow pickRow, row branchRow, openTree func(string)) ui.Element {
+func (app *app) branchItem(ctx *ui.Context, addRow pickRow, row branchRow, openTree func(string)) ui.Element {
 	theme := ctx.Theme()
 	var actions func()
 	if row.tree != "" {
 		actions = func() {
-			iconButton(ctx, worktreeIcon, "Open the worktree "+row.tree, "Open the worktree "+row.tree+" (Cmd+Enter)").OnClick(func() { openTree(row.tree) })
+			iconButton(ctx, worktreeIcon, "Open the worktree "+row.tree, "Open the worktree "+row.tree+" ("+app.platform.keyLabel("CmdOrCtrl+Enter")+")").OnClick(func() { openTree(row.tree) })
 		}
 	}
 	return addRow(ctx.Key(row.name), func() {
