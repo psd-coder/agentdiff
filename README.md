@@ -148,13 +148,13 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Enter in the branch list | Opens the worktree of the highlighted branch, when another worktree has it checked out |
 | Cmd+Backspace or Delete in the project list | Removes the highlighted project from the list, after you confirm |
 
-These are the default shortcuts. The menu bar lists them under File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog, with the shortcuts you gave commands outside the menu bar.
+These are the default shortcuts. The menu bar lists them under AgentDiff, File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog, with the shortcuts you gave commands outside the menu bar.
 
 The command palette lists the commands that apply where you are: the menu bar's commands, and the actions of the open page and side panel, as Mark File as Viewed on a file page or Resolve Thread while a thread is open. While the field is empty, the 5 commands you ran last from it come first. The buttons of the window, the menu bar and the palette run the same commands.
 
 ## Configuration
 
-Settings has four tabs: Appearance, Agent, Prompts and Shortcuts. Every change is saved as you make it, and Done or Escape closes the dialog.
+Settings opens in its own window, from AgentDiff > Settings or with Cmd+Comma. It has four tabs: Appearance, Agent, Prompts and Shortcuts. Every change is saved as you make it. Cmd+W closes the window.
 
 Shortcuts lists every command with its shortcut. Click a shortcut and press the new keys, which must include Command or Control. Escape cancels. When another command has those keys, they move to the command you record, and the tab says which command lost them. The standard shortcuts of macOS, as Copy and Quit, and Cmd+Return and Cmd+Backspace stay as they are. A command outside the menu bar runs by its shortcut where it applies, also while you type in a field. A field keeps the keys it edits with: Command with A, C, X, V, Z or Y, with or without Shift, and Control with the letters that move the caret, as A, E and K. Reset gives one command its default back, and Reset all shortcuts gives all of them theirs. `config.json` keeps only the shortcuts you changed, so new defaults still reach you.
 

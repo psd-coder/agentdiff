@@ -189,7 +189,7 @@ func (app *app) commands() []*command {
 		{id: "compare", overlay: true, title: "Compare…", keys: "CmdOrCtrl+Shift+B", tip: "Compare with another base, or review a custom range",
 			run: func(*ui.Context, string) { app.openCompare() }},
 		{id: "refresh", title: "Refresh", keys: "CmdOrCtrl+R", tip: "Read the changes again", run: func(*ui.Context, string) { app.refresh() }},
-		{id: "settings", overlay: true, title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { app.openSettings() }},
+		{id: "settings", title: "Settings…", keys: "CmdOrCtrl+,", run: func(*ui.Context, string) { app.openSettings() }},
 		{id: "focus-changes", title: "Focus Changes", keys: "CmdOrCtrl+Shift+C", run: func(*ui.Context, string) { app.refocus = "changes" }},
 		{id: "focus-files", title: "Focus Files", keys: "CmdOrCtrl+Shift+F", run: func(*ui.Context, string) { app.focusFiles() }},
 		{id: "focus-page", title: "Focus Page", keys: "CmdOrCtrl+0", run: func(*ui.Context, string) { app.refocus = "page" }},
@@ -292,10 +292,6 @@ func (app *app) closeOverlays(keep string) {
 	if compare := app.compareForm; compare != nil && keep != "compare" {
 		compare.open = false
 	}
-	if settings := app.settings; settings != nil && keep != "settings" {
-		settings.open = false
-		app.recording = ""
-	}
 }
 
 // queueCommand runs the command in the next frame, which has the context that
@@ -306,6 +302,9 @@ func (app *app) queueCommand(id string) {
 		// The menu bar takes its keys before the window sees them: they
 		// are the keys being recorded.
 		app.recordKeys(app.keymap().of(id))
+		if app.settingsWin != nil {
+			app.settingsWin.Invalidate()
+		}
 		return
 	}
 	app.pending = id
