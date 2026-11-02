@@ -381,7 +381,7 @@ func (app *app) cmdMenu(ctx *ui.Context, menu *ui.Menu, target string, ids ...st
 			separate = false
 		}
 		item := menu.Item(cm.title)
-		if mods, key, ok := parseAccelerator(app.keymap().of(id)); ok {
+		if mods, key, ok := app.platform.parseAccelerator(app.keymap().of(id)); ok {
 			item.Shortcut(mods, key)
 		}
 		app.menuChoice(ctx, item, func(ctx *ui.Context) { app.runOn(ctx, id, target) })
@@ -395,9 +395,9 @@ func (app *app) tooltip(cm *command) string {
 	keys := app.keymap().of(cm.id)
 	switch {
 	case keys != "" && cm.tip != "":
-		return cm.tip + " (" + keyLabel(keys) + ")"
+		return cm.tip + " (" + app.platform.keyLabel(keys) + ")"
 	case keys != "":
-		return keyLabel(keys)
+		return app.platform.keyLabel(keys)
 	}
 	return cm.tip
 }
@@ -409,7 +409,7 @@ func (app *app) keyTip(text, id string) string {
 	if keys == "" {
 		return ""
 	}
-	return text + " (" + keyLabel(keys) + ")"
+	return text + " (" + app.platform.keyLabel(keys) + ")"
 }
 
 // keyTips joins the keyTip of each command ids, named by labels, one per

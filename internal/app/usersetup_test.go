@@ -140,21 +140,31 @@ func TestAgentLabel(t *testing.T) {
 }
 
 func TestCommandHelpWarnsWhenTheSandboxDoesNotReach(t *testing.T) {
-	const warning = "The macOS sandbox does not reach into the container"
+	const (
+		container = "The macOS sandbox does not reach into the container"
+		noSandbox = "OpenCode runs without a sandbox on this system"
+	)
 	tests := []struct {
 		name     string
+		goos     string
 		provider agent.Provider
 		command  []string
-		warns    bool
+		want     string
 	}{
-		{"OpenCode on the host", agent.OpenCode, []string{"/opt/bin/opencode"}, false},
-		{"OpenCode in a container", agent.OpenCode, []string{"dev", "opencode"}, true},
-		{"Claude Code in a container", agent.Claude, []string{"dev", "claude"}, false},
+		{"OpenCode on a Mac", "darwin", agent.OpenCode, []string{"/opt/bin/opencode"}, ""},
+		{"OpenCode in a container on a Mac", "darwin", agent.OpenCode, []string{"dev", "opencode"}, container},
+		{"Claude Code in a container on a Mac", "darwin", agent.Claude, []string{"dev", "claude"}, ""},
+		{"OpenCode on Linux", "linux", agent.OpenCode, nil, noSandbox},
+		{"OpenCode in a container on Windows", "windows", agent.OpenCode, []string{"dev", "opencode"}, noSandbox},
+		{"Codex on Windows", "windows", agent.Codex, nil, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := strings.Contains(commandHelp(tt.provider, tt.command), warning); got != tt.warns {
-				t.Errorf("warns = %v, want %v", got, tt.warns)
+			help := commandHelp(platformOf(tt.goos), tt.provider, tt.command)
+			for _, warning := range []string{container, noSandbox} {
+				if got, want := strings.Contains(help, warning), warning == tt.want; got != want {
+					t.Errorf("help contains %q = %v, want %v", warning, got, want)
+				}
 			}
 		})
 	}

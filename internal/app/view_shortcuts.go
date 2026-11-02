@@ -12,26 +12,29 @@ type shortcut struct{ keys, does string }
 
 // otherKeys are the keys that work outside the menu bar, in a part of
 // the window.
-var otherKeys = []shortcut{
-	{"Escape", "Closes the side panel on top, a dialog or a list"},
-	{"Tab", "Moves the focus to the next part of the window"},
-	{"↑ ↓, Home, End", "Chooses an item of the sidebar that has the focus"},
-	{"← →", "Hides and shows the files of the group chosen in the sidebar"},
-	{"↓, Return, Space", "Opens the list of the project or branch button"},
-	{"Return", "Opens the project or branch highlighted in the list"},
-	{"⌘Return", "Opens the worktree of the branch highlighted in the list, or sends the question or comment you are typing"},
-	{"⌘⌫", "Removes the project highlighted in the list, after you confirm"},
-	{"Click, ⇧Click", "Selects a range of lines on their numbers in a diff"},
+func (app *app) otherKeys() []shortcut {
+	sys := app.platform
+	return []shortcut{
+		{"Escape", "Closes the side panel on top, a dialog or a list"},
+		{"Tab", "Moves the focus to the next part of the window"},
+		{"↑ ↓, Home, End", "Chooses an item of the sidebar that has the focus"},
+		{"← →", "Hides and shows the files of the group chosen in the sidebar"},
+		{"↓, " + sys.enter + ", Space", "Opens the list of the project or branch button"},
+		{sys.enter, "Opens the project or branch highlighted in the list"},
+		{sys.cmdEnter(), "Opens the worktree of the branch highlighted in the list, or sends the question or comment you are typing"},
+		{sys.keyLabel("CmdOrCtrl+Backspace"), "Removes the project highlighted in the list, after you confirm"},
+		{"Click, " + sys.modsLabel(ui.Shift) + "Click", "Selects a range of lines on their numbers in a diff"},
+	}
 }
 
 // menuShortcuts are the shortcuts of the app's own items of the menu
 // bar, by menu. Items with a role, as Copy, work as in every app.
-func menuShortcuts(menu *mygo.Menu) (menus []string, keys [][]shortcut) {
+func (app *app) menuShortcuts(menu *mygo.Menu) (menus []string, keys [][]shortcut) {
 	for _, m := range menu.Items() {
 		var list []shortcut
 		for _, it := range m.Submenu {
 			if it.Accelerator != "" && it.Role == "" {
-				list = append(list, shortcut{keyLabel(it.Accelerator), strings.TrimSuffix(it.Label, "…")})
+				list = append(list, shortcut{app.platform.keyLabel(it.Accelerator), strings.TrimSuffix(it.Label, "…")})
 			}
 		}
 		if len(list) == 0 {
@@ -53,7 +56,7 @@ func (app *app) moreShortcuts() []shortcut {
 	var out []shortcut
 	for _, cm := range app.cachedCommands() {
 		if keys := app.keymap().of(cm.id); keys != "" && !inMenu[cm.id] {
-			out = append(out, shortcut{keyLabel(keys), strings.TrimSuffix(cm.title, "…")})
+			out = append(out, shortcut{app.platform.keyLabel(keys), strings.TrimSuffix(cm.title, "…")})
 		}
 	}
 	return out
@@ -80,14 +83,14 @@ func (app *app) shortcutsModal(ctx *ui.Context) {
 			ui.Text(ctx, "Keyboard shortcuts").FontSize(18).Bold().Padding(0, 0, 14, 0)
 			ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
 				ui.Column(ctx).Gap(18).PaddingEnd(4).Children(func() {
-					menus, keys := menuShortcuts(app.menu())
+					menus, keys := app.menuShortcuts(app.menu())
 					for i, m := range menus {
 						section(m+" menu", keys[i])
 					}
 					if more := app.moreShortcuts(); len(more) > 0 {
 						section("Other commands", more)
 					}
-					section("In the window", otherKeys)
+					section("In the window", app.otherKeys())
 				})
 			})
 			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {

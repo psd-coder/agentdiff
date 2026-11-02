@@ -29,35 +29,51 @@ var keySigns = map[string]string{
 	"Escape": "⎋", "Tab": "⇥", "PageUp": "⇞", "PageDown": "⇟", "Home": "↖", "End": "↘",
 }
 
-// modNames are the modifiers of accelerators, in the order macOS shows
-// them: Control, Option, Shift, Command.
-var modNames = []struct {
+// modName is a modifier of accelerators, with the other names it takes.
+type modName struct {
 	mod   ui.Modifiers
 	name  string
-	sign  string
 	alias []string
-}{
-	{ui.Ctrl, "Ctrl", "⌃", []string{"Control"}},
-	{ui.Alt, "Alt", "⌥", []string{"Option"}},
-	{ui.Shift, "Shift", "⇧", nil},
-	{ui.Cmd, "CmdOrCtrl", "⌘", []string{"Cmd", "Command", "CommandOrControl"}},
 }
 
-// accelerator writes a key with modifiers as the menu bar takes it, as
-// "CmdOrCtrl+Shift+P". It is empty for a key it has no name for.
-func accelerator(mods ui.Modifiers, key ui.Key) string {
-	name := keyNames[key]
-	switch {
-	case key >= ui.KeyA && key <= ui.KeyZ:
-		name = string(rune('A' + key - ui.KeyA))
-	case key >= ui.Key0 && key <= ui.Key9:
-		name = string(rune('0' + key - ui.Key0))
+// modNames are the modifiers of accelerators, in the order accelerator
+// writes them. Off macOS, CmdOrCtrl is Control, so Ctrl is another name
+// of it, and Cmd names the Windows key, which shortcuts do not use.
+func (sys platform) modNames() []modName {
+	alt := modName{ui.Alt, "Alt", []string{"Option"}}
+	shift := modName{ui.Shift, "Shift", nil}
+	if sys.mac {
+		return []modName{
+			{ui.Ctrl, "Ctrl", []string{"Control"}}, alt, shift,
+			{ui.Super, "CmdOrCtrl", []string{"Cmd", "Command", "CommandOrControl"}},
+		}
 	}
+	return []modName{alt, shift, {ui.Ctrl, "CmdOrCtrl", []string{"CommandOrControl", "Ctrl", "Control"}}}
+}
+
+// modLabel is how the menus show a modifier.
+type modLabel struct {
+	mod   ui.Modifiers
+	label string
+}
+
+// modSigns are the modifiers as the menus of macOS show them, in their
+// order: ⌃⌥⇧⌘.
+var modSigns = []modLabel{{ui.Ctrl, "⌃"}, {ui.Alt, "⌥"}, {ui.Shift, "⇧"}, {ui.Super, "⌘"}}
+
+// modWords are the modifiers as the menus of Windows and Linux show them,
+// ahead of the key: Ctrl+Alt+Shift+.
+var modWords = []modLabel{{ui.Ctrl, "Ctrl+"}, {ui.Alt, "Alt+"}, {ui.Shift, "Shift+"}}
+
+// accelerator writes a key with modifiers as the menu bar takes it, as
+// "Shift+CmdOrCtrl+P". It is empty for a key it has no name for.
+func (sys platform) accelerator(mods ui.Modifiers, key ui.Key) string {
+	name := keyName(key)
 	if name == "" {
 		return ""
 	}
 	var prefix strings.Builder
-	for _, m := range modNames {
+	for _, m := range sys.modNames() {
 		if mods&m.mod != 0 {
 			prefix.WriteString(m.name)
 			prefix.WriteString("+")
@@ -66,15 +82,25 @@ func accelerator(mods ui.Modifiers, key ui.Key) string {
 	return prefix.String() + name
 }
 
+func keyName(key ui.Key) string {
+	switch {
+	case key >= ui.KeyA && key <= ui.KeyZ:
+		return string(rune('A' + key - ui.KeyA))
+	case key >= ui.Key0 && key <= ui.Key9:
+		return string(rune('0' + key - ui.Key0))
+	}
+	return keyNames[key]
+}
+
 // parseAccelerator reads an accelerator that accelerator writes, or one
 // with its modifiers in another order.
-func parseAccelerator(acc string) (ui.Modifiers, ui.Key, bool) {
+func (sys platform) parseAccelerator(acc string) (ui.Modifiers, ui.Key, bool) {
 	parts := strings.Split(acc, "+")
 	var mods ui.Modifiers
-	for _, p := range parts[:len(parts)-1] {
+	for _, part := range parts[:len(parts)-1] {
 		found := false
-		for _, m := range modNames {
-			if strings.EqualFold(p, m.name) || slices.ContainsFunc(m.alias, func(a string) bool { return strings.EqualFold(a, p) }) {
+		for _, m := range sys.modNames() {
+			if strings.EqualFold(part, m.name) || slices.ContainsFunc(m.alias, func(a string) bool { return strings.EqualFold(a, part) }) {
 				mods |= m.mod
 				found = true
 			}
@@ -100,28 +126,42 @@ func parseAccelerator(acc string) (ui.Modifiers, ui.Key, bool) {
 	return 0, 0, false
 }
 
-// keyLabel writes an accelerator the way the menus of macOS show it: ⇧⌘B.
-func keyLabel(acc string) string {
-	mods, key, ok := parseAccelerator(acc)
+// keyLabel writes an accelerator the way the menus of the system show it:
+// ⇧⌘B on macOS, Ctrl+Shift+B elsewhere.
+func (sys platform) keyLabel(acc string) string {
+	mods, key, ok := sys.parseAccelerator(acc)
 	if !ok {
 		return acc
 	}
-	name := accelerator(0, key)
-	if sign, ok := keySigns[name]; ok {
+	name := keyName(key)
+	if sign, ok := keySigns[name]; ok && sys.mac {
 		name = sign
 	}
-	return modsLabel(mods) + name
+	return sys.modsLabel(mods) + name
 }
 
-// modsLabel writes modifiers the way the menus of macOS show them: ⌃⌥⇧⌘.
-func modsLabel(mods ui.Modifiers) string {
-	var signs strings.Builder
-	for _, m := range modNames {
-		if mods&m.mod != 0 {
-			signs.WriteString(m.sign)
+// modsLabel writes modifiers the way the menus of the system show them
+// ahead of a key: ⌃⌥⇧⌘ on macOS, Ctrl+Alt+Shift+ elsewhere.
+func (sys platform) modsLabel(mods ui.Modifiers) string {
+	labels := modWords
+	if sys.mac {
+		labels = modSigns
+	}
+	var out strings.Builder
+	for _, l := range labels {
+		if mods&l.mod != 0 {
+			out.WriteString(l.label)
 		}
 	}
-	return signs.String()
+	return out.String()
+}
+
+// shortcutMods names the modifiers a recorded shortcut needs.
+func (sys platform) shortcutMods() string {
+	if sys.mac {
+		return "⌘ or ⌃"
+	}
+	return "Ctrl"
 }
 
 // fixedKeys are keys the app uses in fields and lists, which no command
@@ -160,7 +200,7 @@ func (app *app) keymap() *keymap {
 			order = append(order, cm)
 		}
 	}
-	app.km = newKeymap(order, reserved, app.cfg.Keys)
+	app.km = newKeymap(app.platform, order, reserved, app.cfg.Keys)
 	app.cfg.Keys = app.km.overrides()
 	return app.km
 }
@@ -196,7 +236,7 @@ func (app *app) commandKeys(uiContext *ui.Context) {
 		if keys == "" || inMenu[cm.id] {
 			continue
 		}
-		if mods, key, ok := parseAccelerator(keys); ok && uiContext.Shortcut(mods, key) {
+		if mods, key, ok := app.platform.parseAccelerator(keys); ok && uiContext.Shortcut(mods, key) {
 			app.runHere(uiContext, cm.id)
 		}
 	}

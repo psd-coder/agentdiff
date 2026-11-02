@@ -767,7 +767,7 @@ func TestThreadAsksOnceWhileAnswering(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	hint, ok := tt.Find("Cmd+Enter asks the agent")
+	hint, ok := tt.Find("⌘Return asks the agent")
 	if !ok {
 		t.Fatal("the composer is not open")
 	}

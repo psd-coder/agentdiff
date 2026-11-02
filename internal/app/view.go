@@ -662,7 +662,7 @@ func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bo
 }
 
 // fileMenu is the context menu of a file: the commands on it, and the
-// items that copy its path and show it in Finder.
+// items that copy its path and show it in the file manager.
 func (app *app) fileMenu(ctx *ui.Context, menu *ui.Menu, file string) {
 	app.cmdMenu(ctx, menu, file, "comment-file", "mark-viewed", "mark-not-viewed")
 	menu.Separator()
@@ -670,7 +670,7 @@ func (app *app) fileMenu(ctx *ui.Context, menu *ui.Menu, file string) {
 	abs := filepath.Join(app.repo.Root, file)
 	// A deleted file is not on disk to show.
 	if _, err := os.Stat(abs); err == nil {
-		app.menuItem(ctx, menu, "Show in Finder", func(*ui.Context) { mygo.Shell.ShowItemInFolder(abs) })
+		app.menuItem(ctx, menu, "Show in "+app.platform.fileManager, func(*ui.Context) { mygo.Shell.ShowItemInFolder(abs) })
 	}
 }
 
