@@ -63,7 +63,7 @@ func TestPromptsTab(t *testing.T) {
 	app.openSettings()
 	app.settings.tab = promptsTab
 	app.settings.prompts.picked = "Overview"
-	tt := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
 	snapshot(t, tt, "settings-prompts")
 	if !tt.HasText("This repository gives its own prompt in .agentdiff/prompts/overview.md, so its runs use that file. The text below goes to the runs in other repositories.") {
 		t.Errorf("the tab does not say that the repository has its own overview prompt: %q", tt.Texts())
@@ -115,7 +115,7 @@ func TestPromptsTabShowsTheTextOfABlock(t *testing.T) {
 	app.openSettings()
 	app.settings.tab = promptsTab
 	app.settings.prompts.picked = "Overview"
-	tt := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
 	if tt.HasText("- api/handler.go\n- cache/cache.go") {
 		t.Fatal("the text of {{files}} shows before it is opened")
 	}

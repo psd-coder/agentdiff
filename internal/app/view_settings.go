@@ -4,8 +4,10 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -106,8 +108,13 @@ func (app *app) applyTheme() {
 	mygo.Theme.SetSource(themes[themeIndex(app.cfg.Theme)])
 }
 
-// The size the settings window opens at.
-const settingsWidth, settingsHeight = 720, 640
+// The width of the settings window, and the heights it can take: it is
+// as tall as the open tab needs, between the two.
+const (
+	settingsWidth     = 720
+	settingsMinHeight = 240
+	settingsMaxHeight = 680
+)
 
 // openSettings opens the settings window, or brings it to the front.
 func (app *app) openSettings() {
@@ -133,17 +140,21 @@ func (app *app) openSettings() {
 	app.settingsWin = mygo.NewWindow(mygo.WindowOptions{
 		Title:             settingsTabs[form.tab].name,
 		Width:             settingsWidth,
-		Height:            settingsHeight,
-		MinWidth:          600,
-		MinHeight:         420,
+		Height:            settingsMaxHeight,
 		StateKey:          "settings",
 		TitleBarStyle:     mygo.TitleBarHidden,
+		DisableResize:     true,
 		DisableMinimize:   true,
 		DisableMaximize:   true,
 		DisableFullScreen: true,
 		Content:           ui.View(app.settingsView),
 	})
 	app.settingsWin.OnClosed(func() { app.update(app.settingsClosed) })
+	// The window stays invisible until it has the height of its tab, so
+	// it does not show at another height first. If it never settles, it
+	// shows anyway.
+	app.settingsWin.SetOpacity(0)
+	time.AfterFunc(300*time.Millisecond, func() { app.update(app.revealSettings) })
 	for _, p := range providers {
 		form.status[p] = "Checking…"
 		app.async(func() {
@@ -193,6 +204,15 @@ func (app *app) closeSettings() {
 // settingsClosed forgets the settings once their window closed.
 func (app *app) settingsClosed() {
 	app.settings, app.settingsWin, app.recording = nil, nil, ""
+	app.settingsShown = false
+}
+
+// revealSettings makes the settings window visible, once.
+func (app *app) revealSettings() {
+	if app.settingsWin != nil && !app.settingsShown {
+		app.settingsShown = true
+		app.settingsWin.SetOpacity(1)
+	}
 }
 
 // settingsTabs are the names and icons of the tabs, in the order of
@@ -222,33 +242,67 @@ func (app *app) settingsView(ctx *ui.Context) {
 		form.titled = form.tab + 1
 	}
 	bar := ctx.TitleBar()
-	ui.Column(ctx).AlignItems(ui.Center).Gap(4).Padding(0, 16, 8, 16).Background(theme.Surface).DragWindow().Children(func() {
+	ui.Column(ctx).AlignItems(ui.Center).Gap(4).Padding(0, 16, 8, 16).Background(theme.Surface).DragWindow().Bind(&app.settingsHeader).Children(func() {
 		ui.Row(ctx).Height(max(bar.Height, 28)).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, name).Bold()
 		})
 		app.settingsToolbar(ctx, form)
 	})
 	ui.Divider(ctx)
-	ui.Column(ctx).Gap(14).Padding(20, 24).Grow(1).MinHeight(0).Children(func() {
-		switch form.tab {
-		case agentTab:
-			ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-				ui.Column(ctx).PaddingEnd(4).Children(func() {
+	if form.tab == shortcutsTab {
+		// The list scrolls under the filter, which stays in place.
+		ui.Column(ctx).Gap(14).Padding(20, 0).Grow(1).MinHeight(0).Children(func() { app.shortcutsTab(ctx) })
+	} else {
+		// The scroll spans the window, so its bar shows at the window's
+		// edge, outside the padding of the tab.
+		ui.Scroll(ctx).Grow(1).MinHeight(0).FillWidth().Children(func() {
+			ui.Column(ctx).Gap(14).Padding(20, 24).Bind(&app.settingsBody).Children(func() {
+				switch form.tab {
+				case agentTab:
 					app.agentFields(ctx, &form.agent, form.status, &form.ahead)
-				})
+				case promptsTab:
+					app.promptsTab(ctx, &form.prompts)
+				case appearanceTab:
+					app.appearanceTab(ctx, form)
+				}
 			})
-		case promptsTab:
-			app.promptsTab(ctx, &form.prompts)
-		case shortcutsTab:
-			app.shortcutsTab(ctx)
-		case appearanceTab:
-			app.appearanceTab(ctx, form)
-		}
-	})
+		})
+	}
+	app.fitSettings(ctx, form.tab)
 	if form.settingsValues != form.saved {
 		app.saveSettings()
 	}
 	app.savePrompts(&form.prompts)
+}
+
+// fitSettings makes the settings window as tall as the open tab needs,
+// up to settingsMaxHeight, as the settings windows of Mac apps do. Its
+// top edge stays in place. The Shortcuts tab, a long list, takes the
+// most room.
+func (app *app) fitSettings(ctx *ui.Context, tab int) {
+	if app.settingsWin == nil {
+		return
+	}
+	// The boxes of the last frame lag one change behind this build, so
+	// each build asks for one more, which measures what it laid out.
+	app.settingsSettled = !app.settingsSettled
+	if !app.settingsSettled {
+		ctx.Invalidate()
+	}
+	height := float32(settingsMaxHeight)
+	if tab != shortcutsTab {
+		body := app.settingsBody.Bounds(ctx)
+		if body.H == 0 {
+			return
+		}
+		height = min(max(app.settingsHeader.Bounds(ctx).H+1+body.H, settingsMinHeight), settingsMaxHeight)
+	}
+	if _, current := ctx.Size(); math.Abs(float64(height-current)) < 1 {
+		app.revealSettings()
+		return
+	}
+	win, want := app.settingsWin, int(math.Ceil(float64(height)))
+	app.win.Update(func() { win.SetContentSize(settingsWidth, want) })
 }
 
 // settingsToolbar shows the tabs as the toolbar of a macOS settings

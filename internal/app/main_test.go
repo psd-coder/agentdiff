@@ -330,7 +330,7 @@ func TestScopeSwitchToCommit(t *testing.T) {
 func TestSettings(t *testing.T) {
 	app := newTestApp(t)
 	app.openSettings()
-	tt := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
 	snapshot(t, tt, "settings")
 	tab, _ := tt.Find("Agent")
 	if tt.HasText("This review") {
@@ -2568,7 +2568,7 @@ func TestShortcutSettings(t *testing.T) {
 	tt := ui.NewTester(app.view, 1300, 800)
 	app.openSettings()
 	app.settings.tab = shortcutsTab
-	st := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
+	st := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
 	menuKeys := func(id string) string {
 		var keys string
 		var walk func(items []*mygo.MenuItem)
@@ -3307,7 +3307,7 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 func TestSettingsTabsLineUpControls(t *testing.T) {
 	app := newTestApp(t)
 	app.openSettings()
-	tt := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
 	left := map[string]float32{}
 	for tab, control := range map[int]string{appearanceTab: "Theme", agentTab: "Model", promptsTab: "Prompt"} {
 		app.settings.tab = tab
