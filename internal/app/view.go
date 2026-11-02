@@ -508,19 +508,20 @@ func (app *app) reviewNav(ctx *ui.Context) {
 	nav := ui.Sidebar(ctx, &chosen, func() {
 		sidebarHeading(ctx, "Review", nil)
 		ui.SidebarItem(ctx, overview.String(), overviewIcon, "Overview").Children(func() { targetMark(ctx, app.state(review.TargetOverview)) }).
+			Tooltip(app.keyTip("Overview", "go-overview")).
 			ContextMenu(func(m *ui.Menu) {
 				app.cmdMenu(ctx, m, "", "explain", "stop-overview", "regenerate-overview", "overview-log", "", "start-over")
 			})
 		app.walkItems(ctx, "", 1)
-		ui.SidebarItem(ctx, page{kind: kindAll}.String(), filesIcon, "All files diff")
+		ui.SidebarItem(ctx, page{kind: kindAll}.String(), filesIcon, "All files diff").Tooltip(app.keyTip("All files diff", "go-all"))
 		threads := len(app.rev.Threads)
-		ui.SidebarItem(ctx, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Children(func() {
+		ui.SidebarItem(ctx, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Tooltip(app.keyTip("Questions & comments", "go-threads")).Children(func() {
 			if threads > 0 {
 				ui.Badge(ctx, fmt.Sprint(threads))
 			}
 		})
 		feedback := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
-		ui.SidebarItem(ctx, page{kind: kindFeedback}.String(), sendIcon, "Feedback").Children(func() {
+		ui.SidebarItem(ctx, page{kind: kindFeedback}.String(), sendIcon, "Feedback").Tooltip(app.keyTip("Feedback", "go-feedback")).Children(func() {
 			if feedback > 0 {
 				ui.Badge(ctx, fmt.Sprint(feedback))
 			}

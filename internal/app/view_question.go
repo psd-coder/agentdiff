@@ -239,7 +239,7 @@ func (app *app) questionComposer(ctx *ui.Context, walk *review.Walk, target *ask
 			if busy {
 				ui.Button(ctx, "Stop").OnClick(func() { app.runner.stop(app.rev, walk.ID) })
 			}
-			ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).OnClick(func() { send(draft) })
+			ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).Tooltip("Ask (" + keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() { send(draft) })
 		})
 	})
 }
