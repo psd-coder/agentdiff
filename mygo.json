@@ -3,5 +3,13 @@
   "identifier": "dev.psdcoder.agentdiff",
   "version": "0.4.0",
   "copyright": "Copyright © 2026 Pavel Grinchenko",
-  "out": "build"
+  "out": "build",
+  "linux": {
+    "comment": "Review the changes of a coding agent",
+    "categories": [
+      "Development"
+    ],
+    "command": "agentdiff",
+    "webview": false
+  }
 }
