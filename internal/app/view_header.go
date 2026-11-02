@@ -20,10 +20,12 @@ const titleBarHeight = 52
 func (app *app) toolbar(ctx *ui.Context) {
 	theme := ctx.Theme()
 	bar := ctx.TitleBar()
-	ui.Row(ctx).Height(titleBarHeight).Shrink(0).Gap(8).Padding(0, bar.Right+12, 0, 12).AlignItems(ui.Center).
+	ui.Row(ctx).Height(titleBarHeight).Shrink(0).Gap(8).Padding(0, bar.Right+8, 0, 8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).DragWindow().Children(func() {
-		app.projectPicker(ctx)
-		app.branchPicker(ctx)
+		ui.Toolbar(ctx, func() {
+			app.projectPicker(ctx)
+			app.branchPicker(ctx)
+		}).Shrink(1).Label("Changes")
 		ui.Spacer(ctx)
 		cfg := app.cfg.Agent
 		label := cfg.Provider.Name()
@@ -31,11 +33,29 @@ func (app *app) toolbar(ctx *ui.Context) {
 			label += " · " + cfg.Model
 		}
 		ui.Text(ctx, label).FontSize(12).TextColor(theme.TextMuted).SingleLine()
-		app.cmdButton(ctx, "agent-log", "", "Agent log")
-		app.cmdButton(ctx, "refresh", "", "Refresh")
-		app.cmdButton(ctx, "settings", "", "Settings")
-		feedbackCount := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
-		app.cmdPrimaryButton(ctx, "go-feedback", "", fmt.Sprintf("Feedback (%d)", feedbackCount))
+		ui.Toolbar(ctx, func() {
+			app.toolButton(ctx, "agent-log", logIcon, "Agent log", 0)
+			app.toolButton(ctx, "refresh", refreshIcon, "Refresh", 0)
+			feedbackCount := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
+			app.toolButton(ctx, "go-feedback", sendIcon, "Feedback", feedbackCount)
+		}).Shrink(0).Label("Actions")
+	})
+}
+
+// toolButton is a button of the toolbar that runs the command id. It shows
+// the icon, and count as a badge when it is above zero. Its tooltip shows
+// the label and the shortcut.
+func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label string, count int) {
+	cm := app.cmd(id)
+	tip := label
+	if keys := app.keymap().of(id); keys != "" {
+		tip += " (" + keyLabel(keys) + ")"
+	}
+	ui.Button(ctx.Key(id), "").Label(label).Tooltip(tip).Disabled(!app.applies(cm, "")).OnClick(func() { cm.run(ctx, "") }).Children(func() {
+		ui.Icon(ctx, svg).FontSize(16)
+		if count > 0 {
+			ui.Badge(ctx, fmt.Sprint(count))
+		}
 	})
 }
 
@@ -149,16 +169,14 @@ func (app *app) confirmRemoveProject(path string) {
 func (app *app) branchPicker(ctx *ui.Context) {
 	theme := ctx.Theme()
 	label, detail := app.cmpr.label()
-	radius := theme.Radius
-	ui.Row(ctx).AlignItems(ui.Stretch).Children(func() {
-		anchor := pickerButton(ctx, branchIcon, label, detail, app.branchesOpen).Radius(radius, 0, 0, radius).Label("Branch").Tooltip(app.tooltip(app.cmd("switch-branch")))
+	ui.Row(ctx).AlignItems(ui.Stretch).Gap(theme.Space(1)).Children(func() {
+		anchor := pickerButton(ctx, branchIcon, label, detail, app.branchesOpen).Label("Branch").Tooltip(app.tooltip(app.cmd("switch-branch")))
 		if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !app.branchesOpen {
 			app.runOn(ctx, "switch-branch", "")
 		}
 		app.takeFocus(anchor, "branch")
 		compare := app.cmd("compare")
-		iconButton(ctx, compareIcon, compare.tip, app.tooltip(compare)).
-			PaddingX(9).Radius(0, radius, radius, 0).MarginStart(-1).OnClick(func() { app.runOn(ctx, "compare", "") })
+		iconButton(ctx, compareIcon, compare.tip, app.tooltip(compare)).OnClick(func() { app.runOn(ctx, "compare", "") })
 		ui.Popover(ctx, anchor, &app.branchesOpen, func() { app.branchList(ctx) })
 	})
 }

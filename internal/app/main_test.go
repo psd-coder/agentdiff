@@ -239,9 +239,7 @@ func TestScopeSwitchToCommit(t *testing.T) {
 func TestSettings(t *testing.T) {
 	app := newTestApp(t)
 	tt := ui.NewTester(app.view, 1300, 800)
-	if err := tt.Click("Settings"); err != nil {
-		t.Fatal(err)
-	}
+	app.openSettings()
 	tt.Frame()
 	snapshot(t, tt, "settings")
 	tab, _ := tt.Find("Agent")
