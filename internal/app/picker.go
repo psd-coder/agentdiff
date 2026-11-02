@@ -139,12 +139,6 @@ func pickerButton(ctx *ui.Context, svg *ui.SVG, label, detail string, open bool)
 	})
 }
 
-// popUp is a drop-down as wide as its chosen option, as the pop-up buttons
-// of macOS.
-func popUp(ctx *ui.Context, selected *string, options []string) ui.Element {
-	return ui.Select(ctx, selected, options).AlignSelf(ui.Start).MinWidth(0)
-}
-
 // iconButton is a button showing an icon, named label for assistive
 // technology, with the tooltip tip.
 func iconButton(ctx *ui.Context, svg *ui.SVG, label, tip string) ui.Element {
