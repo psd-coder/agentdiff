@@ -218,6 +218,27 @@ func TestWindowStateMarksFeedbackNotHandedOver(t *testing.T) {
 	}
 }
 
+// While another app is in front, a result on screen stays unseen: the Dock
+// counts it, and it clears when AgentDiff comes back to the front.
+func TestResultStaysUnseenWhileInactive(t *testing.T) {
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
+	app.inactive = true
+	if app.onScreen(app.rev, review.TargetOverview) {
+		t.Fatal("the overview counts as seen while another app is in front")
+	}
+	app.targets.unseen[app.rev] = map[string]bool{review.TargetOverview: true}
+	tt.Frame()
+	if got := app.windowState().unseen; got != 1 {
+		t.Fatalf("unseen while inactive = %d, want 1", got)
+	}
+	app.inactive = false
+	tt.Frame()
+	if got := app.windowState().unseen; got != 0 {
+		t.Errorf("unseen after coming back = %d, want 0", got)
+	}
+}
+
 func TestLineThreadAnnotation(t *testing.T) {
 	app := newTestApp(t)
 	app.nav.page = page{kindFile, "cache/cache.go"}

@@ -41,8 +41,11 @@ type app struct {
 	win *mygo.Window
 	// settingsWin is the settings window while it is open.
 	settingsWin *mygo.Window
-	// shownWindow is what the main window shows in its title bar.
+	// shownWindow is what the main window shows in its title bar and the
+	// Dock.
 	shownWindow windowState
+	// inactive is set while another app is in front.
+	inactive bool
 	// queue takes the updates of a window-less app when a test wants to
 	// run them on its own goroutine.
 	queue chan func()
@@ -249,6 +252,11 @@ func newApp(storage store.Store) *app {
 	app.runner = newRunner(app.stream, app.saveReviewOf)
 	app.loader = newScopeLoader(app.reviews, app.async, app.update, app)
 	app.targets = newTargets(app.runner, app.onScreen)
+	markUnseen := app.runner.onEnd
+	app.runner.onEnd = func(key runKey, ahead bool) {
+		markUnseen(key, ahead)
+		app.notifyEnd(key, ahead)
+	}
 	return app
 }
 

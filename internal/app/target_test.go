@@ -128,3 +128,82 @@ func TestSeenClearsTheUnseenMark(t *testing.T) {
 		t.Error("a deleted thread keeps its review unseen")
 	}
 }
+
+func TestCountCountsUnseenResultsOfEveryReview(t *testing.T) {
+	ts, agentRunner, stream, _ := newTestTargets()
+	first, second := newRunnerReview(), newRunnerReview()
+	var threads []*review.Thread
+	for _, rev := range []*review.Review{first, second} {
+		th := rev.AddThread(review.Anchor{})
+		threads = append(threads, th)
+		startThread(agentRunner, rev, th)
+		stream.last(t, rev, th.ID).onEvent(done("Because."))
+	}
+	if got := ts.count(); got != 2 {
+		t.Fatalf("count = %d, want 2", got)
+	}
+	second.DeleteThread(threads[1].ID)
+	if got := ts.count(); got != 1 {
+		t.Errorf("count after a deleted thread = %d, want 1", got)
+	}
+}
+
+func TestRunNotice(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		end         func(subtest *testing.T, agentRunner *runner, stream *fakeStream, rev *review.Review, th *review.Thread)
+		title, body string
+		ok          bool
+	}{
+		{
+			name: "a reply",
+			end: func(t *testing.T, _ *runner, f *fakeStream, rev *review.Review, th *review.Thread) {
+				f.last(t, rev, th.ID).onEvent(done("Because."))
+			},
+			title: "Reply ready", body: "cache.go (file-level)", ok: true,
+		},
+		{
+			name: "a failure",
+			end: func(t *testing.T, _ *runner, f *fakeStream, rev *review.Review, th *review.Thread) {
+				f.last(t, rev, th.ID).onEvent(failed("boom"))
+			},
+			title: "Reply failed", body: "cache.go (file-level)", ok: true,
+		},
+		{
+			name: "a stop",
+			end: func(_ *testing.T, r *runner, _ *fakeStream, rev *review.Review, th *review.Thread) {
+				r.stop(rev, th.ID)
+			},
+		},
+		{
+			name: "a deleted thread",
+			end: func(t *testing.T, _ *runner, f *fakeStream, rev *review.Review, th *review.Thread) {
+				f.last(t, rev, th.ID).onEvent(done("Because."))
+				rev.DeleteThread(th.ID)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			agentRunner, stream := newTestRunner()
+			rev := newRunnerReview()
+			th := rev.AddThread(review.Anchor{Kind: review.AnchorFile, File: "cache.go"})
+			startThread(agentRunner, rev, th)
+			tc.end(t, agentRunner, stream, rev, th)
+			title, body, ok := runNotice(runKey{rev, th.ID})
+			if title != tc.title || body != tc.body || ok != tc.ok {
+				t.Errorf("notice = %q, %q, %v; want %q, %q, %v", title, body, ok, tc.title, tc.body, tc.ok)
+			}
+		})
+	}
+}
+
+func TestOverviewNotice(t *testing.T) {
+	agentRunner, stream := newTestRunner()
+	rev := newRunnerReview()
+	agentRunner.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil), "Overview", "", nil)
+	stream.last(t, rev, review.TargetOverview).onEvent(done("## 1. Step\nText."))
+	title, body, ok := runNotice(runKey{rev, review.TargetOverview})
+	if title != "Overview ready" || body != "repo — Uncommitted changes" || !ok {
+		t.Errorf("notice = %q, %q, %v", title, body, ok)
+	}
+}

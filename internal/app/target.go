@@ -85,6 +85,19 @@ func (targetSet *targets) unseenIn(rev *review.Review) bool {
 	return false
 }
 
+// count is the number of targets with an unseen result, in every review.
+func (targetSet *targets) count() int {
+	total := 0
+	for rev, unseen := range targetSet.unseen {
+		for target := range unseen {
+			if _, ok := rev.Resolve(target); ok {
+				total++
+			}
+		}
+	}
+	return total
+}
+
 // seen clears the unseen mark of target of rev.
 func (targetSet *targets) seen(rev *review.Review, target string) {
 	delete(targetSet.unseen[rev], target)
@@ -95,9 +108,9 @@ func (targetSet *targets) forget(rev *review.Review) { delete(targetSet.unseen, 
 
 // onScreen reports whether the user sees target of rev: the overview of the
 // review on screen, the walk on the page or in the side panel, or the
-// thread in the side panel.
+// thread in the side panel, while AgentDiff is the active app.
 func (app *app) onScreen(rev *review.Review, target string) bool {
-	if rev != app.rev {
+	if rev != app.rev || app.inactive {
 		return false
 	}
 	return target == review.TargetOverview || app.nav.page == (page{kindWalk, target}) ||
@@ -108,7 +121,7 @@ func (app *app) onScreen(rev *review.Review, target string) bool {
 // calls it in every frame, so a page that opens in any way clears its
 // mark.
 func (app *app) markSeen() {
-	if app.rev == nil {
+	if app.rev == nil || app.inactive {
 		return
 	}
 	app.targets.seen(app.rev, review.TargetOverview)

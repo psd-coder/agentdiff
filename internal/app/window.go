@@ -2,6 +2,7 @@ package app
 
 import (
 	"log"
+	"strconv"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -12,19 +13,22 @@ import (
 // windowState is what the main window shows about the open review: the
 // title, the folder the window stands for, and whether the reviewer has
 // feedback they did not copy or save yet, which the close button shows
-// with a dot, as for a document with unsaved changes.
+// with a dot, as for a document with unsaved changes. The Dock icon shows
+// the number of unseen results as its badge.
 type windowState struct {
 	title  string
 	folder string
 	edited bool
+	unseen int
 }
 
 func (app *app) windowState() windowState {
+	unseen := app.targets.count()
 	if app.repo == nil {
-		return windowState{title: "AgentDiff"}
+		return windowState{title: "AgentDiff", unseen: unseen}
 	}
 	edited := app.hasFeedback("") && app.feedback() != app.handedOver
-	return windowState{title: app.repo.Name() + " — " + app.scopeLabel(), folder: app.repo.Root, edited: edited}
+	return windowState{title: app.repo.Name() + " — " + app.scopeLabel(), folder: app.repo.Root, edited: edited, unseen: unseen}
 }
 
 // syncWindow gives the main window the title, folder and edited mark of
@@ -44,6 +48,13 @@ func (app *app) syncWindow() {
 	}
 	if state.edited != shown.edited {
 		app.win.SetDocumentEdited(state.edited)
+	}
+	if state.unseen != shown.unseen {
+		badge := ""
+		if state.unseen > 0 {
+			badge = strconv.Itoa(state.unseen)
+		}
+		mygo.App.Dock.SetBadge(badge)
 	}
 }
 
@@ -78,6 +89,12 @@ func Run(repo string) error {
 			Content:  ui.View(app.view),
 		})
 		app.win.OnFocus(func() { app.win.Update(app.syncBranch) })
+		mygo.App.OnDidResignActive(func() { app.win.Update(func() { app.inactive = true }) })
+		mygo.App.OnDidBecomeActive(func() {
+			// What the user sees now does not wait in Notification Center.
+			mygo.ClearNotifications()
+			app.win.Update(func() { app.inactive = false })
+		})
 		if repo != "" {
 			app.win.Update(func() { app.openRepo(repo) })
 		}
