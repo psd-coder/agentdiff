@@ -358,35 +358,3 @@ func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.P
 		}).Description(setup)
 	})
 }
-
-func (app *app) chooseRepo() {
-	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: app.win, Title: "Open a git repository", Directory: true})
-		if err != nil || len(paths) == 0 {
-			return
-		}
-		app.update(func() { app.openRepo(paths[0]) })
-	}()
-}
-
-func (app *app) welcome(ctx *ui.Context) {
-	theme := ctx.Theme()
-	ui.Box(ctx).Height(titleBarHeight).Shrink(0).FillWidth().Background(theme.Background).DragWindow()
-	ui.Column(ctx).Grow(1).FillWidth().Center().Gap(16).Padding(32).Background(theme.Background).Children(func() {
-		ui.Text(ctx, "AgentDiff").FontSize(30).Bold()
-		ui.Text(ctx, "Review what your coding agent changed: an explanation first, then the diff, grouped, with comments you send back.").TextColor(theme.TextMuted).MaxWidth(480).TextAlign(ui.Center)
-		ui.PrimaryButton(ctx, "Open repository…").OnClick(app.chooseRepo)
-		if app.repoErr != "" {
-			ui.Text(ctx, app.repoErr).TextColor(theme.Danger).MaxWidth(480).Selectable()
-		}
-		if app.saveErr != "" {
-			ui.Text(ctx, "Could not save the settings: "+app.saveErr).TextColor(theme.Danger).MaxWidth(480).Selectable()
-		}
-		if len(app.cfg.Recent) > 0 {
-			ui.Column(ctx).Gap(4).Width(420).Margin(12, 0, 0, 0).Children(func() {
-				ui.Text(ctx, "Recent").FontSize(12).Bold().TextColor(theme.TextMuted).Padding(0, 8)
-				app.projectList(ctx, &app.projectNav, "", false, func(i int) { app.openRepo(app.cfg.Recent[i]) })
-			})
-		}
-	})
-}

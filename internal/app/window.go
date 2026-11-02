@@ -59,8 +59,12 @@ func (app *app) syncWindow() {
 }
 
 // Run opens the window and runs the app until it quits. It opens the
-// repository at repo, or the welcome screen when repo is empty.
-func Run(repo string) error {
+// repository at repo, or the welcome window when repo is empty or does
+// not open. icon is the PNG of the app's icon, for the welcome window.
+func Run(repo string, icon []byte) error {
+	if bitmap, err := ui.DecodeBitmap(icon); err == nil {
+		appIcon = bitmap
+	}
 	// A folder chosen in File > Open Recent or in the Dock menu, or dropped
 	// on the Dock icon, opens as the repository. One that comes before the
 	// window is open waits for it.
@@ -88,6 +92,8 @@ func Run(repo string) error {
 			MinWidth:  900,
 			MinHeight: 560,
 			StateKey:  "main",
+			// It shows once a repository opens.
+			Hidden: true,
 			// The traffic lights sit over the sidebar, and the toolbar
 			// shares the title bar.
 			TitleBarStyle:  mygo.TitleBarHiddenInset,
@@ -107,9 +113,14 @@ func Run(repo string) error {
 			app.win.Update(func() { app.inactive = false })
 		})
 		opened = app
-		if repo != "" {
-			app.win.Update(func() { app.openRepo(repo) })
-		}
+		app.win.Update(func() {
+			if repo != "" {
+				app.openRepo(repo)
+			}
+			if app.repo == nil {
+				app.showWelcome()
+			}
+		})
 	})
 	return mygo.App.Run()
 }

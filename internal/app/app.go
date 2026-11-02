@@ -41,6 +41,9 @@ type app struct {
 	win *mygo.Window
 	// settingsWin is the settings window while it is open.
 	settingsWin *mygo.Window
+	// welcomeWin is the welcome window while it is open, in place of the
+	// main window.
+	welcomeWin *mygo.Window
 	// shownWindow is what the main window shows in its title bar and the
 	// Dock.
 	shownWindow windowState
@@ -267,8 +270,10 @@ func (app *app) update(fn func()) {
 	case app.win != nil:
 		app.win.Update(func() {
 			fn()
-			if app.settingsWin != nil {
-				app.settingsWin.Invalidate()
+			for _, other := range []*mygo.Window{app.settingsWin, app.welcomeWin} {
+				if other != nil {
+					other.Invalidate()
+				}
 			}
 		})
 	case app.queue != nil:
@@ -293,6 +298,7 @@ func (app *app) openRepo(path string) {
 		return
 	}
 	app.repo, app.repoErr = repo, ""
+	app.hideWelcome()
 	app.prompts(repo.Root)
 	app.watch(repo)
 	app.cfg.AddRecent(repo.Root)
@@ -334,6 +340,7 @@ func (app *app) closeRepo() {
 	app.perLoad = newPerLoad()
 	app.projectsOpen = false
 	app.commits.reset()
+	app.showWelcome()
 }
 
 // compare reviews branch against base, as picked in the Compare dialog.
@@ -840,9 +847,10 @@ func (app *app) confirm(message, detail, button string, fn func()) {
 		fn()
 		return
 	}
+	parent := app.frontWindow()
 	go func() {
 		res, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: app.win, Type: mygo.MessageWarning,
+			Parent: parent, Type: mygo.MessageWarning,
 			Message: message, Detail: detail,
 			Buttons: []string{button, "Cancel"},
 		})
@@ -859,9 +867,10 @@ func (app *app) showError(message string, err error) {
 		log.Printf("%s: %v", message, err)
 		return
 	}
+	parent := app.frontWindow()
 	go func() {
 		_, _ = mygo.Dialog.Message(mygo.MessageOptions{
-			Parent: app.win, Type: mygo.MessageError,
+			Parent: parent, Type: mygo.MessageError,
 			Message: message, Detail: err.Error(),
 		})
 	}()

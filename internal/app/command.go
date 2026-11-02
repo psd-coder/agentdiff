@@ -311,7 +311,8 @@ func (app *app) queueCommand(id string) {
 	}
 	app.pending = id
 	if app.win != nil {
-		app.win.Invalidate()
+		// The welcome window runs the command while it shows.
+		app.frontWindow().Invalidate()
 	}
 }
 
