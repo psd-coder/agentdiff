@@ -59,7 +59,7 @@ func (app *app) openPage(page page) {
 }
 
 // pageScroll is the scroll of a page, which keeps its place. It takes the
-// keyboard focus that Focus Page and Cmd+1 to Cmd+3 move to the page, so
+// keyboard focus that Focus Page and Cmd+1 to Cmd+4 move to the page, so
 // that the arrows and Page Up and Page Down scroll it.
 func (app *app) pageScroll(ctx *ui.Context, page page) ui.Element {
 	scroll := ui.Scroll(ctx.Key("page-" + page.String())).TrackScroll(app.scrollOf(page.String())).Focusable().FocusRing(false)
