@@ -294,7 +294,7 @@ func TestSidebarTooltipShowsShortcut(t *testing.T) {
 		tt.Advance(2 * time.Second)
 	}
 	hover("All files diff")
-	if !tt.HasText("All files diff (⌘4)") {
+	if !tt.HasText("All files diff (⌘2)") {
 		t.Errorf("no shortcut tooltip: %q", tt.Texts())
 	}
 	app.keymap().assign("go-all", "CmdOrCtrl+Shift+A")
