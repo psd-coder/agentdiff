@@ -239,6 +239,49 @@ func TestResultStaysUnseenWhileInactive(t *testing.T) {
 	}
 }
 
+// The More button of a walk page lists the actions that apply to the walk,
+// and one chosen there runs on it.
+func TestWalkMoreMenu(t *testing.T) {
+	app := newTestApp(t)
+	walk := app.rev.AddWalk("", 0, "")
+	walk.Content = &review.Walkthrough{Summary: "Inside Get.", Steps: []review.Step{{Title: "ToLower call", Text: "Uses strings."}}}
+	walk.Agent, walk.Generated = agent.Claude, time.Now()
+	app.nav.goTo(page{kindWalk, walk.ID})
+	tt := ui.NewTester(app.view, 1300, 800)
+	if err := tt.Click("More"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Regenerate Walkthrough", "Show Log of the Walkthrough", "-", "Delete Walkthrough"}
+	if got := tt.Menu(); !slices.Equal(got, want) {
+		t.Fatalf("menu = %q, want %q", got, want)
+	}
+	if err := tt.ChooseMenuItem("Delete Walkthrough"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if app.rev.Walk(walk.ID) != nil {
+		t.Error("the walk is still in the review")
+	}
+}
+
+// The context menu of a part of the overview starts a thread about it.
+func TestPartContextMenuDiscusses(t *testing.T) {
+	app := newTestApp(t)
+	app.rev.Overview = &review.Overview{Markdown: "## 1. High level\nKeys are lower-cased.", Agent: agent.Claude, Generated: time.Now()}
+	tt := ui.NewTester(app.view, 1300, 800)
+	if err := tt.RightClick("1. High level"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Discuss"); err != nil {
+		t.Fatalf("%v; menu %q", err, tt.Menu())
+	}
+	tt.Frame()
+	th := app.rev.Thread(app.threadID())
+	if th == nil || th.Anchor.Kind != review.AnchorSection || th.Anchor.Section != "1. High level" {
+		t.Errorf("thread = %+v", th)
+	}
+}
+
 func TestLineThreadAnnotation(t *testing.T) {
 	app := newTestApp(t)
 	app.nav.page = page{kindFile, "cache/cache.go"}

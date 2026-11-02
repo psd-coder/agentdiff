@@ -118,7 +118,7 @@ Keep keys case-sensitive, callers rely on it.
 Return a typed error here.
 ````
 
-To see what an agent did, click Agent log in the toolbar, or Log on the Overview page, on a deeper walkthrough or in a thread. Runs and their steps are collapsed until you click them. Each run lists its steps in order: Command (a shell command you can paste into a terminal), Prompt, Session started (model and permission mode), Tool call and Tool result, Assistant, Result with turns, time and tokens, and the exit status. Copy puts the readable log on the clipboard. Show file opens the raw log in Finder.
+To see what an agent did, click Agent log in the toolbar, Show Log in the ⋯ menu next to the title of the Overview page or of a deeper walkthrough, or Log in a thread. The ⋯ menu also has Regenerate, and Start over on the Overview page or Delete on a deeper walkthrough. Stop shows next to it while the agent writes. Discuss on a step or a section, or in its context menu, starts a thread about it. Runs and their steps are collapsed until you click them. Each run lists its steps in order: Command (a shell command you can paste into a terminal), Prompt, Session started (model and permission mode), Tool call and Tool result, Assistant, Result with turns, time and tokens, and the exit status. Copy puts the readable log on the clipboard. Show file opens the raw log in Finder.
 
 Right-click a file, a group, a walkthrough, a commit, a thread or a recent project for its context menu. It shows the commands that apply to that item, as Mark File as Viewed, Show in Finder, Copy Commit Hash or Delete Walkthrough.
 

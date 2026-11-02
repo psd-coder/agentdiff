@@ -42,10 +42,13 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 			ui.Text(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title).FontSize(18).Bold().Margin(8, 0, 0, 0)
 		}
 		for i, it := range sec.Items {
-			ui.Column(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, theme.Border).Children(func() {
+			label := app.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1)))
+			card := ui.Column(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, theme.Border)
+			app.discussMenu(card, label, it.Text)
+			card.Children(func() {
 				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(ctx, it.Title).Bold().Grow(1)
-					app.sectionThreads(ctx, app.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1))), it.Text)
+					app.sectionThreads(ctx, label, it.Text)
 				})
 				if it.Text != "" {
 					markdown.View(ctx, it.Text, &app.md)
@@ -60,7 +63,9 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 
 func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.Step) {
 	theme := ctx.Theme()
-	ui.Column(ctx).Gap(10).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border).Children(func() {
+	card := ui.Column(ctx).Gap(10).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border)
+	app.discussMenu(card, app.pathLabel(parent, step.Title), step.Text)
+	card.Children(func() {
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, fmt.Sprintf("%d. %s", index+1, step.Title)).FontSize(16).Bold().Grow(1)
 			app.sectionThreads(ctx, app.pathLabel(parent, step.Title), step.Text)
@@ -348,9 +353,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(ctx, app.rev.WalkTitle(walk)).FontSize(22).Bold().Grow(1).Shrink(1)
 				app.cmdButton(ctx, "stop-walk", walk.ID, "Stop")
-				app.cmdButton(ctx, "regenerate-walk", walk.ID, "Regenerate")
-				app.cmdButton(ctx, "walk-log", walk.ID, "Log")
-				app.cmdButton(ctx, "delete-walk", walk.ID, "Delete")
+				app.moreButton(ctx, walk.ID, "regenerate-walk", "walk-log", "", "delete-walk")
 			})
 			if step, ok := app.rev.StepOf(walk); ok && walk.Question != "" {
 				ui.Text(ctx, "About the step: "+step.Title).FontSize(12).TextColor(theme.TextMuted)
