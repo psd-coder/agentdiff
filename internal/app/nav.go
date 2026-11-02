@@ -115,14 +115,11 @@ func (app *app) pageLabel(page page) string {
 	return "previous page"
 }
 
-// backBar leads back to the page Back opens.
-func (app *app) backBar(ctx *ui.Context) {
-	theme := ctx.Theme()
-	prev, ok := app.nav.prev(app.pageGone)
+// navTip is the tooltip of the Back or Forward button: it names the page
+// the button opens.
+func (app *app) navTip(label string, to page, ok bool) string {
 	if !ok {
-		return
+		return label
 	}
-	ui.Row(ctx).Gap(8).Padding(8, pageInset).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		app.cmdButton(ctx, "back", "", "‹ Back to "+app.pageLabel(prev))
-	})
+	return label + " to " + app.pageLabel(to)
 }

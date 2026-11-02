@@ -187,6 +187,31 @@ func TestPrevNamesThePageBackOpens(t *testing.T) {
 	}
 }
 
+func TestNextNamesThePageForwardOpens(t *testing.T) {
+	backed := func(pages ...page) *navigation {
+		nav := visit(pages...)
+		nav.back(noneGone)
+		nav.back(noneGone)
+		return nav
+	}
+	for _, tc := range []struct {
+		name string
+		nav  *navigation
+		gone func(page) bool
+		want page
+		ok   bool
+	}{
+		{"plain", backed(pageA, pageB, pageC), noneGone, pageB, true},
+		{"gone top", backed(pageA, pageB, pageC), goneOf(pageB), pageC, true},
+		{"nothing ahead", visit(pageA, pageB), noneGone, page{}, false},
+	} {
+		next, ok := tc.nav.next(tc.gone)
+		if ok != tc.ok || next != tc.want {
+			t.Errorf("%s: next = %+v, %v; want %+v, %v", tc.name, next, ok, tc.want, tc.ok)
+		}
+	}
+}
+
 func TestHistoryKeepsTheLastPages(t *testing.T) {
 	navigation := &navigation{}
 	for i := range maxHistory + 5 {
