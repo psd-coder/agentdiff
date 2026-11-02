@@ -66,7 +66,7 @@ It worked when `build/darwin-<arch>/` holds `AgentDiff.app` and a `.dmg`, with `
 open -n build/darwin-arm64/AgentDiff.app --args "$PWD"
 ```
 
-To release a version, set `version` in `mygo.json`, commit, and push a tag with the same version, as `v0.2.0`. The Release workflow builds one app for Apple silicon and Intel on a macOS runner. It fails when the tag and `version` differ. Then it publishes a GitHub release with `AgentDiff.dmg`.
+To release a version, add a section for it to `CHANGELOG.md`, set `version` in `mygo.json`, commit, and push a tag with the same version, as `v0.4.0`. The Release workflow builds one app for Apple silicon and Intel on a macOS runner. It fails when the tag and `version` differ, or when `CHANGELOG.md` has no section for the version. Then it publishes a GitHub release with `AgentDiff.dmg` and the changelog section as its notes.
 
 During development, `go run . /path/to/repo` starts the app on a repository. Without an argument the app opens the current directory when that is a git repository, and shows a welcome window otherwise. The welcome window lists the recent projects, which you open with Up, Down and Return, as in the project list. The main window opens with the project, and closing the welcome window quits the app.
 

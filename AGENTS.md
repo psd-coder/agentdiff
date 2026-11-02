@@ -13,7 +13,7 @@ AgentDiff is a native macOS app in Go, built on [MyGo](https://mygo.egoist.dev) 
 - `AGENTDIFF_SNAPSHOTS=<existing dir> go test ./internal/app`: also writes headless PNG screenshots of the main screens.
 - `AGENTDIFF_E2E=claude|codex go test -run TestEndToEnd -v ./internal/app`: real agent run on the user's subscription. Run it only when the user asks.
 
-Release: set `version` in `mygo.json`, commit, push tag `v<version>`. `.github/workflows/release.yml` fails when tag and version differ.
+Release: add a `## <version> - <date>` section to `CHANGELOG.md`, set `version` in `mygo.json`, commit, push tag `v<version>`. `.github/workflows/release.yml` fails when tag and version differ or the section is missing, and uses the section as the release notes.
 
 ## Validate
 
