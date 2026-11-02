@@ -238,9 +238,8 @@ func TestScopeSwitchToCommit(t *testing.T) {
 
 func TestSettings(t *testing.T) {
 	app := newTestApp(t)
-	tt := ui.NewTester(app.view, 1300, 800)
 	app.openSettings()
-	tt.Frame()
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
 	snapshot(t, tt, "settings")
 	tab, _ := tt.Find("Agent")
 	if tt.HasText("This review") {
@@ -257,7 +256,7 @@ func TestSettings(t *testing.T) {
 		t.Errorf("settings opened again on provider %d, want Codex", got)
 	}
 
-	// The tabs start at the same place, and each is as tall as it needs.
+	// The tabs stay in place as the tab changes.
 	if err := tt.Click("Shortcuts"); err != nil {
 		t.Fatal(err)
 	}
@@ -266,13 +265,6 @@ func TestSettings(t *testing.T) {
 	if moved, _ := tt.Find("Agent"); moved.Y != tab.Y {
 		t.Errorf("the top moved with the tab: %v, then %v", tab, moved)
 	}
-	app.keysFilter = "refresh"
-	tt.Frame()
-	done, _ := tt.Find("Done")
-	if reset, _ := tt.Find("Reset all shortcuts"); done.Y-reset.Y > 80 {
-		t.Errorf("room under the short list: Reset all at %v, Done at %v", reset, done)
-	}
-
 	if err := tt.Click("Appearance"); err != nil {
 		t.Fatal(err)
 	}
@@ -292,12 +284,13 @@ func TestSettings(t *testing.T) {
 		t.Errorf("theme = %q, want the system one", got)
 	}
 
-	if err := tt.Click("Done"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Frame()
+	app.closeSettings()
 	if app.settings != nil {
-		t.Error("Done left the settings open")
+		t.Error("closing the window left the settings open")
+	}
+	app.openSettings()
+	if app.settings == nil || app.settings.agent.provider != 1 {
+		t.Errorf("settings opened again with %+v, want the saved Codex", app.settings)
 	}
 }
 
@@ -2484,7 +2477,7 @@ func TestShortcutSettings(t *testing.T) {
 	tt := ui.NewTester(app.view, 1300, 800)
 	app.openSettings()
 	app.settings.tab = shortcutsTab
-	tt.Frame()
+	st := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
 	menuKeys := func(id string) string {
 		var keys string
 		var walk func(items []*mygo.MenuItem)
@@ -2502,36 +2495,36 @@ func TestShortcutSettings(t *testing.T) {
 	startRecording := func(filter, current string) {
 		t.Helper()
 		app.keysFilter = filter
-		tt.Frame()
-		if err := tt.Click(current); err != nil {
-			t.Fatalf("%s: %v in %q", filter, err, tt.Texts())
+		st.Frame()
+		if err := st.Click(current); err != nil {
+			t.Fatalf("%s: %v in %q", filter, err, st.Texts())
 		}
-		tt.Frame()
-		tt.Frame()
+		st.Frame()
+		st.Frame()
 		if app.recording == "" {
 			t.Fatalf("%s: not recording", filter)
 		}
 	}
 
 	startRecording("refresh", "⌘R")
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyY)
-	tt.Frame()
-	snapshot(t, tt, "shortcut-settings")
+	st.Key(ui.Cmd|ui.Shift, ui.KeyY)
+	st.Frame()
+	snapshot(t, st, "shortcut-settings")
 	if menuKeys("refresh") != "Shift+CmdOrCtrl+Y" || app.store.LoadConfig().Keys["refresh"] != "Shift+CmdOrCtrl+Y" {
 		t.Errorf("refresh: menu %q, config %v", menuKeys("refresh"), app.store.LoadConfig().Keys)
 	}
 
 	startRecording("mark file as viewed", "None")
-	tt.Key(ui.Cmd|ui.Shift, ui.KeyY)
-	tt.Frame()
-	if !tt.HasText("⇧⌘Y moved from Refresh to Mark File as Viewed.") {
+	st.Key(ui.Cmd|ui.Shift, ui.KeyY)
+	st.Frame()
+	if !st.HasText("⇧⌘Y moved from Refresh to Mark File as Viewed.") {
 		t.Errorf("move note: %q", app.keysNote)
 	}
 
 	startRecording("refresh", "None")
-	tt.Key(ui.Cmd, ui.KeyC)
-	tt.Frame()
-	if !tt.HasText("⌘C is taken by Copy, which you cannot change.") {
+	st.Key(ui.Cmd, ui.KeyC)
+	st.Frame()
+	if !st.HasText("⌘C is taken by Copy, which you cannot change.") {
 		t.Errorf("taken note: %q", app.keysNote)
 	}
 	if got := app.keymap().assign("refresh", "CmdOrCtrl+Enter"); got.kind != assignTaken {
@@ -2540,28 +2533,28 @@ func TestShortcutSettings(t *testing.T) {
 
 	// The modifiers held show before the key comes.
 	startRecording("refresh", "None")
-	tt.HoldModifiers(ui.Cmd | ui.Shift)
-	tt.Frame()
-	if !tt.HasText("⇧⌘…") {
-		t.Errorf("held keys: %q", tt.Texts())
+	st.HoldModifiers(ui.Cmd | ui.Shift)
+	st.Frame()
+	if !st.HasText("⇧⌘…") {
+		t.Errorf("held keys: %q", st.Texts())
 	}
-	tt.HoldModifiers(0)
-	tt.Frame()
+	st.HoldModifiers(0)
+	st.Frame()
 
-	// Escape cancels the recording and keeps the dialog.
-	tt.Key(0, ui.KeyEscape)
-	tt.Frame()
-	if app.recording != "" || app.settings == nil || !app.settings.open {
+	// Escape cancels the recording and keeps the window.
+	st.Key(0, ui.KeyEscape)
+	st.Frame()
+	if app.recording != "" || app.settings == nil {
 		t.Errorf("Escape: recording %q, settings %v", app.recording, app.settings)
 	}
 
 	// The focus moving away cancels the recording.
 	startRecording("refresh", "None")
-	if err := tt.Click("Filter commands"); err != nil {
+	if err := st.Click("Filter commands"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Frame()
-	tt.Frame()
+	st.Frame()
+	st.Frame()
 	if app.recording != "" {
 		t.Errorf("focus away: recording %q", app.recording)
 	}
@@ -2581,7 +2574,7 @@ func TestShortcutSettings(t *testing.T) {
 	}
 
 	// A command outside the menu bar runs by its keys where it applies.
-	app.settings.open = false
+	app.closeSettings()
 	tt.Frame()
 	tt.Key(ui.Cmd|ui.Shift, ui.KeyY)
 	tt.Frame()
@@ -2663,23 +2656,6 @@ func TestScopeLoadsInOrder(t *testing.T) {
 	}
 }
 
-// TestSettingsRoom leaves as much room under a tall settings dialog as
-// above it.
-func TestSettingsRoom(t *testing.T) {
-	app := newTestApp(t)
-	tt := ui.NewTester(app.view, 1300, 800)
-	app.openSettings()
-	app.settings.tab = shortcutsTab
-	tt.Frame()
-	snapshot(t, tt, "settings-room")
-	// 15% of the window above the dialog, and Done about 18 points
-	// inside it: the padding of the footer and of the button.
-	done, _ := tt.Find("Done")
-	if below := 800 - (done.Y + done.H); below < 132 || below > 144 {
-		t.Errorf("room under Done %v, want about 138", below)
-	}
-}
-
 // TestOverlaysCloseEachOther opens a dialog or a list over another from
 // the menu bar: the one under it closes.
 func TestOverlaysCloseEachOther(t *testing.T) {
@@ -2703,8 +2679,9 @@ func TestOverlaysCloseEachOther(t *testing.T) {
 	if app.paletteOpen || app.settings == nil {
 		t.Fatalf("palette %v, settings %v", app.paletteOpen, app.settings)
 	}
+	// The settings have their own window, which stays open.
 	menu("switch-project")
-	if app.settings != nil || !app.projectsOpen {
+	if app.settings == nil || !app.projectsOpen {
 		t.Fatalf("settings %v, projects %v", app.settings, app.projectsOpen)
 	}
 	menu("switch-branch")
@@ -3238,8 +3215,8 @@ func TestCommitRowShowsOverviewState(t *testing.T) {
 // same place, as the labels of each tab have other widths.
 func TestSettingsTabsLineUpControls(t *testing.T) {
 	app := newTestApp(t)
-	tt := ui.NewTester(app.view, 1300, 1000)
 	app.openSettings()
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
 	left := map[string]float32{}
 	for tab, control := range map[int]string{appearanceTab: "Theme", agentTab: "Model", promptsTab: "Prompt"} {
 		app.settings.tab = tab

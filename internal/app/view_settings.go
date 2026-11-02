@@ -66,8 +66,10 @@ func effortOf(provider agent.Provider, picked string) string {
 }
 
 type settingsForm struct {
-	open    bool
-	tab     int
+	tab int
+	// titled is the tab the title of the window names, plus one, or zero
+	// before the window has a title.
+	titled  int
 	status  map[agent.Provider]string
 	prompts promptForm
 	settingsValues
@@ -104,9 +106,18 @@ func (app *app) applyTheme() {
 	mygo.Theme.SetSource(themes[themeIndex(app.cfg.Theme)])
 }
 
+// The size the settings window opens at.
+const settingsWidth, settingsHeight = 720, 640
+
+// openSettings opens the settings window, or brings it to the front.
 func (app *app) openSettings() {
+	if app.settings != nil {
+		if app.settingsWin != nil {
+			app.settingsWin.Focus()
+		}
+		return
+	}
 	form := &settingsForm{
-		open:      true,
 		status:    map[agent.Provider]string{},
 		prompts:   app.newPromptForm(),
 		agent:     newAgentForm(app.cfg.Agent),
@@ -119,6 +130,20 @@ func (app *app) openSettings() {
 	if app.win == nil {
 		return
 	}
+	app.settingsWin = mygo.NewWindow(mygo.WindowOptions{
+		Title:             settingsTabs[form.tab].name,
+		Width:             settingsWidth,
+		Height:            settingsHeight,
+		MinWidth:          600,
+		MinHeight:         420,
+		StateKey:          "settings",
+		TitleBarStyle:     mygo.TitleBarHidden,
+		DisableMinimize:   true,
+		DisableMaximize:   true,
+		DisableFullScreen: true,
+		Content:           ui.View(app.settingsView),
+	})
+	app.settingsWin.OnClosed(func() { app.update(app.settingsClosed) })
 	for _, p := range providers {
 		form.status[p] = "Checking…"
 		app.async(func() {
@@ -150,6 +175,24 @@ func (app *app) saveSettings() {
 	if themeChanged && app.win != nil {
 		app.applyTheme()
 	}
+	if app.win != nil {
+		// The main window shows the agent and the code theme.
+		app.win.Invalidate()
+	}
+}
+
+// closeSettings closes the settings window.
+func (app *app) closeSettings() {
+	if app.settingsWin != nil {
+		app.settingsWin.Close()
+		return
+	}
+	app.settingsClosed()
+}
+
+// settingsClosed forgets the settings once their window closed.
+func (app *app) settingsClosed() {
+	app.settings, app.settingsWin, app.recording = nil, nil, ""
 }
 
 // settingsTabs are the names and icons of the tabs, in the order of
@@ -164,59 +207,48 @@ var settingsTabs = []struct {
 	{"Shortcuts", keyboardIcon},
 }
 
-func (app *app) settingsModal(ctx *ui.Context) {
+// settingsView is the settings window: the tabs as its toolbar, under its
+// title, and the open tab. Changes save as the user makes them.
+func (app *app) settingsView(ctx *ui.Context) {
+	app.updateMenu()
 	form := app.settings
 	if form == nil {
 		return
 	}
 	theme := ctx.Theme()
-	const radius float32 = 10
-	ui.DialogBase(ctx, &form.open, func(back, panel ui.Element) {
-		// The top stays in place as the tab changes, and the dialog is as
-		// tall as the tab needs, leaving as much room under it as above.
-		_, height := ctx.Size()
-		gap := max(48, height*0.15)
-		back.Background(ui.RGBA(0, 0, 0, 0.4)).Justify(ui.Start).Padding(gap, 16, gap, 16)
-		panel.Width(720).Shrink(1).MinHeight(0).Radius(radius).Background(theme.Background).
-			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Settings")
-		ui.Column(ctx).AlignItems(ui.Center).Gap(6).Padding(10, 16, 8, 16).Radius(radius, radius, 0, 0).Background(theme.Surface).Children(func() {
-			ui.Text(ctx, settingsTabs[form.tab].name).Bold()
-			app.settingsToolbar(ctx, form)
-		})
-		ui.Divider(ctx)
-		ui.Column(ctx).Gap(14).Padding(20, 24).Shrink(1).MinHeight(0).Children(func() {
-			switch form.tab {
-			case agentTab:
-				ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-					ui.Column(ctx).PaddingEnd(4).Children(func() {
-						app.agentFields(ctx, &form.agent, form.status, &form.ahead)
-					})
-				})
-			case promptsTab:
-				app.promptsTab(ctx, &form.prompts)
-			case shortcutsTab:
-				app.shortcutsTab(ctx)
-			case appearanceTab:
-				app.appearanceTab(ctx, form)
-			}
-		})
-		ui.Divider(ctx)
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(12, 20).Children(func() {
-			ui.Text(ctx, "Changes are saved as you make them.").FontSize(11).TextColor(theme.TextMuted).Grow(1)
-			ui.PrimaryButton(ctx, "Done").Tooltip("Escape").OnClick(func() { form.open = false })
-		})
-	})
-	if !form.open && app.recording != "" {
-		// Escape cancels the recording, and the dialog stays.
-		form.open, app.recording = true, ""
+	name := settingsTabs[form.tab].name
+	if app.settingsWin != nil && form.titled != form.tab+1 {
+		app.settingsWin.SetTitle(name)
+		form.titled = form.tab + 1
 	}
+	bar := ctx.TitleBar()
+	ui.Column(ctx).AlignItems(ui.Center).Gap(4).Padding(0, 16, 8, 16).Background(theme.Surface).DragWindow().Children(func() {
+		ui.Row(ctx).Height(max(bar.Height, 28)).AlignItems(ui.Center).Children(func() {
+			ui.Text(ctx, name).Bold()
+		})
+		app.settingsToolbar(ctx, form)
+	})
+	ui.Divider(ctx)
+	ui.Column(ctx).Gap(14).Padding(20, 24).Grow(1).MinHeight(0).Children(func() {
+		switch form.tab {
+		case agentTab:
+			ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
+				ui.Column(ctx).PaddingEnd(4).Children(func() {
+					app.agentFields(ctx, &form.agent, form.status, &form.ahead)
+				})
+			})
+		case promptsTab:
+			app.promptsTab(ctx, &form.prompts)
+		case shortcutsTab:
+			app.shortcutsTab(ctx)
+		case appearanceTab:
+			app.appearanceTab(ctx, form)
+		}
+	})
 	if form.settingsValues != form.saved {
 		app.saveSettings()
 	}
 	app.savePrompts(&form.prompts)
-	if !form.open {
-		app.settings = nil
-	}
 }
 
 // settingsToolbar shows the tabs as the toolbar of a macOS settings

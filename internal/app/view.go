@@ -37,7 +37,6 @@ func (app *app) view(ctx *ui.Context) {
 	if ctx.Vibrancy() {
 		ctx.Root().Background(ui.Transparent)
 	}
-	app.settingsModal(ctx)
 	app.compareModal(ctx)
 	app.shortcutsModal(ctx)
 	app.paletteModal(ctx)

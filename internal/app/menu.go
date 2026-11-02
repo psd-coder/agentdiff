@@ -18,15 +18,25 @@ func (app *app) menuBar(keys func(id string) string) *mygo.Menu {
 		return &mygo.MenuItem{ID: id, Label: cm.title, Accelerator: keys(id), Click: func(*mygo.MenuItem, *mygo.Window) { app.queueCommand(id) }}
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu},
+		{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
+			{Role: mygo.RoleAbout},
+			mygo.Separator(),
+			item("settings"),
+			mygo.Separator(),
+			{Role: mygo.RoleServices},
+			mygo.Separator(),
+			{Role: mygo.RoleHide},
+			{Role: mygo.RoleHideOthers},
+			{Role: mygo.RoleUnhide},
+			mygo.Separator(),
+			{Role: mygo.RoleQuit},
+		}},
 		{Label: "File", Submenu: []*mygo.MenuItem{
 			item("open-repo"),
 			item("switch-project"),
 			item("switch-branch"),
 			item("compare"),
 			item("refresh"),
-			mygo.Separator(),
-			item("settings"),
 			mygo.Separator(),
 			{Role: mygo.RoleClose},
 		}},

@@ -39,6 +39,8 @@ type fileDiff struct {
 
 type app struct {
 	win *mygo.Window
+	// settingsWin is the settings window while it is open.
+	settingsWin *mygo.Window
 	// queue takes the updates of a window-less app when a test wants to
 	// run them on its own goroutine.
 	queue chan func()
@@ -251,7 +253,12 @@ func newApp(storage store.Store) *app {
 func (app *app) update(fn func()) {
 	switch {
 	case app.win != nil:
-		app.win.Update(fn)
+		app.win.Update(func() {
+			fn()
+			if app.settingsWin != nil {
+				app.settingsWin.Invalidate()
+			}
+		})
 	case app.queue != nil:
 		app.queue <- fn
 	default:

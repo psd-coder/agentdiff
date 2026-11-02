@@ -55,9 +55,9 @@ func TestCodeThemeSetting(t *testing.T) {
 	app := newTestApp(t)
 	tt := ui.NewTester(app.view, 1300, 800)
 	app.openSettings()
-	tt.Frame()
+	st := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
 	app.settings.codeTheme = "Dracula"
-	tt.Frame()
+	st.Frame()
 	if got := app.store.LoadConfig().CodeTheme; got != "Dracula" {
 		t.Errorf("saved code theme = %q, want Dracula", got)
 	}
@@ -68,7 +68,7 @@ func TestCodeThemeSetting(t *testing.T) {
 	}
 
 	app.settings.codeTheme = "GitHub"
-	tt.Frame()
+	st.Frame()
 	if got := app.store.LoadConfig().CodeTheme; got != "" {
 		t.Errorf("saved code theme = %q, want the default", got)
 	}
