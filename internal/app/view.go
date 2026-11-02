@@ -695,7 +695,6 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 
 func (app *app) main(ctx *ui.Context) {
 	ui.Column(ctx).Fill().Children(func() {
-		app.backBar(ctx)
 		if app.loadErr != "" {
 			app.errorState(ctx, "Could not read the changes", app.loadErr)
 			return

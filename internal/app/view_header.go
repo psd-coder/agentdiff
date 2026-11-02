@@ -23,6 +23,10 @@ func (app *app) toolbar(ctx *ui.Context) {
 	ui.Row(ctx).Height(titleBarHeight).Shrink(0).Gap(8).Padding(0, bar.Right+8, 0, 8).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).DragWindow().Children(func() {
 		ui.Toolbar(ctx, func() {
+			prev, hasPrev := app.nav.prev(app.pageGone)
+			app.toolButton(ctx, "back", backIcon, "Back", app.navTip("Back", prev, hasPrev), 0)
+			next, hasNext := app.nav.next(app.pageGone)
+			app.toolButton(ctx, "forward", forwardIcon, "Forward", app.navTip("Forward", next, hasNext), 0)
 			app.projectPicker(ctx)
 			app.branchPicker(ctx)
 		}).Shrink(1).Label("Changes")
@@ -34,20 +38,19 @@ func (app *app) toolbar(ctx *ui.Context) {
 		}
 		ui.Text(ctx, label).FontSize(12).TextColor(theme.TextMuted).SingleLine()
 		ui.Toolbar(ctx, func() {
-			app.toolButton(ctx, "agent-log", logIcon, "Agent log", 0)
-			app.toolButton(ctx, "refresh", refreshIcon, "Refresh", 0)
+			app.toolButton(ctx, "agent-log", logIcon, "Agent log", "Agent log", 0)
+			app.toolButton(ctx, "refresh", refreshIcon, "Refresh", "Refresh", 0)
 			feedbackCount := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
-			app.toolButton(ctx, "go-feedback", sendIcon, "Feedback", feedbackCount)
+			app.toolButton(ctx, "go-feedback", sendIcon, "Feedback", "Feedback", feedbackCount)
 		}).Shrink(0).Label("Actions")
 	})
 }
 
-// toolButton is a button of the toolbar that runs the command id. It shows
-// the icon, and count as a badge when it is above zero. Its tooltip shows
-// the label and the shortcut.
-func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label string, count int) {
+// toolButton is a button of the toolbar that runs the command id, named
+// label. It shows the icon, and count as a badge when it is above zero.
+// Its tooltip shows tip and the shortcut.
+func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label, tip string, count int) {
 	cm := app.cmd(id)
-	tip := label
 	if keys := app.keymap().of(id); keys != "" {
 		tip += " (" + keyLabel(keys) + ")"
 	}

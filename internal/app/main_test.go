@@ -1391,7 +1391,7 @@ func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
 	}
 	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
-	if err := tt.Click("‹ Back to cache.go"); err != nil {
+	if err := tt.Click("Back"); err != nil {
 		t.Fatalf("%v; texts %q", err, tt.Texts())
 	}
 	if app.nav.page != (page{kindFile, "cache/cache.go"}) {
@@ -1400,8 +1400,7 @@ func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
 }
 
 // TestDeleteWalkForgetsItsPagesInHistory deletes a walk while a walk under
-// it is in the history: both leave the history, and the back bar names
-// the page Back opens.
+// it is in the history: both leave the history, and Back skips them.
 func TestDeleteWalkForgetsItsPagesInHistory(t *testing.T) {
 	app := newTestApp(t)
 	parent := app.rev.AddWalk("", 0, "")
@@ -1415,9 +1414,31 @@ func TestDeleteWalkForgetsItsPagesInHistory(t *testing.T) {
 		t.Fatalf("page %+v, history %+v", app.nav.page, app.nav.history)
 	}
 	tt := ui.NewTester(app.view, 1300, 800)
+	if err := tt.Click("Back"); err != nil {
+		t.Fatal(err)
+	}
+	if app.nav.page != (page{kindFile, "cache/cache.go"}) {
+		t.Errorf("back opened %+v", app.nav.page)
+	}
+}
+
+// The Back and Forward buttons of the toolbar move through the pages.
+func TestToolbarBackAndForward(t *testing.T) {
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
+	app.nav.goTo(page{kind: kindAll})
 	tt.Frame()
-	if !tt.HasText("‹ Back to cache.go") {
-		t.Errorf("back bar: %q", tt.Texts())
+	if err := tt.Click("Back"); err != nil {
+		t.Fatal(err)
+	}
+	if app.nav.page != overview {
+		t.Fatalf("Back opened %+v", app.nav.page)
+	}
+	if err := tt.Click("Forward"); err != nil {
+		t.Fatal(err)
+	}
+	if app.nav.page != (page{kind: kindAll}) {
+		t.Errorf("Forward opened %+v", app.nav.page)
 	}
 }
 
@@ -1437,7 +1458,7 @@ func TestBackFromSnippet(t *testing.T) {
 		t.Fatalf("page = %q", app.nav.page.String())
 	}
 	tt.Frame()
-	if err := tt.Click("‹ Back to Overview"); err != nil {
+	if err := tt.Click("Back"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()

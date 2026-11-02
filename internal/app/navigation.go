@@ -93,11 +93,20 @@ func (navigation *navigation) forget(gone func(page) bool) {
 
 // prev is the page back opens.
 func (navigation *navigation) prev(gone func(page) bool) (page, bool) {
-	index := navigation.last(navigation.history, gone)
+	return navigation.peek(navigation.history, gone)
+}
+
+// next is the page forward opens.
+func (navigation *navigation) next(gone func(page) bool) (page, bool) {
+	return navigation.peek(navigation.ahead, gone)
+}
+
+func (navigation *navigation) peek(pages []page, gone func(page) bool) (page, bool) {
+	index := navigation.last(pages, gone)
 	if index < 0 {
 		return page{}, false
 	}
-	return navigation.history[index], true
+	return pages[index], true
 }
 
 func (navigation *navigation) back(gone func(page) bool) {
