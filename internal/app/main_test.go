@@ -191,6 +191,33 @@ func TestCommentOnFileAndExport(t *testing.T) {
 	}
 }
 
+// The window names the project and the scope, and marks feedback that the
+// reviewer has not copied or saved yet, until they copy it.
+func TestWindowStateMarksFeedbackNotHandedOver(t *testing.T) {
+	app := newTestApp(t)
+	state := app.windowState()
+	if state.title != app.repo.Name()+" — Uncommitted changes" || state.folder != app.repo.Root || state.edited {
+		t.Fatalf("state without comments = %+v", state)
+	}
+	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
+	th.Messages = append(th.Messages, review.Message{Role: review.RoleUser, Text: "Keep keys case-sensitive."})
+	if !app.windowState().edited {
+		t.Fatal("a comment not copied yet is not marked")
+	}
+	app.nav.page = page{kind: kindFeedback}
+	tt := ui.NewTester(app.view, 1300, 800)
+	if err := tt.Click("Copy feedback"); err != nil {
+		t.Fatal(err)
+	}
+	if app.windowState().edited {
+		t.Error("the copied feedback is still marked")
+	}
+	th.Messages = append(th.Messages, review.Message{Role: review.RoleUser, Text: "Also in Set."})
+	if !app.windowState().edited {
+		t.Error("a comment added after the copy is not marked")
+	}
+}
+
 func TestLineThreadAnnotation(t *testing.T) {
 	app := newTestApp(t)
 	app.nav.page = page{kindFile, "cache/cache.go"}

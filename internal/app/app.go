@@ -41,6 +41,8 @@ type app struct {
 	win *mygo.Window
 	// settingsWin is the settings window while it is open.
 	settingsWin *mygo.Window
+	// shownWindow is what the main window shows in its title bar.
+	shownWindow windowState
 	// queue takes the updates of a window-less app when a test wants to
 	// run them on its own goroutine.
 	queue chan func()
@@ -149,6 +151,8 @@ type perReview struct {
 	// savedPath is where the feedback was saved last.
 	exportDone bool
 	savedPath  string
+	// handedOver is the feedback the reviewer last copied or saved.
+	handedOver string
 	// folded holds the files the reviewer folded or unfolded. The others
 	// are folded while they are viewed or big.
 	folded map[string]bool
@@ -288,9 +292,6 @@ func (app *app) openRepo(path string) {
 	app.cmpr = comparison{}
 	app.commits.reset()
 	app.loader.reset()
-	if app.win != nil {
-		app.win.SetTitle("AgentDiff: " + repo.Name())
-	}
 	app.async(func() {
 		ctx := context.Background()
 		branch, err := repo.CurrentBranch(ctx)
@@ -317,9 +318,6 @@ func (app *app) closeRepo() {
 	app.perLoad = newPerLoad()
 	app.projectsOpen = false
 	app.commits.reset()
-	if app.win != nil {
-		app.win.SetTitle("AgentDiff")
-	}
 }
 
 // compare reviews branch against base, as picked in the Compare dialog.
