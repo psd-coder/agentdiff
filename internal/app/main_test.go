@@ -264,6 +264,21 @@ func TestWalkMoreMenu(t *testing.T) {
 	}
 }
 
+// The More button only shows while one of its actions applies: an empty
+// menu does not open.
+func TestMoreButtonHidesWithoutActions(t *testing.T) {
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
+	if _, ok := tt.Find("More"); ok {
+		t.Error("More shows on an overview without actions")
+	}
+	app.rev.Overview = &review.Overview{Markdown: "## 1. High level\nKeys.", Agent: agent.Claude, Generated: time.Now()}
+	tt.Frame()
+	if _, ok := tt.Find("More"); !ok {
+		t.Error("More is missing on a written overview")
+	}
+}
+
 // The context menu of a part of the overview starts a thread about it.
 func TestPartContextMenuDiscusses(t *testing.T) {
 	app := newTestApp(t)

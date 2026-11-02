@@ -341,8 +341,12 @@ func (app *app) menuItem(ctx *ui.Context, menu *ui.Menu, label string, fn func(c
 }
 
 // moreButton is the borderless button that opens a menu of the commands
-// ids on target, as the ellipsis buttons of Mac apps.
+// ids on target, as the ellipsis buttons of Mac apps. It only shows while
+// one of them applies, because an empty menu does not open.
 func (app *app) moreButton(ctx *ui.Context, target string, ids ...string) {
+	if !slices.ContainsFunc(ids, func(id string) bool { return id != "" && app.applies(app.cmd(id), target) }) {
+		return
+	}
 	theme := ctx.Theme()
 	button := ui.ButtonBase(ctx.Key("more-" + target)).Padding(4).Radius(6).TextColor(theme.TextMuted).Label("More").Tooltip("More")
 	if button.Hovered() {
