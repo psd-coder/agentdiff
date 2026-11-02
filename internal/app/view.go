@@ -2,11 +2,14 @@ package app
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/psd-coder/agentdiff/internal/gitx"
@@ -189,7 +192,12 @@ func (app *app) scopeList(ctx *ui.Context) {
 				commitScope, _ := rows.scope(index)
 				app.scopeMark(ctx, commitScope)
 				ui.Text(ctx, age(cm.Time)).FontSize(11).TextColor(theme.TextMuted).SingleLine()
-			}).Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04"))
+			}).Tooltip(cm.Short + "  " + cm.Subject + "\n" + cm.Author + ", " + cm.Time.Format("2006-01-02 15:04")).
+				ContextMenu(func(m *ui.Menu) {
+					sha, subject := cm.SHA, cm.Subject
+					app.menuItem(ctx, m, "Copy Commit Hash", func(ctx *ui.Context) { ctx.WriteClipboard(sha) })
+					app.menuItem(ctx, m, "Copy Subject", func(ctx *ui.Context) { ctx.WriteClipboard(subject) })
+				})
 		default:
 			row := rows.above[index]
 			item := changeItem(ctx, row.icon, row.text, look, func() {
@@ -498,7 +506,10 @@ func (app *app) reviewNav(ctx *ui.Context) {
 	chosen := app.nav.page.String()
 	nav := ui.Sidebar(ctx, &chosen, func() {
 		sidebarHeading(ctx, "Review", nil)
-		ui.SidebarItem(ctx, overview.String(), overviewIcon, "Overview").Children(func() { targetMark(ctx, app.state(review.TargetOverview)) })
+		ui.SidebarItem(ctx, overview.String(), overviewIcon, "Overview").Children(func() { targetMark(ctx, app.state(review.TargetOverview)) }).
+			ContextMenu(func(m *ui.Menu) {
+				app.cmdMenu(ctx, m, "", "explain", "stop-overview", "regenerate-overview", "overview-log", "", "start-over")
+			})
 		app.walkItems(ctx, "", 1)
 		ui.SidebarItem(ctx, page{kind: kindAll}.String(), filesIcon, "All files diff")
 		threads := len(app.rev.Threads)
@@ -602,6 +613,9 @@ func (app *app) walkItems(ctx *ui.Context, parent string, depth int) {
 		}
 		item := ui.SidebarItem(ctx, page{kindWalk, w.ID}.String(), nil, strings.Repeat("    ", depth)+excerpt(app.rev.WalkTitle(w), 36)).Tooltip(app.rev.WalkTitle(w))
 		item.Children(func() { targetMark(ctx, app.state(w.ID)) })
+		item.ContextMenu(func(m *ui.Menu) {
+			app.cmdMenu(ctx, m, w.ID, "stop-walk", "regenerate-walk", "walk-log", "", "delete-walk")
+		})
 		if depth < 8 {
 			app.walkItems(ctx, w.ID, depth+1)
 		}
@@ -622,7 +636,9 @@ func (app *app) groupOpen(id string) *bool {
 // the group page, and its chevron shows and hides the group's files.
 func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bool) {
 	theme := ctx.Theme()
-	ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open).Children(func() {
+	item := ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open)
+	item.ContextMenu(func(m *ui.Menu) { app.cmdMenu(ctx, m, id, "mark-group-viewed", "mark-group-not-viewed") })
+	item.Children(func() {
 		ui.Text(ctx, fmt.Sprint(files)).FontSize(11).TextColor(theme.TextMuted)
 		label := "Hide files"
 		if !*open {
@@ -643,6 +659,19 @@ func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bo
 	})
 }
 
+// fileMenu is the context menu of a file: the commands on it, and the
+// items that copy its path and show it in Finder.
+func (app *app) fileMenu(ctx *ui.Context, menu *ui.Menu, file string) {
+	app.cmdMenu(ctx, menu, file, "comment-file", "mark-viewed", "mark-not-viewed")
+	menu.Separator()
+	app.menuItem(ctx, menu, "Copy Path", func(ctx *ui.Context) { ctx.WriteClipboard(file) })
+	abs := filepath.Join(app.repo.Root, file)
+	// A deleted file is not on disk to show.
+	if _, err := os.Stat(abs); err == nil {
+		app.menuItem(ctx, menu, "Show in Finder", func(*ui.Context) { mygo.Shell.ShowItemInFolder(abs) })
+	}
+}
+
 // fileItem is a file in the sidebar, with the number of threads on it.
 // In the flat list, the file's folder shows on a second line under its
 // name.
@@ -650,6 +679,7 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 	theme := ctx.Theme()
 	viewed := app.rev.Viewed[file]
 	item := ui.SidebarItem(ctx, page{kindFile, file}.String(), nil, path.Base(file)).Tooltip(file)
+	item.ContextMenu(func(m *ui.Menu) { app.fileMenu(ctx, m, file) })
 	dir := path.Dir(file)
 	folder := app.cfg.FlatFiles && dir != "."
 	if folder {

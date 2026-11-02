@@ -958,6 +958,51 @@ func TestCustomRange(t *testing.T) {
 	}
 }
 
+// A file's context menu offers the commands that apply to it, and one
+// chosen there acts on that file, not on the page on screen.
+func TestFileContextMenu(t *testing.T) {
+	app := newTestApp(t)
+	app.cfg.FlatFiles = true
+	tt := ui.NewTester(app.view, 1300, 800)
+	if err := tt.RightClick("handler.go"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Comment on File", "Mark File as Viewed", "-", "Copy Path", "Show in Finder"}
+	if got := tt.Menu(); !slices.Equal(got, want) {
+		t.Fatalf("menu = %q, want %q", got, want)
+	}
+	if err := tt.ChooseMenuItem("Mark File as Viewed"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !app.rev.Viewed["api/handler.go"] || app.rev.Viewed["cache/cache.go"] {
+		t.Fatalf("viewed = %v, want only api/handler.go", app.rev.Viewed)
+	}
+	if err := tt.RightClick("handler.go"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tt.Menu(); !slices.Contains(got, "Mark File as Not Viewed") || slices.Contains(got, "Mark File as Viewed") {
+		t.Errorf("menu of a viewed file = %q", got)
+	}
+}
+
+// A walk's context menu in the sidebar deletes it.
+func TestWalkContextMenuDeletes(t *testing.T) {
+	app := newTestApp(t)
+	walk := app.rev.AddWalk("", 0, "")
+	tt := ui.NewTester(app.view, 1300, 800)
+	if err := tt.RightClick("    Deeper"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	if err := tt.ChooseMenuItem("Delete Walkthrough"); err != nil {
+		t.Fatalf("%v; menu %q", err, tt.Menu())
+	}
+	tt.Frame()
+	if app.rev.Walk(walk.ID) != nil {
+		t.Error("the walk is still in the review")
+	}
+}
+
 func TestRemoveProject(t *testing.T) {
 	app := newTestApp(t)
 	other := fixtureRepo(t)
@@ -967,15 +1012,13 @@ func TestRemoveProject(t *testing.T) {
 	app.projectsOpen = true
 	tt := ui.NewTester(app.view, 1300, 800)
 	snapshot(t, tt, "projects")
-	row, ok := tt.Find(filepath.Base(other))
-	if !ok {
-		t.Fatalf("no row for %s: %q", other, tt.Texts())
+	if err := tt.RightClick(filepath.Base(other)); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
 	}
-	tt.Move(row.X+row.W/2, row.Y+row.H/2)
+	if err := tt.ChooseMenuItem("Remove from List…"); err != nil {
+		t.Fatalf("%v; menu %q", err, tt.Menu())
+	}
 	tt.Frame()
-	if err := tt.Click("Remove from the list"); err != nil {
-		t.Fatal(err)
-	}
 	if slices.Contains(app.cfg.Recent, other) || app.repo == nil {
 		t.Fatalf("recent = %v, repo = %v", app.cfg.Recent, app.repo)
 	}

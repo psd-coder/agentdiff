@@ -111,12 +111,15 @@ type app struct {
 	refocus       string
 	shortcutsOpen bool
 
-	cmdList      []*command
-	cmds         map[string]*command
-	inMenu       map[string]bool
-	menuDirty    bool
-	km           *keymap
-	pending      string // the command the menu bar queued
+	cmdList   []*command
+	cmds      map[string]*command
+	inMenu    map[string]bool
+	menuDirty bool
+	km        *keymap
+	pending   string // the command the menu bar queued
+	// deferred are the commands chosen in context menus, which run at the
+	// start of the next frame.
+	deferred     []func(ctx *ui.Context)
 	paletteOpen  bool
 	paletteQuery string
 	paletteNav   pickList
