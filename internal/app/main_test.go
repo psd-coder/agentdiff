@@ -279,6 +279,33 @@ func TestMoreButtonHidesWithoutActions(t *testing.T) {
 	}
 }
 
+// An item that a shortcut opens shows the shortcut in its tooltip, and the
+// shortcut the user gave follows there.
+func TestSidebarTooltipShowsShortcut(t *testing.T) {
+	app := newTestApp(t)
+	tt := ui.NewTester(app.view, 1300, 800)
+	hover := func(label string) {
+		t.Helper()
+		box, ok := tt.Find(label)
+		if !ok {
+			t.Fatalf("no %q: %q", label, tt.Texts())
+		}
+		tt.Move(box.X+box.W/2, box.Y+box.H/2)
+		tt.Advance(2 * time.Second)
+	}
+	hover("All files diff")
+	if !tt.HasText("All files diff (⌘4)") {
+		t.Errorf("no shortcut tooltip: %q", tt.Texts())
+	}
+	app.keymap().assign("go-all", "CmdOrCtrl+Shift+A")
+	tt.Move(5, 5)
+	tt.Advance(time.Second)
+	hover("All files diff")
+	if !tt.HasText("All files diff (⇧⌘A)") {
+		t.Errorf("the tooltip keeps the old shortcut: %q", tt.Texts())
+	}
+}
+
 // The context menu of a part of the overview starts a thread about it.
 func TestPartContextMenuDiscusses(t *testing.T) {
 	app := newTestApp(t)

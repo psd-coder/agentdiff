@@ -115,7 +115,7 @@ func (app *app) welcomeView(ctx *ui.Context) {
 			}
 			ui.Text(ctx, "Review what your coding agent changed: an explanation first, then the diff, grouped, with comments you send back.").
 				TextColor(theme.TextMuted).MaxWidth(340).TextAlign(ui.Center).Margin(8, 0, 0, 0)
-			ui.PrimaryButton(ctx, "Open repository…").Margin(16, 0, 0, 0).OnClick(app.chooseRepo)
+			ui.PrimaryButton(ctx, "Open repository…").Margin(16, 0, 0, 0).Tooltip(app.keyTip("Open a repository", "open-repo")).OnClick(app.chooseRepo)
 			if app.repoErr != "" {
 				ui.Text(ctx, app.repoErr).TextColor(theme.Danger).MaxWidth(340).Selectable()
 			}

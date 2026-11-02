@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -52,9 +53,7 @@ func (app *app) toolbar(ctx *ui.Context) {
 // Its tooltip shows tip and the shortcut.
 func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label, tip string, count int) {
 	cm := app.cmd(id)
-	if keys := app.keymap().of(id); keys != "" {
-		tip += " (" + keyLabel(keys) + ")"
-	}
+	tip = cmp.Or(app.keyTip(tip, id), tip)
 	ui.Button(ctx.Key(id), "").Label(label).Tooltip(tip).Disabled(!app.applies(cm, "")).OnClick(func() { cm.run(ctx, "") }).Children(func() {
 		ui.Icon(ctx, svg).FontSize(16)
 		if count > 0 {

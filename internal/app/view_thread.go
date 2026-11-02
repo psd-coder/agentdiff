@@ -149,7 +149,7 @@ func (app *app) composer(ctx *ui.Context, th *review.Thread) {
 				app.comment(th, draft)
 				app.drafts[th.ID] = ""
 			})
-			ui.PrimaryButton(ctx, "Ask agent").Disabled(empty || busy).OnClick(func() {
+			ui.PrimaryButton(ctx, "Ask agent").Disabled(empty || busy).Tooltip("Send to the review agent (" + keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() {
 				app.ask(app.rev, th, draft)
 				app.drafts[th.ID] = ""
 			})

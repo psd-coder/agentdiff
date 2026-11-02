@@ -148,7 +148,7 @@ Uncheck In feedback in a thread to leave it out, or mark it Resolved. The feedba
 | Cmd+Enter in the branch list | Opens the worktree of the highlighted branch, when another worktree has it checked out |
 | Cmd+Backspace or Delete in the project list | Removes the highlighted project from the list, after you confirm |
 
-These are the default shortcuts. The menu bar lists them under AgentDiff, File, View and Go. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog, with the shortcuts you gave commands outside the menu bar.
+These are the default shortcuts. The menu bar lists them under AgentDiff, File, View and Go. A button, switch or sidebar item that runs a command with a shortcut shows the shortcut in its tooltip, and the context menus show it next to the command. Help > Keyboard Shortcuts (Cmd+/) shows them all in a dialog, with the shortcuts you gave commands outside the menu bar.
 
 The command palette lists the commands that apply where you are: the menu bar's commands, and the actions of the open page and side panel, as Mark File as Viewed on a file page or Resolve Thread while a thread is open. While the field is empty, the 5 commands you ran last from it come first. The buttons of the window, the menu bar and the palette run the same commands.
 

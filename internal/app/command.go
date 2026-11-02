@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -334,7 +335,13 @@ func (app *app) runQueued(ctx *ui.Context) {
 // the start of the next frame, so it can change the rows that built the
 // menu.
 func (app *app) menuItem(ctx *ui.Context, menu *ui.Menu, label string, fn func(ctx *ui.Context)) {
-	if menu.Item(label).Chosen() {
+	app.menuChoice(ctx, menu.Item(label), fn)
+}
+
+// menuChoice runs fn at the start of the next frame when the item is
+// chosen, as menuItem does.
+func (app *app) menuChoice(ctx *ui.Context, item *ui.MenuItem, fn func(ctx *ui.Context)) {
+	if item.Chosen() {
 		app.deferred = append(app.deferred, fn)
 		ctx.Invalidate()
 	}
@@ -373,7 +380,11 @@ func (app *app) cmdMenu(ctx *ui.Context, menu *ui.Menu, target string, ids ...st
 			menu.Separator()
 			separate = false
 		}
-		app.menuItem(ctx, menu, cm.title, func(ctx *ui.Context) { app.runOn(ctx, id, target) })
+		item := menu.Item(cm.title)
+		if mods, key, ok := parseAccelerator(app.keymap().of(id)); ok {
+			item.Shortcut(mods, key)
+		}
+		app.menuChoice(ctx, item, func(ctx *ui.Context) { app.runOn(ctx, id, target) })
 		added = true
 	}
 }
@@ -389,6 +400,28 @@ func (app *app) tooltip(cm *command) string {
 		return keyLabel(keys)
 	}
 	return cm.tip
+}
+
+// keyTip is text followed by the shortcut of the command id, as
+// "Overview (⌘1)", or "" when the command has no shortcut.
+func (app *app) keyTip(text, id string) string {
+	keys := app.keymap().of(id)
+	if keys == "" {
+		return ""
+	}
+	return text + " (" + keyLabel(keys) + ")"
+}
+
+// keyTips joins the keyTip of each command ids, named by labels, one per
+// line, and leaves out the commands without a shortcut.
+func (app *app) keyTips(ids, labels []string) string {
+	var tips []string
+	for i, id := range ids {
+		if tip := app.keyTip(labels[i], id); tip != "" {
+			tips = append(tips, tip)
+		}
+	}
+	return strings.Join(tips, "\n")
 }
 
 // runOn runs the command on target from a button of the window.
@@ -425,6 +458,9 @@ func (app *app) cmdButtonBase(ctx *ui.Context, id, target, label string, button 
 func (app *app) cmdCheckbox(ctx *ui.Context, on, off, target, label string) ui.Element {
 	checked := app.applies(app.cmd(off), target)
 	box := ui.Checkbox(ctx.Key(on+target), &checked, label)
+	if tip := app.keyTips([]string{on, off}, []string{app.cmd(on).title, app.cmd(off).title}); tip != "" {
+		box.Tooltip(tip)
+	}
 	if box.Changed() {
 		id := off
 		if checked {
@@ -445,6 +481,9 @@ func (app *app) cmdSegmented(ctx *ui.Context, ids []string, labels ...string) ui
 		}
 	}
 	seg := ui.Segmented(ctx, &at, labels...)
+	if tip := app.keyTips(ids, labels); tip != "" {
+		seg.Tooltip(tip)
+	}
 	if seg.Changed() {
 		app.cmd(ids[at]).run(ctx, "")
 	}
