@@ -340,6 +340,17 @@ func (app *app) menuItem(ctx *ui.Context, menu *ui.Menu, label string, fn func(c
 	}
 }
 
+// moreButton is the borderless button that opens a menu of the commands
+// ids on target, as the ellipsis buttons of Mac apps.
+func (app *app) moreButton(ctx *ui.Context, target string, ids ...string) {
+	theme := ctx.Theme()
+	button := ui.ButtonBase(ctx.Key("more-" + target)).Padding(4).Radius(6).TextColor(theme.TextMuted).Label("More").Tooltip("More")
+	if button.Hovered() {
+		button.Background(theme.Text.Alpha(0.08))
+	}
+	button.Children(func() { ui.Icon(ctx, moreIcon).FontSize(18) }).Menu(func(menu *ui.Menu) { app.cmdMenu(ctx, menu, target, ids...) })
+}
+
 // cmdMenu adds to the context menu the commands ids that apply to
 // target, by their titles. An empty id is a separator, which shows only
 // between items.

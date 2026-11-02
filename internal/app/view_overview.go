@@ -163,9 +163,7 @@ func (app *app) overviewPage(ctx *ui.Context) {
 				ui.Text(ctx, "Overview").FontSize(22).Bold()
 				ui.Spacer(ctx)
 				app.cmdButton(ctx, "stop-overview", "", "Stop")
-				app.cmdButton(ctx, "regenerate-overview", "", "Regenerate")
-				app.cmdButton(ctx, "overview-log", "", "Log")
-				app.cmdButton(ctx, "start-over", "", "Start over")
+				app.moreButton(ctx, "", "regenerate-overview", "overview-log", "", "start-over")
 			})
 			app.commitMessage(ctx)
 			app.summaryLine(ctx)
@@ -285,18 +283,30 @@ func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
 	meta += ", " + ov.Generated.Format("Jan 2 15:04")
 	ui.Text(ctx, meta).FontSize(12).TextColor(theme.TextMuted)
 	for i, s := range review.Sections(ov.Markdown) {
-		ui.Column(ctx.Key(fmt.Sprintf("section-%d-%s", i, s.Title))).Gap(8).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border).Children(func() {
+		title := s.Title
+		if title == "" {
+			title = "Summary"
+		}
+		card := ui.Column(ctx.Key(fmt.Sprintf("section-%d-%s", i, s.Title))).Gap(8).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border)
+		app.discussMenu(card, title, s.Body)
+		card.Children(func() {
 			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-				title := s.Title
-				if title == "" {
-					title = "Summary"
-				}
 				ui.Text(ctx, title).FontSize(16).Bold().Grow(1)
 				app.sectionThreads(ctx, title, s.Body)
 			})
 			markdown.View(ctx, s.Body, &app.md)
 		})
 	}
+}
+
+// discussMenu gives the card of a part a context menu that starts a
+// thread about it.
+func (app *app) discussMenu(card ui.Element, title, body string) {
+	card.ContextMenu(func(menu *ui.Menu) {
+		if menu.Item("Discuss").Chosen() {
+			app.newThread(review.Anchor{Kind: review.AnchorSection, Section: title, Quote: body})
+		}
+	})
 }
 
 func (app *app) sectionThreads(ctx *ui.Context, title, body string) {
