@@ -72,46 +72,42 @@ func (app *app) promptsTab(ctx *ui.Context, form *promptForm) {
 	}
 	pickedIndex := max(slices.Index(titles, form.picked), 0)
 	tpl := review.Templates[pickedIndex]
-	ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-		ui.Column(ctx).PaddingEnd(4).Children(func() {
-			labeledForm(ctx, func() {
-				ui.Field(ctx, "Prompt:", func() {
-					ui.Select(ctx, &form.picked, titles).Label("Prompt").AlignSelf(ui.Start).MinWidth(200)
-				}).Description(tpl.About)
-				if _, ok := form.repo[tpl.Name]; ok {
-					ui.Field(ctx, "", func() {
-						ui.Text(ctx, "This repository gives its own prompt in "+repoPromptFile(tpl.Name)+", so its runs use that file. The text below goes to the runs in other repositories.").FontSize(12).
-							Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
-					})
-				}
-				text := &form.texts[pickedIndex]
-				problem := ""
-				if strings.TrimSpace(*text) != "" {
-					if err := tpl.Check(*text); err != nil {
-						problem = "Not saved. " + err.Error()
-					}
-				}
-				ui.Field(ctx.Key("prompt-"+string(tpl.Name)), "Text:", func() {
-					ui.TextArea(ctx, text).Lines(8, 16).Font("monospace").FontSize(12).Label(tpl.Title + " prompt")
-					ui.Row(ctx).Gap(8).Justify(ui.End).Children(func() {
-						ui.Button(ctx, "Copy default").Tooltip("Copy the default text of this prompt, as a start for " + repoPromptFile(tpl.Name)).OnClick(func() {
-							ctx.WriteClipboard(tpl.Default)
-							ctx.Toast("Default prompt copied")
-						})
-						ui.Button(ctx, "Reset").Disabled(*text == tpl.Default).OnClick(func() { *text = tpl.Default })
-					})
-				}).Error(problem).Description("An empty prompt sends the default one. Changes are saved while the prompt has no problems.")
-				ui.Field(ctx.Key("blocks-"+string(tpl.Name)), "Blocks:", func() {
-					if len(tpl.Blocks) == 0 {
-						ui.Text(ctx, "This prompt has no blocks.").TextColor(theme.TextMuted)
-						return
-					}
-					ui.Text(ctx, "The app puts its own text in place of each block. A prompt must keep its required blocks.").TextColor(theme.TextMuted)
-					for _, b := range tpl.Blocks {
-						app.blockView(ctx.Key(b.Name), form, tpl.Name, b)
-					}
-				})
+	labeledForm(ctx, func() {
+		ui.Field(ctx, "Prompt:", func() {
+			ui.Select(ctx, &form.picked, titles).Label("Prompt").AlignSelf(ui.Start).MinWidth(200)
+		}).Description(tpl.About)
+		if _, ok := form.repo[tpl.Name]; ok {
+			ui.Field(ctx, "", func() {
+				ui.Text(ctx, "This repository gives its own prompt in "+repoPromptFile(tpl.Name)+", so its runs use that file. The text below goes to the runs in other repositories.").FontSize(12).
+					Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
 			})
+		}
+		text := &form.texts[pickedIndex]
+		problem := ""
+		if strings.TrimSpace(*text) != "" {
+			if err := tpl.Check(*text); err != nil {
+				problem = "Not saved. " + err.Error()
+			}
+		}
+		ui.Field(ctx.Key("prompt-"+string(tpl.Name)), "Text:", func() {
+			ui.TextArea(ctx, text).Lines(8, 16).Font("monospace").FontSize(12).Label(tpl.Title + " prompt")
+			ui.Row(ctx).Gap(8).Justify(ui.End).Children(func() {
+				ui.Button(ctx, "Copy default").Tooltip("Copy the default text of this prompt, as a start for " + repoPromptFile(tpl.Name)).OnClick(func() {
+					ctx.WriteClipboard(tpl.Default)
+					ctx.Toast("Default prompt copied")
+				})
+				ui.Button(ctx, "Reset").Disabled(*text == tpl.Default).OnClick(func() { *text = tpl.Default })
+			})
+		}).Error(problem).Description("An empty prompt sends the default one. Changes are saved while the prompt has no problems.")
+		ui.Field(ctx.Key("blocks-"+string(tpl.Name)), "Blocks:", func() {
+			if len(tpl.Blocks) == 0 {
+				ui.Text(ctx, "This prompt has no blocks.").TextColor(theme.TextMuted)
+				return
+			}
+			ui.Text(ctx, "The app puts its own text in place of each block. A prompt must keep its required blocks.").TextColor(theme.TextMuted)
+			for _, b := range tpl.Blocks {
+				app.blockView(ctx.Key(b.Name), form, tpl.Name, b)
+			}
 		})
 	})
 }

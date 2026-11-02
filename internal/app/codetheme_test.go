@@ -55,7 +55,7 @@ func TestCodeThemeSetting(t *testing.T) {
 	app := newTestApp(t)
 	tt := ui.NewTester(app.view, 1300, 800)
 	app.openSettings()
-	st := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
+	st := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
 	app.settings.codeTheme = "Dracula"
 	st.Frame()
 	if got := app.store.LoadConfig().CodeTheme; got != "Dracula" {

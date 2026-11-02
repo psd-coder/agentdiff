@@ -10,7 +10,7 @@ func TestUserSetupCheckbox(t *testing.T) {
 	app := newTestApp(t)
 	app.openSettings()
 	app.settings.tab = agentTab
-	tt := ui.NewTester(app.settingsView, settingsWidth, settingsHeight)
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
 	if app.cfg.Agent.UserSetup {
 		t.Fatal("a new config loads the user's own setup")
 	}

@@ -63,10 +63,11 @@ func (app *app) shortcutsTab(ctx *ui.Context) {
 		}
 	}
 	slices.SortFunc(cmds, func(x, y *command) int { return strings.Compare(x.title, y.title) })
-	ui.Text(ctx, "Click a shortcut and press the new keys, with ⌘ or ⌃. Escape cancels. A shortcut another command has moves to this one.").FontSize(12).TextColor(theme.TextMuted)
-	ui.TextInput(ctx, &app.keysFilter).Placeholder("Filter commands").Label("Filter commands")
+	ui.Text(ctx, "Click a shortcut and press the new keys, with ⌘ or ⌃. Escape cancels. A shortcut another command has moves to this one.").FontSize(12).TextColor(theme.TextMuted).PaddingX(24)
+	ui.TextInput(ctx, &app.keysFilter).Placeholder("Filter commands").Label("Filter commands").MarginX(24)
+	// The scroll spans the window, so its bar shows at the window's edge.
 	ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-		ui.Column(ctx).Gap(2).PaddingEnd(4).Children(func() {
+		ui.Column(ctx).Gap(2).PaddingX(24).Children(func() {
 			for _, cm := range cmds {
 				app.shortcutRow(ctx.Key(cm.id), cm)
 			}
@@ -75,7 +76,7 @@ func (app *app) shortcutsTab(ctx *ui.Context) {
 			}
 		})
 	})
-	ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(ctx).Gap(8).AlignItems(ui.Center).PaddingX(24).Children(func() {
 		ui.Text(ctx, app.keysNote).FontSize(12).TextColor(theme.TextMuted).Grow(1).Shrink(1)
 		ui.Button(ctx, "Reset all shortcuts").Disabled(len(app.cfg.Keys) == 0).OnClick(func() {
 			app.keymap().reset()

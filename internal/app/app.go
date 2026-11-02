@@ -39,8 +39,15 @@ type fileDiff struct {
 
 type app struct {
 	win *mygo.Window
-	// settingsWin is the settings window while it is open.
-	settingsWin *mygo.Window
+	// settingsWin is the settings window while it is open, and the
+	// handles of its header and the body of its open tab, whose heights
+	// size it.
+	settingsWin                  *mygo.Window
+	settingsHeader, settingsBody ui.Handle
+	// settingsSettled is set on the extra frame that measures the
+	// settings window after a change, and settingsShown once the window
+	// has the height of its tab and shows.
+	settingsSettled, settingsShown bool
 	// welcomeWin is the welcome window while it is open, in place of the
 	// main window.
 	welcomeWin *mygo.Window
