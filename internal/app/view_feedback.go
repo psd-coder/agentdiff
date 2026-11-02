@@ -72,7 +72,7 @@ func (app *app) saveFeedback(services ui.Services) {
 		}
 		app.update(func() {
 			if app.rev == rev {
-				app.savedPath = path
+				app.savedPath, app.handedOver = path, text
 			}
 			services.WriteClipboard(agentPrompt(path))
 		})

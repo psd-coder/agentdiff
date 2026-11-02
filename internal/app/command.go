@@ -113,7 +113,9 @@ func (app *app) commands() []*command {
 			run: func(_ *ui.Context, id string) { app.deleteWalk(app.rev.Walk(id)) }},
 
 		{id: "copy-feedback", title: "Copy Feedback", target: app.targetFeedback, can: app.hasFeedback, run: func(c *ui.Context, _ string) {
-			c.WriteClipboard(app.feedback())
+			text := app.feedback()
+			c.WriteClipboard(text)
+			app.handedOver = text
 			c.Toast("Feedback copied")
 		}},
 		{id: "save-feedback", title: "Save Feedback to File…", target: app.targetFeedback, can: app.hasFeedback,

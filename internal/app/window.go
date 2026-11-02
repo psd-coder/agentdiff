@@ -9,6 +9,44 @@ import (
 	"github.com/psd-coder/agentdiff/internal/store"
 )
 
+// windowState is what the main window shows about the open review: the
+// title, the folder the window stands for, and whether the reviewer has
+// feedback they did not copy or save yet, which the close button shows
+// with a dot, as for a document with unsaved changes.
+type windowState struct {
+	title  string
+	folder string
+	edited bool
+}
+
+func (app *app) windowState() windowState {
+	if app.repo == nil {
+		return windowState{title: "AgentDiff"}
+	}
+	edited := app.hasFeedback("") && app.feedback() != app.handedOver
+	return windowState{title: app.repo.Name() + " — " + app.scopeLabel(), folder: app.repo.Root, edited: edited}
+}
+
+// syncWindow gives the main window the title, folder and edited mark of
+// the open review, when they changed.
+func (app *app) syncWindow() {
+	state := app.windowState()
+	if app.win == nil || state == app.shownWindow {
+		return
+	}
+	shown := app.shownWindow
+	app.shownWindow = state
+	if state.title != shown.title {
+		app.win.SetTitle(state.title)
+	}
+	if state.folder != shown.folder {
+		app.win.SetRepresentedFile(state.folder)
+	}
+	if state.edited != shown.edited {
+		app.win.SetDocumentEdited(state.edited)
+	}
+}
+
 // Run opens the window and runs the app until it quits. It opens the
 // repository at repo, or the welcome screen when repo is empty.
 func Run(repo string) error {

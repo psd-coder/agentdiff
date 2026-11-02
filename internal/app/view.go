@@ -20,6 +20,7 @@ func (app *app) view(ctx *ui.Context) {
 	app.syncCodeTheme(ctx)
 	app.runQueued(ctx)
 	app.updateMenu()
+	app.syncWindow()
 	if app.repo == nil {
 		app.welcome(ctx)
 		return
