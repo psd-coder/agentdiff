@@ -12,8 +12,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/psd-coder/agentdiff/internal/proc"
 )
 
 // Config is how to run an agent. AutoModel and AutoEffort replace Model
@@ -154,8 +155,7 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = pw
 	cmd.Stderr = io.MultiWriter(stderr, stderrLines)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return killGroup(cmd) }
+	proc.Group(cmd)
 	cmd.WaitDelay = waitDelay
 
 	if err := cmd.Start(); err != nil {
@@ -225,23 +225,6 @@ func failure(provider Provider, streamErr, exitErr error, stderr string) error {
 	return errors.New(msg)
 }
 
-// killGroup kills the process and its children. A child forked while the
-// signal is delivered can miss it on macOS and keep stdout open, so the
-// kill repeats until the group is gone.
-func killGroup(cmd *exec.Cmd) error {
-	pgid := -cmd.Process.Pid
-	err := syscall.Kill(pgid, syscall.SIGKILL)
-	go func() {
-		for range 20 {
-			time.Sleep(50 * time.Millisecond)
-			if syscall.Kill(pgid, syscall.SIGKILL) != nil {
-				return
-			}
-		}
-	}()
-	return err
-}
-
 func firstErr(errs ...error) error {
 	for _, err := range errs {
 		if err != nil {
@@ -261,8 +244,7 @@ func Available(ctx context.Context, cfg Config) (path, version string, err error
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, append(slices.Clone(cfg.Command[min(1, len(cfg.Command)):]), "--version")...)
 	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return killGroup(cmd) }
+	proc.Group(cmd)
 	cmd.WaitDelay = time.Second
 	out, err := cmd.CombinedOutput()
 	version = strings.TrimSpace(string(out))

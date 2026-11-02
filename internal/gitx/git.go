@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/psd-coder/agentdiff/internal/proc"
 )
 
 const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -57,6 +59,7 @@ func command(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), gitEnv...)
 	cmd.WaitDelay = 2 * time.Second
+	proc.Hide(cmd)
 	return cmd
 }
 
