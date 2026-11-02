@@ -74,7 +74,7 @@ func (app *app) promptsTab(ctx *ui.Context, form *promptForm) {
 	tpl := review.Templates[pickedIndex]
 	labeledForm(ctx, func() {
 		ui.Field(ctx, "Prompt:", func() {
-			ui.Select(ctx, &form.picked, titles).Label("Prompt").AlignSelf(ui.Start).MinWidth(200)
+			popUp(ctx, &form.picked, titles).Label("Prompt")
 		}).Description(tpl.About)
 		if _, ok := form.repo[tpl.Name]; ok {
 			ui.Field(ctx, "", func() {
