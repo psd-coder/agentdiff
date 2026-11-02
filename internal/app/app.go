@@ -297,6 +297,14 @@ func (app *app) openRepo(path string) {
 	app.watch(repo)
 	app.cfg.AddRecent(repo.Root)
 	app.saveConfig()
+	if app.win != nil {
+		// File > Open Recent and the Dock menu list it.
+		go func() {
+			if err := mygo.App.AddRecentDocument(repo.Root); err != nil {
+				log.Printf("recent repositories: %v", err)
+			}
+		}()
+	}
 	app.cmpr = comparison{}
 	app.commits.reset()
 	app.loader.reset()
