@@ -539,7 +539,12 @@ func (app *app) fileNav(ctx *ui.Context) {
 	threads := app.rev.ThreadCounts()
 	ui.Column(ctx).Padding(0, 10).Children(func() {
 		sidebarHeading(ctx, "Files", func() {
-			app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
+			listing := app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
+			if ctx.Vibrancy() {
+				// The opaque track and its border stand out on the
+				// material, so the track darkens the material instead.
+				listing.Background(theme.Text.Alpha(0.07)).BorderColor(ui.Transparent)
+			}
 		})
 		ui.Row(ctx).Padding(0, 8, 4, 8).Children(func() {
 			app.cmdCheckbox(ctx, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
