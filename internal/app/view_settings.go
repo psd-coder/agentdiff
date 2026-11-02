@@ -147,7 +147,8 @@ func (app *app) openSettings() {
 		Width:             settingsWidth,
 		Height:            settingsMaxHeight,
 		StateKey:          "settings",
-		TitleBarStyle:     mygo.TitleBarHidden,
+		TitleBarStyle:     app.platform.titleBar(mygo.TitleBarHidden),
+		AutoHideMenuBar:   true,
 		DisableResize:     true,
 		DisableMinimize:   true,
 		DisableMaximize:   true,
@@ -294,11 +295,17 @@ func (app *app) settingsView(ctx *ui.Context) {
 		app.settingsWin.SetTitle(name)
 		form.titled = form.tab + 1
 	}
-	bar := ctx.TitleBar()
-	ui.Column(ctx).AlignItems(ui.Center).Gap(4).Padding(0, 16, 8, 16).Background(theme.Surface).DragWindow().Bind(&app.settingsHeader).Children(func() {
-		ui.Row(ctx).Height(max(bar.Height, 28)).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, name).Bold()
-		})
+	top := float32(8)
+	if app.platform.mac {
+		top = 0
+	}
+	ui.Column(ctx).AlignItems(ui.Center).Gap(4).Padding(top, 16, 8, 16).Background(theme.Surface).DragWindow().Bind(&app.settingsHeader).Children(func() {
+		// On Windows and Linux the title bar of the system shows the title.
+		if app.platform.mac {
+			ui.Row(ctx).Height(max(ctx.TitleBar().Height, 28)).AlignItems(ui.Center).Children(func() {
+				ui.Text(ctx, name).Bold()
+			})
+		}
 		app.settingsToolbar(ctx, form)
 	})
 	ui.Divider(ctx)

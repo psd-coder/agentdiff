@@ -94,13 +94,14 @@ func Run(repo string, icon []byte) error {
 			StateKey:  "main",
 			// It shows once a repository opens.
 			Hidden: true,
-			// The traffic lights sit over the sidebar, and the toolbar
-			// shares the title bar.
-			TitleBarStyle:  mygo.TitleBarHiddenInset,
+			// On macOS the traffic lights sit over the sidebar, and the
+			// toolbar shares the title bar.
+			TitleBarStyle:  app.platform.titleBar(mygo.TitleBarHiddenInset),
 			TitleBarHeight: titleBarHeight,
 			// macOS keeps its own title bar height for the traffic lights;
 			// this centers the 14 points of their height in the toolbar.
 			TrafficLightPosition: &mygo.Point{X: 20, Y: (titleBarHeight - 14) / 2},
+			AutoHideMenuBar:      app.platform.hideMenuBar,
 			// The sidebar draws no background, and the material shows.
 			Vibrancy: mygo.VibrancySidebar,
 			Content:  ui.View(app.view),
