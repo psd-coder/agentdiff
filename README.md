@@ -28,7 +28,7 @@ curl -fL -o /tmp/AgentDiff.dmg https://github.com/psd-coder/agentdiff/releases/l
 hdiutil detach -quiet /tmp/AgentDiff
 ```
 
-The app reads the `PATH` of your login shell (`$SHELL -l -i`), so it finds the CLIs when you start it from the Dock too. Settings shows the version of each CLI it found, or why it found none. Open a repository from the app with Cmd+O, or start the app on the repository you are in from a terminal:
+The app reads the `PATH` of your login shell (`$SHELL -l -i`), so it finds the CLIs when you start it from the Dock too. Settings shows the version of each CLI it found, or why it found none. Open a repository from the app with Cmd+O or File > Open Recent. The Dock menu also lists the recent repositories, and you can drop a folder on the Dock icon. To start the app on the repository you are in, run this from a terminal:
 
 ```bash
 open -n /Applications/AgentDiff.app --args "$PWD"

@@ -33,6 +33,7 @@ func (app *app) menuBar(keys func(id string) string) *mygo.Menu {
 		}},
 		{Label: "File", Submenu: []*mygo.MenuItem{
 			item("open-repo"),
+			{Role: mygo.RoleOpenRecent},
 			item("switch-project"),
 			item("switch-branch"),
 			item("compare"),
