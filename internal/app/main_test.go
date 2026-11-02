@@ -1002,9 +1002,10 @@ func TestCompareBranches(t *testing.T) {
 	if app.scope.Kind != gitx.ScopeBranch || app.scope.Base != "origin/main" {
 		t.Errorf("picked base is forgotten: scope = %+v", app.scope)
 	}
+	// The tree is clean, so main against itself opens its newest commit.
 	app.cmpr.base, app.cmpr.baseSet = "main", false
 	app.pickBranch("main")
-	if app.scope.Kind != gitx.ScopeUncommitted {
+	if app.scope.Kind != gitx.ScopeCommit || app.scope.Commit != app.commits.rows[0].SHA {
 		t.Errorf("main against itself: scope = %+v", app.scope)
 	}
 	app.cmpr.base = "agent"
@@ -1012,6 +1013,48 @@ func TestCompareBranches(t *testing.T) {
 	if app.scope.Kind != gitx.ScopeCommit || len(app.commits.rows) == 0 || app.scope.Commit != app.commits.rows[0].SHA {
 		t.Errorf("other branch against itself: scope = %+v", app.scope)
 	}
+}
+
+// A project opens on its uncommitted changes. When there are none, it
+// opens all the changes of the branch since its base, or the newest
+// commit of a branch without a base.
+func TestOpenSkipsEmptyUncommittedChanges(t *testing.T) {
+	app := newTestApp(t)
+	if app.scope.Kind != gitx.ScopeUncommitted {
+		t.Fatalf("with changes: scope = %+v", app.scope)
+	}
+	dir := app.repo.Root
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "Second")
+	app.openRepo(dir)
+	if app.scope.Kind != gitx.ScopeCommit || app.scope.Commit != app.commits.rows[0].SHA {
+		t.Errorf("clean main: scope = %+v", app.scope)
+	}
+	git(t, dir, "checkout", "-qb", "agent")
+	write(t, dir, "feature.go", "package feature\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "Add feature")
+	app.openRepo(dir)
+	if app.scope.Kind != gitx.ScopeBranch || app.scope.Base != "main" {
+		t.Errorf("clean branch: scope = %+v", app.scope)
+	}
+}
+
+// The window shows a project from the moment it opens, while git still
+// reads its branches and working tree, as when the user picks a project
+// on the welcome window.
+func TestOpenRepoShowsAtOnce(t *testing.T) {
+	app := newApp(store.Store{Dir: t.TempDir()})
+	t.Cleanup(app.streams.Wait)
+	app.queue = make(chan func(), 64)
+	app.openRepo(fixtureRepo(t))
+	if app.rev == nil || app.scope.Kind != gitx.ScopeUncommitted {
+		t.Fatalf("before git answers: review %v, scope %+v", app.rev, app.scope)
+	}
+	tt := ui.NewTester(app.view, 1300, 800)
+	tt.Frame()
+	drain(app)
+	tt.Frame()
 }
 
 func TestCustomRange(t *testing.T) {
@@ -1037,7 +1080,7 @@ func TestCustomRange(t *testing.T) {
 		t.Errorf("texts = %q", tt.Texts())
 	}
 	app.pickBranch("main")
-	if app.cmpr.rng != nil || app.scope.Kind != gitx.ScopeUncommitted {
+	if app.cmpr.rng != nil || app.scope.Kind == gitx.ScopeRange {
 		t.Errorf("picking a branch kept the range: scope = %+v", app.scope)
 	}
 }

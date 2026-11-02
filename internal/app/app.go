@@ -82,6 +82,9 @@ type app struct {
 	// chosen is the scope the user opened last, which the list of
 	// changes shows chosen while it loads.
 	chosen gitx.Scope
+	// picks counts the scopes chosen, so that the scope a project opens
+	// on does not replace one the user chose while it was read.
+	picks  int
 	rev    *review.Review
 	loader *scopeLoader
 	perLoad
@@ -321,22 +324,59 @@ func (app *app) openRepo(path string) {
 	app.cmpr = comparison{}
 	app.commits.reset()
 	app.loader.reset()
+	// The uncommitted changes show at once, so the window always has a
+	// review. A clean working tree leaves them once git answers.
+	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	picks := app.picks
 	app.async(func() {
 		ctx := context.Background()
 		branch, err := repo.CurrentBranch(ctx)
 		base := repo.DefaultBase(ctx)
 		branches, trees, lerr := readBranches(ctx, repo)
 		err = cmp.Or(err, lerr)
+		dirty := hasUncommitted(ctx, repo)
 		app.update(func() {
 			if app.repo != repo {
 				return
 			}
 			app.cmpr.branch, app.cmpr.base, app.cmpr.branches, app.cmpr.worktrees = branch, base, branches, trees
 			app.cmpr.err = errText(err)
+			if app.picks == picks && !dirty {
+				app.openCheckedOut(false)
+			}
 			app.loadCommits()
 		})
 	})
-	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+}
+
+// hasUncommitted reports whether the working tree of repo has changes. It
+// reports true when git fails, so the uncommitted changes open with the
+// error.
+func hasUncommitted(ctx context.Context, repo *gitx.Repo) bool {
+	snap, err := repo.Snapshot(ctx, gitx.Scope{Kind: gitx.ScopeUncommitted})
+	if err != nil {
+		return true
+	}
+	changes, err := snap.Changes(ctx)
+	return err != nil || len(changes) > 0
+}
+
+// openCheckedOut opens the changes of the checked-out branch: the
+// uncommitted ones. When there are none, it opens all the changes of the
+// branch since its base, or else its newest commit once the commit list
+// lands. The caller reads the commit list next.
+func (app *app) openCheckedOut(dirty bool) {
+	all, hasAll := app.cmpr.allScope()
+	switch {
+	case dirty:
+		app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+	case hasAll:
+		app.setScope(all)
+	default:
+		// The empty uncommitted changes show until the commit list lands.
+		app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+		app.commits.newest = true
+	}
 }
 
 // closeRepo goes back to the welcome screen.
@@ -358,7 +398,8 @@ func (app *app) compare(branch, base string) {
 
 // pickBranch lists the commits of branch and opens all its changes.
 // Without a base to compare with, it opens the uncommitted changes of
-// the checked-out branch, or the newest commit of another one.
+// the checked-out branch, or its newest commit when it has none, and the
+// newest commit of another branch.
 func (app *app) pickBranch(branch string) {
 	scope, all := app.cmpr.pick(branch)
 	app.showComparison(scope, all)
@@ -366,13 +407,23 @@ func (app *app) pickBranch(branch string) {
 
 func (app *app) showComparison(scope gitx.Scope, all bool) {
 	app.commits.newest = !all && app.cmpr.head != ""
-	app.loadCommits()
 	switch {
 	case all:
 		app.setScope(scope)
 	case app.cmpr.head == "":
-		app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
+		repo, picks := app.repo, app.picks
+		app.async(func() {
+			dirty := hasUncommitted(context.Background(), repo)
+			app.update(func() {
+				if app.repo == repo && app.picks == picks {
+					app.openCheckedOut(dirty)
+					app.loadCommits()
+				}
+			})
+		})
+		return
 	}
+	app.loadCommits()
 }
 
 // setRange reviews the changes between two revisions.
@@ -490,6 +541,7 @@ func (app *app) readCommitPage(last int) {
 }
 
 func (app *app) setScope(scope gitx.Scope) {
+	app.picks++
 	app.commits.newest = false
 	app.chosen = scope
 	app.load(scope, true)
