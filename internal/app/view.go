@@ -22,7 +22,7 @@ func (app *app) view(ctx *ui.Context) {
 	app.updateMenu()
 	app.syncWindow()
 	if app.repo == nil {
-		app.welcome(ctx)
+		// The main window hides while the welcome window shows.
 		return
 	}
 	theme := ctx.Theme()

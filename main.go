@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"log"
 	"os"
 	"strings"
@@ -28,8 +29,11 @@ func startPath() string {
 	return wd
 }
 
+//go:embed resources/icon.png
+var icon []byte
+
 func main() {
-	if err := app.Run(startPath()); err != nil {
+	if err := app.Run(startPath(), icon); err != nil {
 		log.Fatal(err)
 	}
 }

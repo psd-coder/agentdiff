@@ -1070,9 +1070,9 @@ func TestRemoveProject(t *testing.T) {
 	if !slices.Equal(app.store.LoadConfig().Recent, app.cfg.Recent) {
 		t.Error("the list is not saved")
 	}
-	tt.Frame()
-	if !tt.HasText("Open repository…") {
-		t.Errorf("no welcome screen: %q", tt.Texts())
+	welcome := ui.NewTester(app.welcomeView, welcomeWidth, welcomeHeight)
+	if !welcome.HasText("Open repository…") {
+		t.Errorf("no welcome screen: %q", welcome.Texts())
 	}
 }
 
@@ -2500,7 +2500,7 @@ func TestWelcomeList(t *testing.T) {
 	app := newTestApp(t)
 	app.cfg.AddRecent(fixtureRepo(t))
 	app.closeRepo()
-	tt := ui.NewTester(app.view, 1300, 800)
+	tt := ui.NewTester(app.welcomeView, welcomeWidth, welcomeHeight)
 	tt.Frame()
 	tt.Frame()
 	snapshot(t, tt, "welcome")
