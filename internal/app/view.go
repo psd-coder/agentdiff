@@ -81,10 +81,11 @@ func sidebarBackground(ctx *ui.Context) ui.Color {
 
 func (app *app) sidebar(ctx *ui.Context) {
 	if ctx.Vibrancy() {
-		// The opaque grays of hovered and chosen rows match the material
-		// and do not show on it, so the sidebar darkens it instead.
+		// The opaque grays of controls, lines and hovered and chosen rows
+		// stand out on the material, so in the sidebar they darken it.
 		base := ctx.Theme()
 		over := *base
+		over.Surface, over.Border = base.Text.Alpha(0.07), base.Text.Alpha(0.1)
 		over.SurfaceHover, over.SurfacePressed = base.Text.Alpha(0.06), base.Text.Alpha(0.1)
 		ctx.SetTheme(&over)
 		defer ctx.SetTheme(base)
@@ -539,12 +540,7 @@ func (app *app) fileNav(ctx *ui.Context) {
 	threads := app.rev.ThreadCounts()
 	ui.Column(ctx).Padding(0, 10).Children(func() {
 		sidebarHeading(ctx, "Files", func() {
-			listing := app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
-			if ctx.Vibrancy() {
-				// The opaque track and its border stand out on the
-				// material, so the track darkens the material instead.
-				listing.Background(theme.Text.Alpha(0.07)).BorderColor(ui.Transparent)
-			}
+			app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
 		})
 		ui.Row(ctx).Padding(0, 8, 4, 8).Children(func() {
 			app.cmdCheckbox(ctx, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
