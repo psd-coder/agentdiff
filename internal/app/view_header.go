@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/psd-coder/agentdiff/internal/review"
@@ -109,9 +110,13 @@ func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add boo
 				if p == open {
 					ui.Icon(ctx, checkIcon).TextColor(theme.Accent).Label("Open")
 				}
-			}, func() {
-				iconButton(ctx, trashIcon, "Remove from the list", "Remove from the list (Cmd+Backspace)").OnClick(func() { app.confirmRemoveProject(p) })
-			}).Label(filepath.Base(p) + ", " + p)
+			}, nil).Label(filepath.Base(p) + ", " + p)
+			row.ContextMenu(func(m *ui.Menu) {
+				app.menuItem(ctx, m, "Show in Finder", func(*ui.Context) { mygo.Shell.ShowItemInFolder(p) })
+				app.menuItem(ctx, m, "Copy Path", func(ctx *ui.Context) { ctx.WriteClipboard(p) })
+				m.Separator()
+				app.menuItem(ctx, m, "Remove from List…", func(*ui.Context) { app.confirmRemoveProject(p) })
+			})
 			if row.Clicked() {
 				choose(i)
 			}

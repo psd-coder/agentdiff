@@ -314,11 +314,50 @@ func (app *app) queueCommand(id string) {
 	}
 }
 
-// runQueued runs the command the menu bar queued.
+// runQueued runs the command the menu bar queued and the commands chosen
+// in context menus.
 func (app *app) runQueued(ctx *ui.Context) {
 	if id := app.pending; id != "" {
 		app.pending = ""
 		app.runHere(ctx, id)
+	}
+	deferred := app.deferred
+	app.deferred = nil
+	for _, run := range deferred {
+		run(ctx)
+	}
+}
+
+// menuItem adds the item label to the context menu. A choice runs fn at
+// the start of the next frame, so it can change the rows that built the
+// menu.
+func (app *app) menuItem(ctx *ui.Context, menu *ui.Menu, label string, fn func(ctx *ui.Context)) {
+	if menu.Item(label).Chosen() {
+		app.deferred = append(app.deferred, fn)
+		ctx.Invalidate()
+	}
+}
+
+// cmdMenu adds to the context menu the commands ids that apply to
+// target, by their titles. An empty id is a separator, which shows only
+// between items.
+func (app *app) cmdMenu(ctx *ui.Context, menu *ui.Menu, target string, ids ...string) {
+	added, separate := false, false
+	for _, id := range ids {
+		if id == "" {
+			separate = added
+			continue
+		}
+		cm := app.cmd(id)
+		if !app.applies(cm, target) {
+			continue
+		}
+		if separate {
+			menu.Separator()
+			separate = false
+		}
+		app.menuItem(ctx, menu, cm.title, func(ctx *ui.Context) { app.runOn(ctx, id, target) })
+		added = true
 	}
 }
 
