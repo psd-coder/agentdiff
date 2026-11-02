@@ -110,7 +110,7 @@ func (app *app) sidebar(ctx *ui.Context) {
 func sidebarHeading(ctx *ui.Context, title string, end func()) {
 	theme := ctx.Theme()
 	ui.Row(ctx).Gap(6).Padding(10, 8, 4, 8).AlignItems(ui.Center).Children(func() {
-		ui.Text(ctx, strings.ToUpper(title)).FontSize(10).Bold().LetterSpacing(0.6).TextColor(theme.TextMuted).Grow(1).SingleLine()
+		ui.Text(ctx, title).FontSize(11).Bold().TextColor(theme.TextMuted).Grow(1).SingleLine()
 		if end != nil {
 			end()
 		}
