@@ -15,11 +15,11 @@ import (
 )
 
 // titleBarHeight is the height of the toolbar, which the window's title
-// bar shares, as in Mac apps with a unified toolbar.
+// bar shares on macOS, as in Mac apps with a unified toolbar.
 const titleBarHeight = 52
 
-// toolbar is the title bar of the window, over the page. It drags the
-// window, as a title bar does.
+// toolbar is the title bar of the window on macOS, over the page. It drags
+// the window, as a title bar does.
 func (app *app) toolbar(ctx *ui.Context) {
 	theme := ctx.Theme()
 	bar := ctx.TitleBar()

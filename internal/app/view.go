@@ -92,7 +92,10 @@ func (app *app) sidebar(ctx *ui.Context) {
 	}
 	theme := ctx.Theme()
 	background := sidebarBackground(ctx)
-	ui.Box(ctx).Height(titleBarHeight).Shrink(0).FillWidth().Background(background).DragWindow()
+	if app.platform.mac {
+		// The traffic lights sit here, beside the toolbar.
+		ui.Box(ctx).Height(titleBarHeight).Shrink(0).FillWidth().Background(background).DragWindow()
+	}
 	ui.SplitVerticalPercent(ctx, &app.scopePct, func() {
 		ui.Column(ctx).Fill().Background(background).Children(func() {
 			app.scopeList(ctx)

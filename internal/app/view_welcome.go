@@ -33,7 +33,8 @@ func (app *app) showWelcome() {
 			Title:             "Welcome to AgentDiff",
 			Width:             welcomeWidth,
 			Height:            welcomeHeight,
-			TitleBarStyle:     mygo.TitleBarHidden,
+			TitleBarStyle:     app.platform.titleBar(mygo.TitleBarHidden),
+			AutoHideMenuBar:   true,
 			DisableResize:     true,
 			DisableMinimize:   true,
 			DisableMaximize:   true,
@@ -123,7 +124,11 @@ func (app *app) welcomeView(ctx *ui.Context) {
 				ui.Text(ctx, "Could not save the settings: "+app.saveErr).TextColor(theme.Danger).MaxWidth(340).Selectable()
 			}
 		})
-		ui.Column(ctx).Width(320).Shrink(0).Padding(titleBarHeight, 10, 10, 10).Gap(4).
+		top := float32(10)
+		if app.platform.mac {
+			top = titleBarHeight
+		}
+		ui.Column(ctx).Width(320).Shrink(0).Padding(top, 10, 10, 10).Gap(4).
 			Background(sidebarBackground(ctx)).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).DragWindow().Children(func() {
 			if len(app.cfg.Recent) == 0 {
 				ui.Text(ctx, "No recent repositories").TextColor(theme.TextMuted).AlignSelf(ui.Center).Margin(24, 0, 0, 0)
