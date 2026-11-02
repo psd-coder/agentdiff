@@ -1,8 +1,10 @@
 package app
 
 import (
+	"slices"
 	"testing"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -66,5 +68,27 @@ func TestRecordedControlKeysOffMac(t *testing.T) {
 	app.startRecording("refresh")
 	if app.keyInput(ui.InputEvent{Kind: ui.InputKeyDown, Key: ui.KeyJ, Mods: ui.Super}) {
 		t.Error("keys with the Windows key alone were recorded")
+	}
+}
+
+func TestMenuBarOffMac(t *testing.T) {
+	app := newTestApp(t)
+	app.platform = platformOf("linux")
+	menus := app.menuBar(func(string) string { return "" }).Items()
+	labels := map[string][]string{}
+	for _, m := range menus {
+		if m.Role == mygo.RoleAppMenu || m.Role == mygo.RoleHelp {
+			t.Errorf("menu with role %q, which Linux hides", m.Role)
+		}
+		for _, it := range m.Submenu {
+			labels[m.Label] = append(labels[m.Label], it.ID+string(it.Role))
+		}
+	}
+	file := labels["File"]
+	if len(file) < 3 || file[len(file)-1] != string(mygo.RoleQuit) || !slices.Contains(file, "settings") {
+		t.Errorf("File = %q", file)
+	}
+	if !slices.Contains(labels["Help"], "shortcuts") {
+		t.Errorf("Help = %q", labels["Help"])
 	}
 }

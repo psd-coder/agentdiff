@@ -11,14 +11,29 @@ import (
 // is, and the menus show them.
 func (app *app) menu() *mygo.Menu { return app.menuBar(app.keymap().of) }
 
-// menuBar is the menu bar with the keys of each command from keys.
+// menuBar is the menu bar with the keys of each command from keys. On
+// macOS, Settings is in the app menu. Windows and Linux have no app menu
+// and no Help menu of the system, so Settings goes in File, after the
+// file commands, and Exit or Quit ends File.
 func (app *app) menuBar(keys func(id string) string) *mygo.Menu {
 	item := func(id string) *mygo.MenuItem {
 		cm := app.cmd(id)
 		return &mygo.MenuItem{ID: id, Label: cm.title, Accelerator: keys(id), Click: func(*mygo.MenuItem, *mygo.Window) { app.queueCommand(id) }}
 	}
-	return mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
+	file := []*mygo.MenuItem{
+		item("open-repo"),
+		{Role: mygo.RoleOpenRecent},
+		item("switch-project"),
+		item("switch-branch"),
+		item("compare"),
+		item("refresh"),
+		mygo.Separator(),
+	}
+	var menus []*mygo.MenuItem
+	help := &mygo.MenuItem{Label: "Help", Submenu: []*mygo.MenuItem{item("shortcuts")}}
+	if app.platform.mac {
+		help.Label, help.Role = "", mygo.RoleHelp
+		menus = append(menus, &mygo.MenuItem{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
 			{Role: mygo.RoleAbout},
 			mygo.Separator(),
 			item("settings"),
@@ -30,19 +45,15 @@ func (app *app) menuBar(keys func(id string) string) *mygo.Menu {
 			{Role: mygo.RoleUnhide},
 			mygo.Separator(),
 			{Role: mygo.RoleQuit},
-		}},
-		{Label: "File", Submenu: []*mygo.MenuItem{
-			item("open-repo"),
-			{Role: mygo.RoleOpenRecent},
-			item("switch-project"),
-			item("switch-branch"),
-			item("compare"),
-			item("refresh"),
-			mygo.Separator(),
-			{Role: mygo.RoleClose},
-		}},
-		{Role: mygo.RoleEditMenu},
-		{Label: "View", Submenu: []*mygo.MenuItem{
+		}})
+		file = append(file, &mygo.MenuItem{Role: mygo.RoleClose})
+	} else {
+		file = append(file, item("settings"), mygo.Separator(), &mygo.MenuItem{Role: mygo.RoleClose}, &mygo.MenuItem{Role: mygo.RoleQuit})
+	}
+	return mygo.NewMenu(append(menus,
+		&mygo.MenuItem{Label: "File", Submenu: file},
+		&mygo.MenuItem{Role: mygo.RoleEditMenu},
+		&mygo.MenuItem{Label: "View", Submenu: []*mygo.MenuItem{
 			item("palette"),
 			mygo.Separator(),
 			item("focus-changes"),
@@ -53,7 +64,7 @@ func (app *app) menuBar(keys func(id string) string) *mygo.Menu {
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
 		}},
-		{Label: "Go", Submenu: []*mygo.MenuItem{
+		&mygo.MenuItem{Label: "Go", Submenu: []*mygo.MenuItem{
 			item("back"),
 			item("forward"),
 			mygo.Separator(),
@@ -65,11 +76,9 @@ func (app *app) menuBar(keys func(id string) string) *mygo.Menu {
 			item("next-file"),
 			item("previous-file"),
 		}},
-		{Role: mygo.RoleWindowMenu},
-		{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{
-			item("shortcuts"),
-		}},
-	})
+		&mygo.MenuItem{Role: mygo.RoleWindowMenu},
+		help,
+	))
 }
 
 // menuIDs are the commands the menu bar holds.
