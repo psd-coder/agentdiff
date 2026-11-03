@@ -9,6 +9,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/psd-coder/agentdiff/internal/gitx"
+	"github.com/psd-coder/agentdiff/internal/review"
 	"github.com/psd-coder/agentdiff/internal/store"
 )
 
@@ -174,5 +175,44 @@ func TestWatchFollowsOpenProject(t *testing.T) {
 	app.closeRepo()
 	if (*watches)[2].ctx.Err() == nil || (*watches)[3].ctx.Err() == nil {
 		t.Error("the watches still run after the project closed")
+	}
+}
+
+func TestWatchRereadsRepoPrompts(t *testing.T) {
+	dir := fixtureRepo(t)
+	write(t, dir, ".gitignore", ".agentdiff/\n")
+	app, watches := newWatchedApp(t, dir)
+	tree := (*watches)[0]
+	file := filepath.Join(dir, ".agentdiff", "prompts", "overview.md")
+
+	write(t, dir, ".agentdiff/prompts/overview.md", "Risks only.\n{{format}}\n{{files}}\n")
+	tree.emit("api")
+	drain(app)
+	if app.repoPrompts.Has(review.PromptOverview) {
+		t.Fatal("read the prompts again for a change in api")
+	}
+	tree.emit(".")
+	drain(app)
+	if app.repoPrompts[review.PromptOverview] != "Risks only.\n{{format}}\n{{files}}\n" {
+		t.Fatalf("prompts after a new file in an ignored folder: %q", app.repoPrompts)
+	}
+
+	write(t, dir, ".agentdiff/prompts/overview.md", "Risks only.\n")
+	tree.emit(".agentdiff/prompts")
+	drain(app)
+	if app.repoPrompts.Has(review.PromptOverview) || len(app.promptProblems) != 1 {
+		t.Fatalf("prompts after the file broke: %q, problems %q", app.repoPrompts, app.promptProblems)
+	}
+
+	write(t, dir, ".agentdiff/prompts/overview.md", "Risks only.\n{{format}}\n{{files}}\n")
+	tree.emit(".agentdiff/prompts")
+	drain(app)
+	if err := os.RemoveAll(filepath.Dir(filepath.Dir(file))); err != nil {
+		t.Fatal(err)
+	}
+	tree.emit(".agentdiff")
+	drain(app)
+	if app.repoPrompts.Has(review.PromptOverview) {
+		t.Errorf("prompts after the folder went away: %q", app.repoPrompts)
 	}
 }
