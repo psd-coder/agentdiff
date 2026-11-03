@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/psd-coder/agentdiff/internal/review"
 )
@@ -46,6 +47,32 @@ func (app *app) targetVersion() (string, bool) {
 		return "", false
 	}
 	return ov.ID, app.nav.page.kind == kindOverview && app.earlierVersion(ov.ID)
+}
+
+// targetOverviewLog is the version of the overview whose log the menu
+// bar and the palette show: the earlier version on screen, or the latest.
+func (app *app) targetOverviewLog() (string, bool) {
+	if id, ok := app.targetVersion(); ok {
+		return id, true
+	}
+	return "", true
+}
+
+// runOfVersion reports whether an overview run that started at started
+// belongs to a version, the latest for "": it started after the version
+// before was written, and before the version itself was. The latest
+// version also takes the runs after it, as a regenerate that failed or
+// that still writes.
+func (app *app) runOfVersion(started time.Time, version string) bool {
+	versions := app.rev.Versions()
+	index := slices.IndexFunc(versions, func(ov *review.Overview) bool { return ov.ID == version })
+	if index < 0 {
+		index = len(versions) - 1
+	}
+	if index > 0 && !started.After(versions[index-1].Generated) {
+		return false
+	}
+	return index < 0 || index == len(versions)-1 || !started.After(versions[index].Generated)
 }
 
 // versionLabels names the versions in the switcher: the time, the prompt

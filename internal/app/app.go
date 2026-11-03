@@ -97,7 +97,10 @@ type app struct {
 	reviews   *continuity.Reviews
 	logOpen   bool
 	logTarget string
-	logPct    float32
+	// logVersion is the overview version whose runs the log shows while
+	// logTarget is the overview, empty for the latest.
+	logVersion string
+	logPct     float32
 
 	perReview
 	// drafts holds the unsent text of each thread and question for the

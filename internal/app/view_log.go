@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo"
@@ -23,7 +24,15 @@ func (app *app) logTargetLabel() string {
 	case !ok:
 		return "Thread"
 	case kind == review.KindOverview:
-		return "Overview"
+		versions := app.rev.Versions()
+		if len(versions) < 2 {
+			return "Overview"
+		}
+		index := slices.IndexFunc(versions, func(ov *review.Overview) bool { return ov.ID == app.logVersion })
+		if index < 0 {
+			index = len(versions) - 1
+		}
+		return "Overview: " + versionLabels(versions, app.rev.Overview)[index]
 	case kind == review.KindWalk:
 		return app.rev.WalkTitle(app.rev.Walk(app.logTarget))
 	}
@@ -52,7 +61,7 @@ func (app *app) logPanel(ctx *ui.Context) {
 			ui.Column(ctx).Gap(6).Padding(10, 12).Children(func() {
 				shownRuns := 0
 				for _, r := range app.logsOf(rev) {
-					if app.logTarget != "" && r.info.Target != app.logTarget {
+					if !app.inLog(r) {
 						continue
 					}
 					shownRuns++
@@ -84,7 +93,15 @@ func (app *app) logUsage() (agent.Usage, bool) {
 
 // inLog reports whether the log panel shows run r.
 func (app *app) inLog(run *logRun) bool {
-	return app.logTarget == "" || run.info.Target == app.logTarget
+	switch {
+	case app.logTarget == "":
+		return true
+	case run.info.Target != app.logTarget:
+		return false
+	case app.logTarget == review.TargetOverview:
+		return app.runOfVersion(run.info.Started, app.logVersion)
+	}
+	return true
 }
 
 // spentContext adds up the context the runs that keep reports built. A run

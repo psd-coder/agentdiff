@@ -296,5 +296,12 @@ func (runFile *runFile) closeLocked() {
 }
 
 func (app *app) showLog(target string) {
-	app.logOpen, app.logTarget = true, target
+	app.logOpen, app.logTarget, app.logVersion = true, target, ""
+}
+
+// showOverviewLog shows the runs of a version of the overview, the latest
+// for "".
+func (app *app) showOverviewLog(version string) {
+	app.showLog(store.TargetOverview)
+	app.logVersion = version
 }
