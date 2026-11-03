@@ -35,6 +35,7 @@ func (app *app) newPromptForm() promptForm {
 	}
 	if app.repo != nil {
 		form.repo, app.promptProblems = readRepoPrompts(app.repo.Root)
+		app.repoPrompts = form.repo
 	}
 	return form
 }

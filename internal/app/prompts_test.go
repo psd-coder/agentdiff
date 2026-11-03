@@ -48,6 +48,9 @@ func TestRepoPromptFilesGoBeforeTheSettings(t *testing.T) {
 	if !tt.HasText(want[0]) {
 		t.Errorf("the overview does not warn about the file: %q", tt.Texts())
 	}
+	if !tt.HasText("The agent runs use the prompts of this repository: .agentdiff/prompts/system.md, .agentdiff/prompts/overview.md") {
+		t.Errorf("the overview does not name the prompt files it uses: %q", tt.Texts())
+	}
 
 	app.deeper("", 0, "")
 	walk := app.rev.Walks[0]

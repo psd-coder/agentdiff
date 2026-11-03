@@ -155,8 +155,9 @@ type app struct {
 	// saveErr is why the last write of a review or the settings failed;
 	// it clears once a later write works.
 	saveErr string
-	// promptProblems are the prompt files of the open repository that the
-	// last run could not use.
+	// repoPrompts are the prompt files of the open repository that the
+	// last run used, and promptProblems the ones it could not use.
+	repoPrompts    review.Prompts
 	promptProblems []string
 }
 
@@ -386,7 +387,7 @@ func (app *app) openCheckedOut(dirty bool) {
 
 // closeRepo goes back to the welcome screen.
 func (app *app) closeRepo() {
-	app.repo, app.promptProblems = nil, nil
+	app.repo, app.repoPrompts, app.promptProblems = nil, nil, nil
 	app.unwatch()
 	app.loader.reset()
 	app.perLoad = newPerLoad()
