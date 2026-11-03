@@ -94,3 +94,45 @@ func TestEachAgentKeepsItsModel(t *testing.T) {
 		t.Errorf("saved %+v", got)
 	}
 }
+
+func TestAgentLabelOpensAgentSettings(t *testing.T) {
+	app := newTestApp(t)
+	app.cfg.SetAgent(agent.Config{Provider: agent.OpenCode, Model: "opencode/glm"})
+	tt := ui.NewTester(app.view, 1300, 800)
+	if err := tt.Click("OpenCode · opencode/glm | default"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
+	tt.Frame()
+	if app.settings == nil || app.settings.tab != agentTab || providers[app.settings.provider] != agent.OpenCode {
+		t.Errorf("settings = %+v, want the Agent tab on OpenCode", app.settings)
+	}
+}
+
+func TestAgentLabel(t *testing.T) {
+	cases := []struct {
+		name  string
+		cfg   agent.Config
+		label string
+		tip   string
+	}{
+		{
+			"nothing set", agent.Config{Provider: agent.Claude},
+			"Claude Code · default | default", "Agent settings",
+		},
+		{
+			"automatic runs differ", agent.Config{Provider: agent.OpenCode, Model: "opencode/glm", Effort: "high", AutoEffort: "low"},
+			"OpenCode · opencode/glm | high", "Automatic runs use model: opencode/glm, effort: low\nAgent settings",
+		},
+		{
+			"automatic model only", agent.Config{Provider: agent.Codex, AutoModel: "gpt-5-mini"},
+			"Codex · default | default", "Automatic runs use model: gpt-5-mini, effort: default\nAgent settings",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if label, tip := agentLabel(c.cfg); label != c.label || tip != c.tip {
+				t.Errorf("agentLabel = %q, %q, want %q, %q", label, tip, c.label, c.tip)
+			}
+		})
+	}
+}

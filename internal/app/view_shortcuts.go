@@ -93,8 +93,7 @@ func (app *app) shortcutsModal(ctx *ui.Context) {
 			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
 				if ui.Button(ctx, "Change shortcuts…").Clicked() {
 					app.shortcutsOpen = false
-					app.openSettings()
-					app.settings.tab = shortcutsTab
+					app.openSettingsTab(shortcutsTab)
 				}
 				ui.Spacer(ctx)
 				app.takeFocus(ui.PrimaryButton(ctx, "Done").Tooltip("Escape").AutoFocus().OnClick(func() { app.shortcutsOpen = false }), "shortcuts")
