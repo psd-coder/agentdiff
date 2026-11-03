@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"github.com/psd-coder/agentdiff/internal/agent"
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
@@ -33,13 +34,11 @@ func (app *app) toolbar(ctx *ui.Context) {
 			app.branchPicker(ctx)
 		}).Shrink(1).Label("Changes")
 		ui.Spacer(ctx)
-		cfg := app.cfg.Agent()
-		label := cfg.Provider.Name()
-		if cfg.Model != "" {
-			label += " · " + cfg.Model
-		}
-		ui.Text(ctx, label).FontSize(12).TextColor(theme.TextMuted).SingleLine()
+		label, tip := agentLabel(app.cfg.Agent())
 		ui.Toolbar(ctx, func() {
+			ui.Button(ctx.Key("agent-settings"), "").Label(label).Tooltip(tip).OnClick(func() { app.openSettingsTab(agentTab) }).Children(func() {
+				ui.Text(ctx, label).FontSize(12).TextColor(theme.TextMuted).SingleLine()
+			})
 			app.toolButton(ctx, "agent-log", logIcon, "Agent log", "Agent log", 0)
 			app.toolButton(ctx, "refresh", refreshIcon, "Refresh", "Refresh", 0)
 			feedbackCount := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
@@ -47,6 +46,19 @@ func (app *app) toolbar(ctx *ui.Context) {
 		}).Shrink(0).Label("Actions")
 	})
 }
+
+// agentLabel names the agent, model and effort of the runs the user
+// starts, and the tooltip names those of the automatic runs when they
+// differ.
+func agentLabel(cfg agent.Config) (label, tip string) {
+	tip = "Agent settings"
+	if auto := cfg.Auto(); auto.Model != cfg.Model || auto.Effort != cfg.Effort {
+		tip = fmt.Sprintf("Automatic runs use model: %s, effort: %s\n%s", orDefault(auto.Model), orDefault(auto.Effort), tip)
+	}
+	return cfg.Provider.Name() + " · " + orDefault(cfg.Model) + " | " + orDefault(cfg.Effort), tip
+}
+
+func orDefault(value string) string { return cmp.Or(value, "default") }
 
 // toolButton is a button of the toolbar that runs the command id, named
 // label. It shows the icon, and count as a badge when it is above zero.

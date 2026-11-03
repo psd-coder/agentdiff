@@ -169,6 +169,12 @@ func (app *app) openSettings() {
 	}
 }
 
+// openSettingsTab opens the settings window on a tab.
+func (app *app) openSettingsTab(tab int) {
+	app.openSettings()
+	app.settings.tab = tab
+}
+
 // saveSettings saves what the settings form holds, as the user changes it.
 func (app *app) saveSettings() {
 	form := app.settings
