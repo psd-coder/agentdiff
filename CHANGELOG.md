@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-11-03
 
 ### Added
 
+- AgentDiff runs on Windows and Linux. A release has an installer for Windows on x64, and the Linux app for x64 and ARM64 as a `.deb` and as a `.tar.gz` with `install.sh`. The README explains how to install them. On these systems, menus and tooltips show shortcuts as Ctrl+Shift+P, File holds Settings, and the windows keep the title bar of the system. On Windows, the app only runs agent CLIs that are `.exe` files.
 - OpenCode is a third agent, next to Claude Code and Codex. With OpenCode, the app works with an API key of Anthropic, OpenAI, OpenRouter and many other providers. The README explains how to set it up. On macOS, OpenCode cannot change the files of the repository, because it runs in a sandbox. On Windows and Linux, only its permission rules keep it read-only.
 - The agent can run in a dev container. Set Command in Settings > Agent to the command that runs the CLI there, such as `dev claude`. The README lists what the container needs.
+- The code snippets of the walkthroughs are colored with the code theme. You can select their lines and copy them without the line numbers.
+- The diff colors Astro, Vue and Svelte components. Their scripts are colored as TypeScript or JavaScript, and so are the expressions in the template.
 
 ### Changed
 
