@@ -100,8 +100,13 @@ func exitText(ctx context.Context, err error, delivered bool) string {
 var plainArg = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
 
 // commandLine is the run as a shell command a person can paste.
-func commandLine(dir, bin string, args []string) string {
-	parts := []string{shellQuote(bin)}
+func commandLine(dir string, env []string, bin string, args []string) string {
+	var parts []string
+	for _, variable := range env {
+		name, value, _ := strings.Cut(variable, "=")
+		parts = append(parts, name+"="+shellQuote(value))
+	}
+	parts = append(parts, shellQuote(bin))
 	for _, a := range args {
 		parts = append(parts, shellQuote(a))
 	}
@@ -175,7 +180,8 @@ type LogItem struct {
 }
 
 // Usage is the tokens a run spent. Input counts the tokens read without
-// the cache. CostUSD is what the CLI reports at API prices, 0 for Codex.
+// the cache. CostUSD is what the CLI reports at API prices, 0 for Codex;
+// OpenCode reports it for each step of the run.
 // The other counts add up every request of the run, and each request reads
 // the whole conversation again. Context is the size of the last request,
 // the number Claude Code shows; 0 when the CLI does not report it.
@@ -525,4 +531,54 @@ func codexCompleted(line codexLogLine) []LogItem {
 		return []LogItem{{Title: title, Detail: detail, Failed: failed}}
 	}
 	return []LogItem{{Title: "Item: " + it.Type, Detail: it.Text}}
+}
+
+func opencodeItems(raw []byte) []LogItem {
+	var line opencodeLine
+	if json.Unmarshal(raw, &line) != nil {
+		return []LogItem{{Title: "Output", Detail: string(raw)}}
+	}
+	part := line.Part
+	switch line.Type {
+	case "step_start":
+		return nil
+	case "text":
+		if part == nil {
+			return nil
+		}
+		return []LogItem{{Title: "Assistant", Detail: part.Text}}
+	case "reasoning":
+		if part == nil {
+			return nil
+		}
+		return []LogItem{{Title: "Thinking", Detail: part.Text}}
+	case "tool_use":
+		if part == nil || part.State == nil {
+			return nil
+		}
+		call := LogItem{Title: "Tool call", Detail: opencodeActivity(part, "")}
+		if part.State.Status == "error" {
+			return []LogItem{call, {Title: "Tool error", Detail: part.State.Error, Failed: true}}
+		}
+		return []LogItem{call, {Title: "Tool result", Detail: part.State.Output}}
+	case "step_finish":
+		if part == nil {
+			return nil
+		}
+		item := LogItem{Title: "Step finished: " + firstNonEmpty(part.Reason, "unknown")}
+		if opencodeDone(part) {
+			item.result = RunDone
+		}
+		if tokens := part.Tokens; tokens != nil {
+			output := tokens.Output + tokens.Reasoning
+			usage := Usage{Input: tokens.Input, Output: output, CacheRead: tokens.Cache.Read, CacheWrite: tokens.Cache.Write, CostUSD: part.Cost}
+			usage.Context = usage.Total()
+			item.Usage = &usage
+			item.Detail = fmt.Sprintf("%s, of them %s reasoning", usage, Count(tokens.Reasoning))
+		}
+		return []LogItem{item}
+	case "error":
+		return []LogItem{{Title: "Error", Detail: line.Error.text(), Failed: true, result: RunFailed}}
+	}
+	return []LogItem{{Title: firstNonEmpty(line.Type, "Output")}}
 }

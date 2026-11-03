@@ -85,8 +85,8 @@ func TestOwnCost(t *testing.T) {
 
 func TestResumedSession(t *testing.T) {
 	const session = "2b02f0c1-3491-4bdd-9e05-ee7282cd2510"
-	tricky := Request{Dir: "/my repo", SystemPrompt: "don't resume 0d5c3c1e-7c3b-4a5e-9f00-0123456789ab --resume x fork y"}
-	for _, p := range []Provider{Claude, Codex} {
+	tricky := Request{Dir: "/my repo", SystemPrompt: "don't resume 0d5c3c1e-7c3b-4a5e-9f00-0123456789ab --resume x fork y --session z"}
+	for _, p := range []Provider{Claude, Codex, OpenCode} {
 		for _, tt := range []struct {
 			name string
 			id   string
@@ -96,7 +96,8 @@ func TestResumedSession(t *testing.T) {
 				cfg := Config{Provider: p, Model: "m", Effort: "low", ExtraArgs: []string{"--x", "it's"}}
 				req := tricky
 				req.ResumeID, req.Fork = tt.id, tt.fork
-				line := commandLine(req.Dir, "/bin/"+string(p), Args(cfg, req))
+				bin, args := command(cfg, req, "/bin/"+string(p))
+				line := commandLine(req.Dir, providerEnv(cfg, req), bin, args)
 				if got := ResumedSession(p, line); got != tt.id {
 					t.Errorf("session %q, want %q\n%s", got, tt.id, line)
 				}

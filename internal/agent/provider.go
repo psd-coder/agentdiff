@@ -3,8 +3,9 @@ package agent
 type Provider string
 
 const (
-	Claude Provider = "claude"
-	Codex  Provider = "codex"
+	Claude   Provider = "claude"
+	Codex    Provider = "codex"
+	OpenCode Provider = "opencode"
 )
 
 // spec is what AgentDiff knows about the CLI of one provider.
@@ -15,8 +16,14 @@ type spec struct {
 	efforts []string
 	args    func(Config, Request) []string
 	// stdin is the text the CLI reads on its standard input.
-	stdin  func(Request) string
-	parser func(dir string) lineParser
+	stdin func(Request) string
+	// env are the variables the CLI gets on top of the login shell's, nil
+	// for none.
+	env func(Config, Request) []string
+	// sandbox runs the CLI in a macOS sandbox that refuses writes in the
+	// repository, for a CLI whose own rules can miss a write.
+	sandbox bool
+	parser  func(dir string) lineParser
 	// resumed reads the resumed session from the words of a logged
 	// command.
 	resumed  func(words []string) string
@@ -24,6 +31,10 @@ type spec struct {
 	// withoutSetup says what a run leaves out when the user's own setup
 	// is off.
 	withoutSetup string
+	// modelExample and modelHelp show how the CLI names a model, empty
+	// when the CLI takes the plain name of a model.
+	modelExample string
+	modelHelp    string
 }
 
 // specs are the providers, in the order the settings show them.
@@ -49,6 +60,21 @@ var specs = []spec{
 		resumed:      codexResumed,
 		logItems:     codexItems,
 		withoutSetup: "Codex runs without your config.toml, hooks, plugins, apps and the AGENTS.md files of the repository, so a model set in config.toml does not apply. Codex still reads ~/.codex/AGENTS.md and your skills, because the CLI has no option to leave them out.",
+	},
+	{
+		id:           OpenCode,
+		name:         "OpenCode",
+		efforts:      []string{"minimal", "low", "medium", "high", "xhigh", "max"},
+		args:         opencodeArgs,
+		stdin:        opencodePrompt,
+		env:          opencodeEnv,
+		sandbox:      true,
+		parser:       func(dir string) lineParser { return &opencodeParser{dir: dir} },
+		resumed:      opencodeResumed,
+		logItems:     opencodeItems,
+		modelExample: "provider/model, as opencode/glm-5.3-flash-free",
+		modelHelp:    "OpenCode takes the provider and the model. Run opencode models to list the models of your providers.",
+		withoutSetup: "OpenCode runs without your opencode.json files, plugins, MCP servers, skills and AGENTS.md files, and without the Claude Code files it reads otherwise. A provider that only your opencode.json sets up is missing then. A key from opencode auth login or from an environment variable still works.",
 	},
 }
 
@@ -84,6 +110,14 @@ func (provider Provider) Name() string { return specOf(provider).name }
 
 // Efforts lists the effort levels the CLI of the provider takes.
 func (provider Provider) Efforts() []string { return specOf(provider).efforts }
+
+// ModelExample is an example of a model name, empty when the CLI takes the
+// plain name of a model.
+func (provider Provider) ModelExample() string { return specOf(provider).modelExample }
+
+// ModelHelp says how the CLI names a model, empty when the CLI takes the
+// plain name of a model.
+func (provider Provider) ModelHelp() string { return specOf(provider).modelHelp }
 
 // WithoutUserSetup says what a run of the provider leaves out when the
 // user's own setup is off.

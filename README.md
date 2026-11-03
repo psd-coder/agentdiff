@@ -10,6 +10,7 @@ You need macOS 12 or later, on Apple silicon or Intel. You also need at least on
 
 - [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), tested with 2.1.310
 - [Codex](https://github.com/openai/codex) (`codex`), tested with 0.162.1
+- [OpenCode](https://opencode.ai) (`opencode`), tested with 1.18.25. It accepts the keys of Anthropic, OpenAI, OpenRouter and many other providers, see [Use an API key](#use-an-api-key)
 
 1. Download `AgentDiff.dmg` from the [latest release](https://github.com/psd-coder/agentdiff/releases/latest).
 2. Open the disk image and drag AgentDiff to Applications.
@@ -34,9 +35,23 @@ The app reads the `PATH` of your login shell (`$SHELL -l -i`), so it finds the C
 open -n /Applications/AgentDiff.app --args "$PWD"
 ```
 
+## Use an API key
+
+Instead of a subscription, the agent can use your API key, and the provider charges you for the tokens of each run. The agent log shows the tokens of each run, and OpenCode also reports their price.
+
+OpenCode is the simplest way, because one CLI takes the keys of many providers:
+
+1. Install OpenCode with `brew install opencode` or `npm install -g opencode-ai`.
+2. Give OpenCode your key. Run `opencode auth login` and pick the provider, or export the key in your shell profile, such as `~/.zshrc`: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY`. AgentDiff reads the variables of your login shell, so the key reaches OpenCode when you start the app from the Dock too.
+3. In Settings > Agent, pick OpenCode and set Model to `provider/model`, for example `anthropic/claude-sonnet-5-5`, `openai/gpt-5.5` or a model of `openrouter`. A model name without its provider fails with "Model not found". `opencode models` lists the models of every provider that has a key. To try OpenCode without a key, use one of its free models, such as `opencode/glm-5.3-flash-free`.
+
+Effort is passed to OpenCode as `--variant`. The variants differ from model to model, and OpenCode ignores a variant that the model does not have.
+
+Claude Code and Codex take a key too. Claude Code uses `ANTHROPIC_API_KEY` when your shell exports it. For Codex, run `printenv OPENAI_API_KEY | codex login --with-api-key`.
+
 ## Features
 
-- **Walkthrough by your own agent**: Claude Code or Codex reads the changes through its CLI on your subscription. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
+- **Walkthrough by your own agent**: Claude Code, Codex or OpenCode reads the changes through its CLI, on your subscription or your API key. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
 - **Go deeper into any step**: Go deeper opens a new walkthrough of the step, one level closer to the code. Each level forks the agent session of the level above, so the agent keeps what it learned on the way down. When the overview is done, the app writes the deeper walkthrough of every step, 3 at a time, so Go deeper usually opens at once. Your questions and a click on Go deeper start at once and do not wait for these walkthroughs. Settings can turn this off.
 - **Questions in the side panel**: a question about a step or a page opens a conversation next to the walkthrough, so you keep your place. The answers are short walkthroughs with snippets, follow-up questions go on in the same agent session, and every conversation stays listed under its step and on the Questions & comments page.
 - **Checklist**: by default the overview also answers a checklist in a sentence or two per question: data changes, UI changes, API changes, and the changes that are not beautiful and why.
@@ -47,7 +62,7 @@ open -n /Applications/AgentDiff.app --args "$PWD"
 - **Separate discussion threads**: the first question of a thread forks the agent session that wrote the explanation, so it starts with that context. Later questions go on in the thread's own session, and threads never mix.
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
 - **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, and how the run ended. Each run shows its context size, the tokens in its last request, as Claude Code does. Codex does not report the context size, so a Codex run shows the tokens it processed. Every request reads the whole conversation again, so this number is much larger. The run details list the processed tokens (input, cache read, cache write, output) and the cost at API prices that Claude reports. The panel shows the context its runs built up. A run that resumes or forks an earlier session, as a deeper walkthrough or a follow-up question does, starts with that session's context, so it counts only the context it added. When no run reports a context size, the panel shows the processed total. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
-- **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused. By default a run also leaves out your own agent setup, so your hooks do not run during a review.
+- **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused. OpenCode gets the same allow list, and it refuses a command with a `>` redirect or `--output`. OpenCode also runs in a macOS sandbox that refuses every write in the repository. By default a run also leaves out your own agent setup, so your hooks do not run during a review.
 - **Settings**: agent, model, effort, a model and effort for automatic runs, binary path, extra CLI arguments, prompts.
 - **Your own shortcuts**: any command can get a shortcut in Settings, also the ones outside the menu bar, as Mark File as Viewed.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
@@ -93,7 +108,7 @@ It fits when you:
 ## Reviewing a change
 
 1. Pick a project and a branch in the toolbar. The project picker lists the repositories you opened before and adds a new one. Remove from List in the context menu of a project removes it from the list after you confirm (its saved reviews stay). The branch picker lists the local and remote branches, and opens the worktree of a branch that is checked out in another worktree. The button next to it opens Compare, which picks another base for the branch or a custom range. Then pick a scope in the top part of the sidebar: Uncommitted changes (only for the checked-out branch), All changes of the branch since its base, or one of its commits. The list has every commit of the branch or range. It reads them 50 at a time, and reads the next ones when you scroll near the end of the list. The count next to All changes is the number of all commits. A project opens on its uncommitted changes. When there are none, it opens All changes, or the newest commit when the branch has no base, as main itself. Picking the checked-out branch does the same. A branch review belongs to the branch: it stays the same after a checkout, and it opens too when you pick the branch while another one is checked out. The app reads the checked-out branch again when its window gets focus and on Refresh. Uncommitted changes have one review per repository, because they stay in the working tree when you check out another branch.
-2. On the Overview page of a commit, the commit message comes first: its subject, its body, the short hash, the author and the date. Click Explain changes with Claude Code (or Codex). The walkthrough appears when the agent is done, and the sidebar regroups the files. The Flat and Grouped switch above the files lists them by path instead, with each file's folder in small text under its name. Hide viewed files leaves the files you marked viewed out of the list, in both flat and grouped mode. A group leaves the list when all its files are viewed. The open file leaves the list too. Next and previous file follow the order the sidebar shows, so with viewed files hidden they only step through the files left to review. You can open another scope while the agent writes. The row of the scope in the sidebar shows a spinner while the overview runs. When the overview ends while another scope is open, the row shows a blue dot, or a red dot when the run failed, until you open that scope again. When a run you started ends while another app is in front, AgentDiff shows a notification, and a click on it opens the result. The Dock icon shows the number of results you have not seen yet. Stop cancels the run, and the overview you had before stays under a "Stopped" note. When the CLI is missing or fails, the overview shows its error output.
+2. On the Overview page of a commit, the commit message comes first: its subject, its body, the short hash, the author and the date. Click Explain changes with Claude Code (or Codex, or OpenCode). The walkthrough appears when the agent is done, and the sidebar regroups the files. The Flat and Grouped switch above the files lists them by path instead, with each file's folder in small text under its name. Hide viewed files leaves the files you marked viewed out of the list, in both flat and grouped mode. A group leaves the list when all its files are viewed. The open file leaves the list too. Next and previous file follow the order the sidebar shows, so with viewed files hidden they only step through the files left to review. You can open another scope while the agent writes. The row of the scope in the sidebar shows a spinner while the overview runs. When the overview ends while another scope is open, the row shows a blue dot, or a red dot when the run failed, until you open that scope again. When a run you started ends while another app is in front, AgentDiff shows a notification, and a click on it opens the result. The Dock icon shows the number of results you have not seen yet. Stop cancels the run, and the overview you had before stays under a "Stopped" note. When the CLI is missing or fails, the overview shows its error output.
 3. Read the steps. Click a snippet's `path:line` to see it in the diff. Go deeper on a step opens a deeper walkthrough on its own page. Ask about this step opens a conversation in the side panel, with the questions asked about that step before. Open as page shows a conversation full width. The breadcrumbs and the sidebar lead back up. After a click on a snippet or a link, Back in the toolbar (Cmd+[) returns to where you were, at the same scroll place, and Forward (Cmd+]) goes on again.
 4. Open a group with Review group, or with its name in the sidebar, to read all its files one after the other, or open one file. The chevron next to a group's name shows and hides its files, as do Right and Left. Mark a file Viewed when you are done with it. Mark all as viewed on the group page marks every file of the group. All files diff under Review in the sidebar (Cmd+2) shows the diffs of every file of the scope on one page, in the order the sidebar lists them, with the group titles between them. On these pages, the chevron before a file's name folds its diff. A file folds when you mark it Viewed, and it unfolds when you take the mark off.
 5. Comment: `+` in the gutter for one line, or click a line number and Shift+click another to select a range, then use `+` on a selected line or Comment on lines. Comment on file comments on the whole file. The thread opens on the right. Comment saves your note. Ask agent (Cmd+Enter) also sends it to the review agent. While the agent answers, Comment still works, and Ask agent is off until the answer ends or you press Stop.
@@ -161,8 +176,8 @@ Shortcuts lists every command with its shortcut. Click a shortcut and press the 
 | Field | Default | Purpose |
 | --- | --- | --- |
 | Agent | Claude Code | Which CLI writes the explanation and answers threads |
-| Model | CLI default | Passed as `--model` (Claude) or `-m` (Codex) |
-| Effort | CLI default | Passed as `--effort` (Claude) or `-c model_reasoning_effort=` (Codex) |
+| Model | CLI default | Passed as `--model` (Claude) or `-m` (Codex, OpenCode). OpenCode takes `provider/model` |
+| Effort | CLI default | Passed as `--effort` (Claude), `-c model_reasoning_effort=` (Codex) or `--variant` (OpenCode) |
 | Model for automatic runs | same as Model | Used by the overview and the deeper walkthroughs written ahead |
 | Effort for automatic runs | `low` | Used by the overview and the deeper walkthroughs written ahead |
 | Binary | found on the login shell's `PATH` | Full path to the CLI, `~/` allowed |
@@ -171,7 +186,7 @@ Shortcuts lists every command with its shortcut. Click a shortcut and press the 
 
 Automatic runs are the runs the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions, follow-ups, threads and a click on Go deeper use Model and Effort. Each run in the agent log shows the effort it ran at.
 
-While Load my own instructions, skills, hooks and MCP servers is off, a run gets only the prompts of the app. Claude Code runs with `--safe-mode`, so it leaves out your `CLAUDE.md` files, skills, plugins, hooks and MCP servers, and keeps your login and permission rules. Your Claude Code version must have this option. Codex runs with `--ignore-user-config`, with its hooks, plugins and apps features turned off, and with `project_doc_max_bytes=0`. So it leaves out your `config.toml`, hooks, plugins, apps and the `AGENTS.md` files of the repository. A model that only `config.toml` sets does not apply, so set it in Model. Codex has no option to leave out `~/.codex/AGENTS.md` or your skills, so those still reach a Codex run. With the setting on, your hooks run on each run of the agent, outside the read-only rules of the app.
+While Load my own instructions, skills, hooks and MCP servers is off, a run gets only the prompts of the app. Claude Code runs with `--safe-mode`, so it leaves out your `CLAUDE.md` files, skills, plugins, hooks and MCP servers, and keeps your login and permission rules. Your Claude Code version must have this option. Codex runs with `--ignore-user-config`, with its hooks, plugins and apps features turned off, and with `project_doc_max_bytes=0`. So it leaves out your `config.toml`, hooks, plugins, apps and the `AGENTS.md` files of the repository. A model that only `config.toml` sets does not apply, so set it in Model. Codex has no option to leave out `~/.codex/AGENTS.md` or your skills, so those still reach a Codex run. OpenCode gets an empty directory as its global config, and the config of the repository is turned off. A run then has none of your `opencode.json` files, plugins, MCP servers, skills and `AGENTS.md` files, and none of the Claude Code files and skills of other agents that OpenCode reads otherwise. A provider that only your `opencode.json` sets up is missing then. A key from `opencode auth login` or from an environment variable still works. With the setting on, your hooks run on each run of the agent, outside the read-only rules of the app.
 
 Overviews written before the walkthrough still show as they were. Regenerate turns one into a walkthrough. The overview, each walkthrough and each thread keep one session for each agent. After you switch agents, the next question goes on in the earlier session of the new agent. That session does not hold what the other agent answered in between. When the new agent has no session yet, the question starts a new one, with the thread's anchor and its earlier messages. Regenerate on a deeper walkthrough drops its sessions of every agent, because they hold the conversation about the old walkthrough.
 
@@ -232,7 +247,7 @@ A repository can give its own prompts in `.agentdiff/prompts/`, with the file na
 | `go tool mygo build` | Builds `AgentDiff.app` and a `.dmg` into `build/darwin-arm64/` |
 | `go test ./...` | Runs all tests, with no network and no agent calls |
 | `AGENTDIFF_SNAPSHOTS=/tmp/snaps go test ./internal/app` | Also writes PNG screenshots of the main screens, rendered without a window, into an existing directory |
-| `AGENTDIFF_E2E=claude go test -run TestEndToEnd -v ./internal/app` | Asks a real agent (`claude` or `codex`) to explain this repository's last commit, then asks a question in a forked session. It uses your subscription. `AGENTDIFF_E2E_MODEL` sets the model |
+| `AGENTDIFF_E2E=claude go test -run TestEndToEnd -v ./internal/app` | Asks a real agent (`claude`, `codex` or `opencode`) to explain this repository's last commit, then asks a question in a forked session. It uses your subscription or API key. `AGENTDIFF_E2E_MODEL` sets the model |
 
 ## Project layout
 
@@ -241,7 +256,7 @@ main.go                   picks the repository to open and starts the app
 internal/app              window, app state, agent runs and streaming
 internal/app/view*.go     one file per screen: overview, files, thread panel, feedback, settings
 internal/gitx             git CLI wrapper: scopes, changed files, file contents, commits
-internal/agent            claude and codex CLI runner: arguments, stream parsing, login-shell PATH
+internal/agent            claude, codex and opencode CLI runner: arguments, stream parsing, login-shell PATH
 internal/review           review model, prompt templates and parsing, feedback export
 internal/store            JSON files for settings and reviews
 ```
@@ -257,7 +272,7 @@ MyGo's native UI ships a diff viewer with gutter buttons and room for comments u
 The agent can read the files around the change, the commit messages and the tests. It also sees the reasons behind a change that a diff does not show, which is what the questions about non-pretty changes ask for.
 
 **Can the review agent change my code?**
-Codex cannot: it runs in its `read-only` sandbox. Claude refuses every Bash call that matches neither the app's allow list nor an allow rule in your own Claude settings. So Claude can only write when your settings allow a write command. Your coding agent applies the feedback, in its own session.
+Codex cannot: it runs in its `read-only` sandbox. Claude refuses every Bash call that matches neither the app's allow list nor an allow rule in your own Claude settings. So Claude can only write when your settings allow a write command. OpenCode refuses every tool except reading files and the allowed read commands, and its macOS sandbox stops any change to the files of the repository. Your coding agent applies the feedback, in its own session.
 
 **When should I not use it?**
 For a two-line change: `git diff` is faster. `agentdiff` does not post to GitHub either. Review pull requests of other people in GitHub.

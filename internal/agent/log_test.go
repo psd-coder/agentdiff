@@ -117,7 +117,7 @@ func TestRunLogExit(t *testing.T) {
 }
 
 func TestCommandLine(t *testing.T) {
-	got := commandLine("/my repo", "/bin/claude", []string{"-p", "Bash(git diff:*)", "it's"})
+	got := commandLine("/my repo", nil, "/bin/claude", []string{"-p", "Bash(git diff:*)", "it's"})
 	want := `cd '/my repo' && /bin/claude -p 'Bash(git diff:*)' 'it'\''s'`
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
@@ -262,6 +262,12 @@ func TestSummarizeEdgeCases(t *testing.T) {
 			[]LogItem{{Title: "Tool result, exit 1", Detail: "nope", Failed: true}},
 		},
 		{
+			"opencode error", OpenCode,
+			LogEntry{Kind: LogStdout, Text: `{"type":"error","error":{"name":"APIError","data":{"message":"invalid x-api-key"}}}`},
+			[]LogItem{{Title: "Error", Detail: "invalid x-api-key", Failed: true, result: RunFailed}},
+		},
+		{"opencode step start", OpenCode, LogEntry{Kind: LogStdout, Text: `{"type":"step_start","part":{}}`}, nil},
+		{
 			"turn failed", Codex,
 			LogEntry{Kind: LogStdout, Text: `{"type":"turn.failed","error":{"message":"quota"}}`},
 			[]LogItem{{Title: "Turn failed", Detail: "quota", Failed: true, result: RunFailed}},
@@ -273,6 +279,35 @@ func TestSummarizeEdgeCases(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSummarizeOpenCode(t *testing.T) {
+	items := fixtureItems(t, OpenCode, "opencode_tools.jsonl")
+	want := []string{
+		"Tool call", "Tool result", "Tool call", "Tool error", "Tool call", "Tool result",
+		"Step finished: tool-calls", "Assistant", "Step finished: stop",
+	}
+	if !slices.Equal(titles(items), want) {
+		t.Fatalf("titles = %q", titles(items))
+	}
+	if items[2].Detail != "Bash: git log -1 > /tmp/x_oc_test" || !items[3].Failed || !strings.HasPrefix(items[3].Detail, "The user has specified a rule") {
+		t.Errorf("denied call = %+v, %+v", items[2], items[3])
+	}
+	if Status(items[:7]) != RunUnknown || Status(items) != RunDone {
+		t.Errorf("status after tool calls = %v, at the end = %v", Status(items[:7]), Status(items))
+	}
+	if detail := items[8].Detail; detail != "105 tokens in context, 105 tokens processed: 100 in, 0 cache read, 0 cache write, 5 out, of them 0 reasoning" {
+		t.Errorf("usage detail = %q", detail)
+	}
+}
+
+func TestOpenCodeUsage(t *testing.T) {
+	line := `{"type":"step_finish","part":{"reason":"stop","tokens":{"input":40,"output":5,"reasoning":3,"cache":{"read":60,"write":2}},"cost":0.0125}}`
+	items := Summarize(OpenCode, LogEntry{Kind: LogStdout, Text: line})
+	want := Usage{Input: 40, Output: 8, CacheRead: 60, CacheWrite: 2, CostUSD: 0.0125, Context: 110}
+	if len(items) != 1 || items[0].Usage == nil || *items[0].Usage != want {
+		t.Errorf("items = %+v", items)
 	}
 }
 

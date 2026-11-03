@@ -375,18 +375,19 @@ func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.P
 	for i, p := range providers {
 		names[i] = p.Name()
 	}
-	efforts := providers[form.provider].Efforts()
+	provider := providers[form.provider]
+	efforts := provider.Efforts()
 	setup := "The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app."
 	if !form.userSetup {
-		setup = providers[form.provider].WithoutUserSetup() + " The Prompts tab holds the instructions it gets."
+		setup = provider.WithoutUserSetup() + " The Prompts tab holds the instructions it gets."
 	}
 	labeledForm(ctx, func() {
 		ui.Field(ctx, "Agent:", func() {
 			ui.Segmented(ctx, &form.provider, names...).Label("Agent").AlignSelf(ui.Start)
-		}).Description(status[providers[form.provider]])
+		}).Description(status[provider])
 		ui.Field(ctx, "Model:", func() {
-			ui.TextInput(ctx, &form.model).Placeholder("CLI default").Label("Model")
-		})
+			ui.TextInput(ctx, &form.model).Placeholder(cmp.Or(provider.ModelExample(), "CLI default")).Label("Model")
+		}).Description(provider.ModelHelp())
 		ui.Field(ctx, "Effort:", func() {
 			popUp(ctx, &form.effort, append([]string{defaultEffort}, efforts...)).Label("Effort")
 		})

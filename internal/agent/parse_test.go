@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -363,4 +364,118 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func TestOpenCodeConfig(t *testing.T) {
+	var config struct {
+		Share string `json:"share"`
+		Agent map[string]struct {
+			Prompt     string          `json:"prompt"`
+			Permission json.RawMessage `json:"permission"`
+		} `json:"agent"`
+	}
+	if err := json.Unmarshal([]byte(opencodeConfig("be brief")), &config); err != nil {
+		t.Fatal(err)
+	}
+	agent := config.Agent["agentdiff"]
+	if config.Share != "disabled" || agent.Prompt != "be brief" {
+		t.Errorf("config = %+v", config)
+	}
+	permission := string(agent.Permission)
+	for _, rules := range []string{
+		`{"*":"deny","read":"allow",`,
+		`"external_directory":"deny","bash":{"*":"deny","git diff":"allow","git diff *":"allow",`,
+		`"wc *":"allow","*\u003e*":"deny","*--output*":"deny"}}`,
+	} {
+		if !strings.Contains(permission, rules) {
+			t.Errorf("permission does not hold %s in order:\n%s", rules, permission)
+		}
+	}
+	var withoutPrompt struct {
+		Agent map[string]map[string]any `json:"agent"`
+	}
+	if err := json.Unmarshal([]byte(opencodeConfig("")), &withoutPrompt); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := withoutPrompt.Agent["agentdiff"]["prompt"]; ok {
+		t.Error("an empty system prompt replaces the prompt of OpenCode")
+	}
+}
+
+func TestOpenCodeEnvKeepsUserSetup(t *testing.T) {
+	isolated := strings.Join(opencodeEnv(Config{}, Request{}), "\n")
+	own := strings.Join(opencodeEnv(Config{UserSetup: true}, Request{}), "\n")
+	for _, name := range []string{"OPENCODE_CONFIG_DIR=", "OPENCODE_DISABLE_PROJECT_CONFIG=1", "OPENCODE_DISABLE_CLAUDE_CODE=1", "OPENCODE_DISABLE_EXTERNAL_SKILLS=1"} {
+		if !strings.Contains(isolated, name) || strings.Contains(own, name) {
+			t.Errorf("%s: without the user's setup %v, with it %v", name, strings.Contains(isolated, name), strings.Contains(own, name))
+		}
+	}
+	if !strings.HasPrefix(own, "OPENCODE_CONFIG_CONTENT=") {
+		t.Errorf("with the user's setup = %q", own)
+	}
+}
+
+func TestOpenCodeFixtures(t *testing.T) {
+	t.Run("tools", func(t *testing.T) {
+		const session = "ses_e5e2a9c03ffewCdJfh3pImwkOs"
+		events := parseFixture(t, &opencodeParser{dir: "/Users/me/repo"}, "opencode_tools.jsonl")
+		assertEvents(t, events, []Event{
+			{Kind: EventSession, SessionID: session},
+			{Kind: EventActivity, Text: "Read: README.md"},
+			{Kind: EventActivity, Text: "Bash: git log -1 > /tmp/x_oc_test"},
+			{Kind: EventActivity, Text: "Bash: git log -1 --oneline"},
+			{Kind: EventText, Text: "DONE-TEXT"},
+			{Kind: EventDone, Text: "DONE-TEXT", SessionID: session},
+		})
+	})
+	t.Run("error", func(t *testing.T) {
+		parser := &opencodeParser{}
+		assertEvents(t, parseFixture(t, parser, "opencode_error.jsonl"), []Event{{Kind: EventSession, SessionID: "ses_e60e60795ffetobe42K4hQutc0"}})
+		if got := errString(parser.streamError()); got != "invalid x-api-key" {
+			t.Errorf("streamError = %q", got)
+		}
+	})
+}
+
+func TestOpenCodeParserEdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		lines     []string
+		want      []Event
+		streamErr string
+	}{
+		{
+			name:  "empty and malformed lines",
+			lines: []string{"", "{", "[]", `{"type":"text"}`, `{"type":"tool_use"}`, `{"type":"step_finish"}`},
+		},
+		{
+			name: "texts of several steps join into the answer",
+			lines: []string{
+				`{"type":"text","part":{"text":"Let me look."}}`,
+				`{"type":"step_finish","part":{"reason":"tool-calls"}}`,
+				`{"type":"text","part":{"text":""}}`,
+				`{"type":"text","part":{"text":"Done."}}`,
+				`{"type":"step_finish","part":{"reason":"length"}}`,
+			},
+			want: []Event{
+				{Kind: EventText, Text: "Let me look."},
+				{Kind: EventText, Text: "\n\nDone."},
+				{Kind: EventDone, Text: "Let me look.\n\nDone."},
+			},
+		},
+		{
+			name:      "error without a message gives its name",
+			lines:     []string{`{"type":"error","error":{"name":"ProviderAuthError","data":{}}}`, `{"type":"error"}`},
+			streamErr: "ProviderAuthError\nopencode reported an error",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := &opencodeParser{}
+			assertEvents(t, parseLines(parser, tt.lines...), tt.want)
+			if got := errString(parser.streamError()); got != tt.streamErr {
+				t.Errorf("streamError = %q, want %q", got, tt.streamErr)
+			}
+		})
+	}
 }

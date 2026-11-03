@@ -15,12 +15,12 @@ import (
 
 // TestEndToEnd asks a real agent for an overview of the last commit of
 // this repository, then a question in a forked session. It uses the
-// user's subscription, so it only runs with AGENTDIFF_E2E set to the
-// provider: claude or codex.
+// user's subscription or API key, so it only runs with AGENTDIFF_E2E set
+// to the provider: claude, codex or opencode.
 func TestEndToEnd(t *testing.T) {
 	provider := agent.Provider(os.Getenv("AGENTDIFF_E2E"))
 	if provider == "" {
-		t.Skip("set AGENTDIFF_E2E=claude or codex")
+		t.Skip("set AGENTDIFF_E2E=claude, codex or opencode")
 	}
 	cfg := agent.Config{Provider: provider, Model: os.Getenv("AGENTDIFF_E2E_MODEL")}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
