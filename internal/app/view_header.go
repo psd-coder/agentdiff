@@ -33,7 +33,7 @@ func (app *app) toolbar(ctx *ui.Context) {
 			app.branchPicker(ctx)
 		}).Shrink(1).Label("Changes")
 		ui.Spacer(ctx)
-		cfg := app.cfg.Agent
+		cfg := app.cfg.Agent()
 		label := cfg.Provider.Name()
 		if cfg.Model != "" {
 			label += " · " + cfg.Model

@@ -15,7 +15,7 @@ const sessionsAnswer = "```json\n" + `{"summary": "s", "steps": [{"title": "A", 
 
 // useAgent makes the next runs go to provider, in a new session id.
 func useAgent(app *app, fake *fakeAgent, provider agent.Provider, id string) {
-	app.cfg.Agent = agent.Config{Provider: provider}
+	app.cfg.SetAgent(agent.Config{Provider: provider})
 	fake.answer(id, sessionsAnswer)
 }
 
@@ -166,7 +166,7 @@ func TestFailedStartKeepsSessions(t *testing.T) {
 	idle(t, app, "the claude runs")
 	walk := app.rev.Walks[0]
 
-	app.cfg.Agent = agent.Config{Provider: agent.Codex}
+	app.cfg.SetAgent(agent.Config{Provider: agent.Codex})
 	fake.fail(errors.New("codex: executable file not found in $PATH"))
 	app.generateOverview()
 	app.ask(app.rev, th, "And codex?")

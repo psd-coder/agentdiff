@@ -17,18 +17,38 @@ import (
 
 func TestConfigRoundTrip(t *testing.T) {
 	store := Store{Dir: t.TempDir()}
-	if got := store.LoadConfig(); got.Agent.Provider != agent.Claude || got.Prompts != nil {
+	if got := store.LoadConfig(); got.Agent().Provider != agent.Claude || got.Prompts != nil {
 		t.Fatalf("default config = %+v", got)
 	}
 	cfg := DefaultConfig()
-	cfg.Agent = agent.Config{Provider: agent.Codex, Model: "gpt-5"}
+	cfg.SetAgent(agent.Config{Provider: agent.OpenCode, Model: "opencode/glm"})
+	cfg.SetAgent(agent.Config{Provider: agent.Codex, Model: "gpt-5"})
 	cfg.Prompts = review.Prompts{review.PromptSystem: "Be brief."}
 	if err := store.SaveConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
 	got := store.LoadConfig()
-	if got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.Prompts[review.PromptSystem] != "Be brief." {
+	if got.Agent().Provider != agent.Codex || got.Agent().Model != "gpt-5" || got.Prompts[review.PromptSystem] != "Be brief." {
 		t.Errorf("loaded config = %+v", got)
+	}
+	if model := got.AgentOf(agent.OpenCode).Model; model != "opencode/glm" {
+		t.Errorf("OpenCode model = %q, want opencode/glm", model)
+	}
+}
+
+func TestLoadConfigMovesTheAgentOfAnOlderConfig(t *testing.T) {
+	store := Store{Dir: t.TempDir()}
+	older := `{"agent": {"provider": "codex", "model": "gpt-5", "binary": "/bin/codex"}}`
+	if err := os.WriteFile(filepath.Join(store.Dir, "config.json"), []byte(older), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := store.LoadConfig()
+	want := agent.Config{Provider: agent.Codex, Model: "gpt-5", AutoEffort: "low", Binary: "/bin/codex"}
+	if got := cfg.Agent(); !reflect.DeepEqual(got, want) {
+		t.Errorf("agent = %+v, want %+v", got, want)
+	}
+	if got := cfg.AgentOf(agent.Claude); got.Model != "" || got.Binary != "" {
+		t.Errorf("Claude Code got the settings of Codex: %+v", got)
 	}
 }
 
@@ -38,14 +58,19 @@ func TestAutoEffortDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := store.LoadConfig()
-	if cfg.Agent.AutoEffort != "low" {
-		t.Fatalf("an older config got auto effort %q", cfg.Agent.AutoEffort)
+	if got := cfg.Agent().AutoEffort; got != "low" {
+		t.Fatalf("an older config got auto effort %q", got)
 	}
-	cfg.Agent.AutoEffort = ""
+	if got := cfg.AgentOf(agent.Codex).AutoEffort; got != "low" {
+		t.Fatalf("an agent without settings got auto effort %q", got)
+	}
+	cleared := cfg.Agent()
+	cleared.AutoEffort = ""
+	cfg.SetAgent(cleared)
 	if err := store.SaveConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
-	if got := store.LoadConfig().Agent.AutoEffort; got != "" {
+	if got := store.LoadConfig().Agent().AutoEffort; got != "" {
 		t.Errorf("a cleared auto effort came back as %q", got)
 	}
 }
@@ -56,7 +81,7 @@ func TestLoadConfigCorrupt(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{oops"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := store.LoadConfig(); got.Agent.Provider != agent.Claude {
+	if got := store.LoadConfig(); got.Agent().Provider != agent.Claude {
 		t.Errorf("corrupt config = %+v, want defaults", got)
 	}
 	if data, err := os.ReadFile(path + ".bad"); err != nil || string(data) != "{oops" {

@@ -23,8 +23,8 @@ const (
 	sameEffort    = "Same as above"
 )
 
+// agentForm holds how to run one agent.
 type agentForm struct {
-	provider   int
 	model      string
 	effort     string
 	autoModel  string
@@ -39,13 +39,11 @@ func newAgentForm(cfg agent.Config) agentForm {
 		model: cfg.Model, effort: cmp.Or(cfg.Effort, defaultEffort),
 		autoModel: cfg.AutoModel, autoEffort: cmp.Or(cfg.AutoEffort, sameEffort),
 		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), userSetup: cfg.UserSetup,
-		provider: max(slices.Index(providers, cfg.Provider), 0),
 	}
 	return form
 }
 
-func (form agentForm) config() agent.Config {
-	provider := providers[form.provider]
+func (form agentForm) config(provider agent.Provider) agent.Config {
 	return agent.Config{
 		Provider:   provider,
 		Model:      strings.TrimSpace(form.model),
@@ -79,8 +77,10 @@ type settingsForm struct {
 	saved settingsValues
 }
 
-// settingsValues are the fields of the settings form.
+// settingsValues are the fields of the settings form. The agent form
+// holds the fields of the chosen provider.
 type settingsValues struct {
+	provider  int
 	agent     agentForm
 	ahead     bool
 	theme     int
@@ -127,7 +127,8 @@ func (app *app) openSettings() {
 	form := &settingsForm{
 		status:    map[agent.Provider]string{},
 		prompts:   app.newPromptForm(),
-		agent:     newAgentForm(app.cfg.Agent),
+		provider:  max(slices.Index(providers, app.cfg.Provider), 0),
+		agent:     newAgentForm(app.cfg.Agent()),
 		ahead:     app.cfg.DeeperAhead,
 		theme:     themeIndex(app.cfg.Theme),
 		codeTheme: codeThemeNamed(app.cfg.CodeTheme).name,
@@ -172,8 +173,15 @@ func (app *app) openSettings() {
 func (app *app) saveSettings() {
 	form := app.settings
 	themeChanged := form.theme != form.saved.theme
+	if form.agent != form.saved.agent {
+		app.cfg.SetAgent(form.agent.config(providers[form.saved.provider]))
+	}
+	if form.provider != form.saved.provider {
+		app.cfg.Provider = providers[form.provider]
+		form.agent = newAgentForm(app.cfg.Agent())
+	}
 	form.saved = form.settingsValues
-	app.cfg.Agent, app.cfg.DeeperAhead = form.agent.config(), form.ahead
+	app.cfg.DeeperAhead = form.ahead
 	app.cfg.Theme = ""
 	if form.theme > 0 {
 		app.cfg.Theme = string(themes[form.theme])
@@ -259,7 +267,7 @@ func (app *app) settingsView(ctx *ui.Context) {
 			ui.Column(ctx).Gap(14).Padding(20, 24).Bind(&app.settingsBody).Children(func() {
 				switch form.tab {
 				case agentTab:
-					app.agentFields(ctx, &form.agent, form.status, &form.ahead)
+					app.agentFields(ctx, form)
 				case promptsTab:
 					app.promptsTab(ctx, &form.prompts)
 				case appearanceTab:
@@ -370,12 +378,12 @@ func (app *app) appearanceTab(ctx *ui.Context, form *settingsForm) {
 	})
 }
 
-func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.Provider]string, ahead *bool) {
+func (app *app) agentFields(ctx *ui.Context, settings *settingsForm) {
 	names := make([]string, len(providers))
 	for i, p := range providers {
 		names[i] = p.Name()
 	}
-	provider := providers[form.provider]
+	form, provider := &settings.agent, providers[settings.provider]
 	efforts := provider.Efforts()
 	setup := "The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app."
 	if !form.userSetup {
@@ -383,8 +391,8 @@ func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.P
 	}
 	labeledForm(ctx, func() {
 		ui.Field(ctx, "Agent:", func() {
-			ui.Segmented(ctx, &form.provider, names...).Label("Agent").AlignSelf(ui.Start)
-		}).Description(status[provider])
+			ui.Segmented(ctx, &settings.provider, names...).Label("Agent").AlignSelf(ui.Start)
+		}).Description(settings.status[provider])
 		ui.Field(ctx, "Model:", func() {
 			ui.TextInput(ctx, &form.model).Placeholder(cmp.Or(provider.ModelExample(), "CLI default")).Label("Model")
 		}).Description(provider.ModelHelp())
@@ -399,7 +407,7 @@ func (app *app) agentFields(ctx *ui.Context, form *agentForm, status map[agent.P
 			popUp(ctx, &form.autoEffort, append([]string{sameEffort}, efforts...)).Label("Effort for automatic runs")
 		}).Description("Automatic runs are the ones the app starts by itself: the overview and the deeper walkthroughs it writes ahead. Your questions and Go deeper use the model and effort above.")
 		ui.Field(ctx, "Write ahead:", func() {
-			ui.Checkbox(ctx, ahead, "Write the deeper walkthrough of every step with the overview")
+			ui.Checkbox(ctx, &settings.ahead, "Write the deeper walkthrough of every step with the overview")
 		}).Description(fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead))
 		ui.Divider(ctx)
 		ui.Field(ctx, "Binary:", func() {

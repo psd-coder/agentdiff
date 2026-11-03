@@ -1,11 +1,13 @@
 package store
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,7 +22,10 @@ import (
 const maxRecent = 10
 
 type Config struct {
-	Agent agent.Config `json:"agent"`
+	// Provider is the agent that runs. Agents holds how to run each agent,
+	// so each one keeps its model and options when the user switches.
+	Provider agent.Provider                  `json:"provider"`
+	Agents   map[agent.Provider]agent.Config `json:"agents,omitempty"`
 	// Prompts are the prompts the user rewrote in the settings.
 	Prompts review.Prompts `json:"prompts,omitempty"`
 	Unified bool           `json:"unified,omitempty"`
@@ -47,7 +52,34 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return Config{Agent: agent.Config{Provider: agent.Claude, AutoEffort: "low"}, DeeperAhead: true}
+	return Config{Provider: agent.Claude, DeeperAhead: true}
+}
+
+// Agent is how to run the agent that runs.
+func (config Config) Agent() agent.Config {
+	return config.AgentOf(config.Provider)
+}
+
+// AgentOf is how to run an agent. An agent the user has not set up yet
+// gets the low effort for its automatic runs.
+func (config Config) AgentOf(provider agent.Provider) agent.Config {
+	cfg, ok := config.Agents[provider]
+	if !ok {
+		cfg = agent.Config{AutoEffort: "low"}
+	}
+	cfg.Provider = provider
+	return cfg
+}
+
+// SetAgent makes the agent of cfg the one that runs, and keeps how to run
+// it.
+func (config *Config) SetAgent(cfg agent.Config) {
+	agents := maps.Clone(config.Agents)
+	if agents == nil {
+		agents = map[agent.Provider]agent.Config{}
+	}
+	agents[cfg.Provider] = cfg
+	config.Provider, config.Agents = cfg.Provider, agents
 }
 
 func (config *Config) AddRecent(repo string) {
@@ -71,15 +103,20 @@ func (store Store) LoadConfig() Config {
 	file := struct {
 		Config
 		Questions string `json:"questions"`
-	}{Config: DefaultConfig()}
+		// Agent is how to run the agent, from a config written before
+		// each agent had its own settings.
+		Agent agent.Config `json:"agent"`
+	}{Config: DefaultConfig(), Agent: agent.Config{AutoEffort: "low"}}
 	if err := readJSON(path, &file); err != nil {
 		setAside(path, err)
 		return DefaultConfig()
 	}
 	cfg := file.Config
-	if cfg.Agent.Provider == "" {
-		cfg.Agent.Provider = agent.Claude
+	if cfg.Agents == nil {
+		file.Agent.Provider = cmp.Or(file.Agent.Provider, cfg.Provider, agent.Claude)
+		cfg.SetAgent(file.Agent)
 	}
+	cfg.Provider = cmp.Or(cfg.Provider, agent.Claude)
 	if questions := strings.TrimSpace(file.Questions); questions != "" && questions != oldDefaultQuestions && questions != legacyQuestions && cfg.Prompts[review.PromptOverview] == "" {
 		if cfg.Prompts == nil {
 			cfg.Prompts = review.Prompts{}

@@ -6,6 +6,10 @@
 
 - OpenCode is a third agent, next to Claude Code and Codex. With OpenCode, the app works with an API key of Anthropic, OpenAI, OpenRouter and many other providers. The README explains how to set it up. OpenCode cannot change the files of the repository, because it runs in a macOS sandbox.
 
+### Changed
+
+- Each agent in Settings > Agent keeps its own model, effort, binary, extra arguments and setup option. A switch to another agent no longer passes the model of one CLI to another one. Your current settings move to the agent you use now.
+
 ## 0.4.0 - 2026-11-02
 
 ### Added

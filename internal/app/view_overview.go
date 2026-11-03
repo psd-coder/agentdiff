@@ -154,7 +154,7 @@ func (app *app) commitName(sha string) string {
 
 func (app *app) overviewPage(ctx *ui.Context) {
 	theme := ctx.Theme()
-	cfg := app.cfg.Agent
+	cfg := app.cfg.Agent()
 	run := app.runner.run(app.rev, store.TargetOverview)
 	ov := app.rev.Overview
 	app.pageScroll(ctx, overview).Grow(1).FillWidth().Children(func() {
