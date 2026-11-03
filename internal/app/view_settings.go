@@ -29,7 +29,7 @@ type agentForm struct {
 	effort     string
 	autoModel  string
 	autoEffort string
-	binary     string
+	command    string
 	extraArgs  string
 	userSetup  bool
 }
@@ -38,7 +38,7 @@ func newAgentForm(cfg agent.Config) agentForm {
 	form := agentForm{
 		model: cfg.Model, effort: cmp.Or(cfg.Effort, defaultEffort),
 		autoModel: cfg.AutoModel, autoEffort: cmp.Or(cfg.AutoEffort, sameEffort),
-		binary: cfg.Binary, extraArgs: strings.Join(cfg.ExtraArgs, " "), userSetup: cfg.UserSetup,
+		command: agent.JoinWords(cfg.Command), extraArgs: strings.Join(cfg.ExtraArgs, " "), userSetup: cfg.UserSetup,
 	}
 	return form
 }
@@ -50,7 +50,7 @@ func (form agentForm) config(provider agent.Provider) agent.Config {
 		Effort:     effortOf(provider, form.effort),
 		AutoModel:  strings.TrimSpace(form.autoModel),
 		AutoEffort: effortOf(provider, form.autoEffort),
-		Binary:     strings.TrimSpace(form.binary),
+		Command:    agent.SplitWords(form.command),
 		ExtraArgs:  strings.Fields(form.extraArgs),
 		UserSetup:  form.userSetup,
 	}
@@ -69,8 +69,11 @@ type settingsForm struct {
 	tab int
 	// titled is the tab the title of the window names, plus one, or zero
 	// before the window has a title.
-	titled  int
-	status  map[agent.Provider]string
+	titled int
+	status map[agent.Provider]string
+	// checks counts the checks of each agent's CLI, so only the result of
+	// the last one shows.
+	checks  map[agent.Provider]int
 	prompts promptForm
 	settingsValues
 	// saved is what the form held when it last saved.
@@ -126,6 +129,7 @@ func (app *app) openSettings() {
 	}
 	form := &settingsForm{
 		status:    map[agent.Provider]string{},
+		checks:    map[agent.Provider]int{},
 		prompts:   app.newPromptForm(),
 		provider:  max(slices.Index(providers, app.cfg.Provider), 0),
 		agent:     newAgentForm(app.cfg.Agent()),
@@ -157,16 +161,47 @@ func (app *app) openSettings() {
 	app.settingsWin.SetOpacity(0)
 	time.AfterFunc(300*time.Millisecond, func() { app.update(app.revealSettings) })
 	for _, p := range providers {
-		form.status[p] = "Checking…"
-		app.async(func() {
-			path, version, err := agent.Available(context.Background(), agent.Config{Provider: p})
+		app.checkAgent(form, app.cfg.AgentOf(p), 0)
+	}
+}
+
+// commandCheckDelay is how long a changed command stays the same before
+// the settings check it, so they do not run a command half typed.
+const commandCheckDelay = 800 * time.Millisecond
+
+// checkAgent shows under the tab of the agent the version of the CLI that
+// cfg runs, checked after delay. A later check of the agent replaces it.
+func (app *app) checkAgent(form *settingsForm, cfg agent.Config, delay time.Duration) {
+	provider := cfg.Provider
+	form.checks[provider]++
+	check := form.checks[provider]
+	form.status[provider] = "Checking…"
+	current := func() bool { return app.settings == form && form.checks[provider] == check }
+	start := func() {
+		go func() {
+			path, version, err := agent.Available(context.Background(), cfg)
 			msg := fmt.Sprintf("%s (%s)", version, path)
 			if err != nil {
 				msg = "Not found: " + err.Error()
 			}
-			app.update(func() { form.status[p] = msg })
-		})
+			app.update(func() {
+				if current() {
+					form.status[provider] = msg
+				}
+			})
+		}()
 	}
+	if delay == 0 {
+		start()
+		return
+	}
+	time.AfterFunc(delay, func() {
+		app.update(func() {
+			if current() {
+				start()
+			}
+		})
+	})
 }
 
 // openSettingsTab opens the settings window on a tab.
@@ -180,7 +215,11 @@ func (app *app) saveSettings() {
 	form := app.settings
 	themeChanged := form.theme != form.saved.theme
 	if form.agent != form.saved.agent {
-		app.cfg.SetAgent(form.agent.config(providers[form.saved.provider]))
+		edited := form.agent.config(providers[form.saved.provider])
+		app.cfg.SetAgent(edited)
+		if form.agent.command != form.saved.agent.command && app.settingsWin != nil {
+			app.checkAgent(form, edited, commandCheckDelay)
+		}
 	}
 	if form.provider != form.saved.provider {
 		app.cfg.Provider = providers[form.provider]
@@ -347,7 +386,7 @@ func (app *app) settingsToolbar(ctx *ui.Context, form *settingsForm) {
 // settingsLabels are the labels of the fields of every tab.
 var settingsLabels = []string{
 	"Theme:", "Code theme:",
-	"Agent:", "Model:", "Effort:", "Automatic model:", "Automatic effort:", "Write ahead:", "Binary:", "Extra arguments:", "Your setup:",
+	"Agent:", "Model:", "Effort:", "Automatic model:", "Automatic effort:", "Write ahead:", "Command:", "Extra arguments:", "Your setup:",
 	"Prompt:", "Text:", "Blocks:",
 }
 
@@ -384,6 +423,16 @@ func (app *app) appearanceTab(ctx *ui.Context, form *settingsForm) {
 	})
 }
 
+// commandHelp says what the Command field takes, and warns when the
+// macOS sandbox of the agent does not reach a CLI that a launcher starts.
+func commandHelp(provider agent.Provider, command []string) string {
+	help := fmt.Sprintf("The name or path of the CLI. To run it in a container, put the command that runs it there in front, as dev %[1]s or devcontainer exec --workspace-folder . %[1]s.", provider)
+	if len(command) > 1 && provider.Sandboxed() {
+		help += fmt.Sprintf(" The macOS sandbox does not reach into the container, so only the permission rules keep %s read-only there. A shell redirect in a pipeline gets past them.", provider.Name())
+	}
+	return help
+}
+
 func (app *app) agentFields(ctx *ui.Context, settings *settingsForm) {
 	names := make([]string, len(providers))
 	for i, p := range providers {
@@ -416,9 +465,9 @@ func (app *app) agentFields(ctx *ui.Context, settings *settingsForm) {
 			ui.Checkbox(ctx, &settings.ahead, "Write the deeper walkthrough of every step with the overview")
 		}).Description(fmt.Sprintf("Go deeper then opens at once. It costs one agent run per step, %d at a time.", maxAhead))
 		ui.Divider(ctx)
-		ui.Field(ctx, "Binary:", func() {
-			ui.TextInput(ctx, &form.binary).Placeholder("Found on your shell's PATH").Label("Binary")
-		})
+		ui.Field(ctx, "Command:", func() {
+			ui.TextInput(ctx, &form.command).Placeholder(string(provider) + ", found on your shell's PATH").Label("Command")
+		}).Description(commandHelp(provider, agent.SplitWords(form.command)))
 		ui.Field(ctx, "Extra arguments:", func() {
 			ui.TextInput(ctx, &form.extraArgs).Placeholder("Passed to the CLI as they are, split at spaces").Label("Extra arguments")
 		})

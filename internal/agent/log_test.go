@@ -33,7 +33,7 @@ func TestRunLog(t *testing.T) {
 	fixture := fixturePath(t, "codex_exec.jsonl")
 	bin := writeScript(t, "/bin/cat > /dev/null\necho 'warning: slow' >&2\n/bin/cat "+fixture+"\nprintf 'no newline' >&2")
 	dir := t.TempDir()
-	entries := runLog(t, t.Context(), Config{Provider: Codex, Binary: bin}, Request{Dir: dir, Prompt: "question"})
+	entries := runLog(t, t.Context(), Config{Provider: Codex, Command: []string{bin}}, Request{Dir: dir, Prompt: "question"})
 
 	lines, err := os.ReadFile(fixture)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestRunLog(t *testing.T) {
 func TestRunLogExit(t *testing.T) {
 	t.Run("status", func(t *testing.T) {
 		bin := writeScript(t, "exit 3")
-		entries := runLog(t, t.Context(), Config{Provider: Claude, Binary: bin}, Request{})
+		entries := runLog(t, t.Context(), Config{Provider: Claude, Command: []string{bin}}, Request{})
 		if last := entries[len(entries)-1]; last.Text != "Exited with status 3" {
 			t.Errorf("last = %+v", last)
 		}
@@ -79,7 +79,7 @@ func TestRunLogExit(t *testing.T) {
 		bin := writeScript(t, "sleep 10")
 		ctx, cancel := context.WithCancel(t.Context())
 		time.AfterFunc(200*time.Millisecond, cancel)
-		entries := runLog(t, ctx, Config{Provider: Claude, Binary: bin}, Request{})
+		entries := runLog(t, ctx, Config{Provider: Claude, Command: []string{bin}}, Request{})
 		if last := entries[len(entries)-1]; last.Text != exitStopped {
 			t.Errorf("last = %+v", last)
 		}
@@ -91,7 +91,7 @@ func TestRunLogExit(t *testing.T) {
 		var entries []LogEntry
 		req := Request{Log: func(e LogEntry) { entries = append(entries, e) }}
 		var events []Event
-		for ev := range Run(ctx, Config{Provider: Claude, Binary: bin}, req) {
+		for ev := range Run(ctx, Config{Provider: Claude, Command: []string{bin}}, req) {
 			events = append(events, ev)
 			if ev.Kind == EventDone {
 				cancel()
@@ -109,7 +109,7 @@ func TestRunLogExit(t *testing.T) {
 		}
 	})
 	t.Run("missing binary", func(t *testing.T) {
-		entries := runLog(t, t.Context(), Config{Provider: Claude, Binary: "/nonexistent/claude"}, Request{})
+		entries := runLog(t, t.Context(), Config{Provider: Claude, Command: []string{"/nonexistent/claude"}}, Request{})
 		if !slices.Equal(logKinds(entries), []LogKind{LogExit}) || !strings.HasPrefix(entries[0].Text, "Could not start: ") {
 			t.Errorf("entries = %+v", entries)
 		}

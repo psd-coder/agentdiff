@@ -122,3 +122,7 @@ func (provider Provider) ModelHelp() string { return specOf(provider).modelHelp 
 // WithoutUserSetup says what a run of the provider leaves out when the
 // user's own setup is off.
 func (provider Provider) WithoutUserSetup() string { return specOf(provider).withoutSetup }
+
+// Sandboxed says whether the CLI runs in the macOS sandbox, which keeps
+// it from writing to the repository.
+func (provider Provider) Sandboxed() bool { return specOf(provider).sandbox }

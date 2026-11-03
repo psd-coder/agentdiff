@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,12 +26,41 @@ type Config struct {
 	Effort     string   `json:"effort,omitempty"`
 	AutoModel  string   `json:"autoModel,omitempty"`
 	AutoEffort string   `json:"autoEffort"`
-	Binary     string   `json:"binary,omitempty"`
-	ExtraArgs  []string `json:"extraArgs,omitempty"`
+	// Command starts the CLI: its name or path, or a launcher command
+	// that ends with it, as "dev claude". Empty runs the provider's CLI
+	// from the PATH.
+	Command   []string `json:"command,omitempty"`
+	ExtraArgs []string `json:"extraArgs,omitempty"`
 	// UserSetup lets the CLI load the user's own setup: instructions,
 	// skills, hooks, plugins and MCP servers. Without it, a run gets only
 	// the prompts of the app.
 	UserSetup bool `json:"userSetup,omitempty"`
+}
+
+// UnmarshalJSON also reads the binary of a config written before the
+// command replaced it.
+func (config *Config) UnmarshalJSON(data []byte) error {
+	type plain Config
+	file := struct {
+		*plain
+		Binary string `json:"binary"`
+	}{plain: (*plain)(config)}
+	if err := json.Unmarshal(data, &file); err != nil {
+		return err
+	}
+	if len(config.Command) == 0 && file.Binary != "" {
+		config.Command = []string{file.Binary}
+	}
+	return nil
+}
+
+// launcher is the words of the command before the CLI, empty when the
+// command is the CLI alone.
+func (config Config) launcher() []string {
+	if len(config.Command) < 2 {
+		return nil
+	}
+	return config.Command[:len(config.Command)-1]
 }
 
 // Auto is the config for the runs the app starts on its own: the
@@ -106,9 +136,8 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 		return
 	}
 
-	bin, args := command(cfg, req, bin)
+	bin, args, extraEnv := command(cfg, req, bin)
 	stdin := stdinText(cfg, req)
-	extraEnv := providerEnv(cfg, req)
 	log.add(LogCommand, commandLine(req.Dir, extraEnv, bin, args))
 	log.add(LogStdin, stdin)
 	stderr := &tailBuffer{max: stderrTailSize}
@@ -230,7 +259,7 @@ func Available(ctx context.Context, cfg Config) (path, version string, err error
 	}
 	ctx, cancel := context.WithTimeout(ctx, versionTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, path, "--version")
+	cmd := exec.CommandContext(ctx, path, append(slices.Clone(cfg.Command[min(1, len(cfg.Command)):]), "--version")...)
 	cmd.Env = env
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return killGroup(cmd) }
@@ -238,7 +267,7 @@ func Available(ctx context.Context, cfg Config) (path, version string, err error
 	out, err := cmd.CombinedOutput()
 	version = strings.TrimSpace(string(out))
 	if err != nil {
-		return path, version, fmt.Errorf("%s --version: %w", path, firstErr(ctx.Err(), err))
+		return path, version, fmt.Errorf("%s --version: %w", JoinWords(cmd.Args), firstErr(ctx.Err(), err))
 	}
 	return path, version, nil
 }
@@ -253,14 +282,24 @@ func Args(cfg Config, req Request) []string {
 	return sp.args(cfg, req)
 }
 
-// command is the program and arguments that run the CLI at bin for a
-// request.
-func command(cfg Config, req Request, bin string) (string, []string) {
-	args := Args(cfg, req)
-	if !specOf(cfg.Provider).sandbox || req.Dir == "" {
-		return bin, args
+// command is the program and arguments that run the CLI for a request,
+// with bin the program of its first word, and the variables the program
+// gets on top of the login shell's. A launcher may not pass the app's
+// variables on, so behind one the CLI gets them through env.
+func command(cfg Config, req Request, bin string) (string, []string, []string) {
+	args, env := Args(cfg, req), providerEnv(cfg, req)
+	if launcher := cfg.launcher(); launcher != nil {
+		var envArgs []string
+		if len(env) > 0 {
+			envArgs = append([]string{"env"}, env...)
+		}
+		args = slices.Concat(launcher[1:], envArgs, cfg.Command[len(launcher):], args)
+		env = nil
 	}
-	return sandboxed(req.Dir, bin, args)
+	if specOf(cfg.Provider).sandbox && req.Dir != "" {
+		bin, args = sandboxed(req.Dir, bin, args)
+	}
+	return bin, args, env
 }
 
 func stdinText(cfg Config, req Request) string { return specOf(cfg.Provider).stdin(req) }

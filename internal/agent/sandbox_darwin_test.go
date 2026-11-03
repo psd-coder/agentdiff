@@ -11,7 +11,7 @@ func TestOpenCodeCannotWriteToRepository(t *testing.T) {
 	dir := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside.txt")
 	bin := writeScript(t, "echo x > inside.txt\necho x > "+outside+"\n/bin/cat "+fixturePath(t, "opencode_tools.jsonl"))
-	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Binary: bin}, Request{Dir: dir}), 5*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Command: []string{bin}}, Request{Dir: dir}), 5*time.Second))
 	if last.Kind != EventDone {
 		t.Fatalf("last = %+v", last)
 	}

@@ -244,7 +244,7 @@ func TestRunFixtures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
 			bin := writeScript(t, "/bin/cat "+fixturePath(t, tt.fixture))
-			ch := Run(t.Context(), Config{Provider: tt.provider, Binary: bin}, Request{Dir: t.TempDir(), Prompt: "q"})
+			ch := Run(t.Context(), Config{Provider: tt.provider, Command: []string{bin}}, Request{Dir: t.TempDir(), Prompt: "q"})
 			events := collect(t, ch, 5*time.Second)
 			last := assertOneTerminal(t, events)
 			if last.Kind != EventDone || last.Text != tt.answer || last.SessionID != tt.session {
@@ -262,7 +262,7 @@ func TestRunPassesPromptOnStdin(t *testing.T) {
 	out := filepath.Join(dir, "stdin.txt")
 	bin := writeScript(t, "/bin/cat > "+out+"\n/bin/cat "+fixturePath(t, "codex_exec.jsonl"))
 	req := Request{Dir: dir, Prompt: "question", SystemPrompt: "rules"}
-	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Codex, Binary: bin}, req), 5*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Codex, Command: []string{bin}}, req), 5*time.Second))
 	if last.Kind != EventDone {
 		t.Fatalf("last = %+v", last)
 	}
@@ -280,7 +280,7 @@ func TestRunPassesProviderEnv(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "env.txt")
 	bin := writeScript(t, `echo "$OPENCODE_CONFIG_CONTENT $OPENCODE_DISABLE_PROJECT_CONFIG" > `+out+"\n/bin/cat "+fixturePath(t, "opencode_tools.jsonl"))
 	req := Request{Dir: dir, Prompt: "q", SystemPrompt: "rules"}
-	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Binary: bin}, req), 5*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Command: []string{bin}}, req), 5*time.Second))
 	if last.Kind != EventDone {
 		t.Fatalf("last = %+v", last)
 	}
@@ -293,11 +293,41 @@ func TestRunPassesProviderEnv(t *testing.T) {
 	}
 }
 
+func TestRunThroughLauncherPassesEnvAsArguments(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "env.txt")
+	// The launcher drops the app's variables, as a container does.
+	launcher := writeScript(t, `exec /usr/bin/env -i "$@"`)
+	bin := writeScript(t, `echo "$OPENCODE_CONFIG_CONTENT $OPENCODE_DISABLE_PROJECT_CONFIG" > `+out+"\n/bin/cat "+fixturePath(t, "opencode_tools.jsonl"))
+	req := Request{Dir: t.TempDir(), Prompt: "q", SystemPrompt: "rules"}
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Command: []string{launcher, bin}}, req), 5*time.Second))
+	if last.Kind != EventDone {
+		t.Fatalf("last = %+v", last)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := opencodeConfig("rules") + " 1\n"; string(got) != want {
+		t.Errorf("env = %q, want %q", got, want)
+	}
+}
+
+func TestCommandThroughLauncher(t *testing.T) {
+	cfg := Config{Provider: Claude, Command: []string{"docker", "exec", "-i", "box", "claude"}}
+	bin, args, env := command(cfg, Request{Prompt: "q"}, "/usr/bin/docker")
+	if bin != "/usr/bin/docker" || len(env) != 0 {
+		t.Errorf("bin %q, env %q", bin, env)
+	}
+	if want := []string{"exec", "-i", "box", "claude", "-p"}; !slices.Equal(args[:len(want)], want) {
+		t.Errorf("args = %q, want them to start with %q", args, want)
+	}
+}
+
 func TestRunSetsPWDToRequestDir(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(t.TempDir(), "pwd.txt")
 	bin := writeScript(t, `echo "$PWD" > `+out+"\n/bin/cat "+fixturePath(t, "codex_exec.jsonl"))
-	assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Codex, Binary: bin}, Request{Dir: dir}), 5*time.Second))
+	assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Codex, Command: []string{bin}}, Request{Dir: dir}), 5*time.Second))
 	got, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatal(err)
@@ -311,7 +341,7 @@ func TestRunOpenCodeErrorKeepsEveryMessage(t *testing.T) {
 	general := `{"type":"error","sessionID":"ses_1","error":{"name":"UnknownError","data":{"message":"Unexpected server error."}}}`
 	cause := `{"type":"error","sessionID":"ses_1","error":{"name":"UnknownError","data":{"message":"Model not found: x/y."}}}`
 	bin := writeScript(t, "echo '"+general+"'\necho '"+cause+"'\nexit 1")
-	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Binary: bin}, Request{Dir: t.TempDir()}), 5*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Command: []string{bin}}, Request{Dir: t.TempDir()}), 5*time.Second))
 	if want := "opencode failed: exit status 1: Unexpected server error.\nModel not found: x/y."; last.Kind != EventError || errString(last.Err) != want {
 		t.Errorf("last = %+v, want error %q", last, want)
 	}
@@ -350,7 +380,7 @@ func TestRunErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			bin := writeScript(t, tt.script)
-			ch := Run(t.Context(), Config{Provider: tt.provider, Binary: bin}, Request{Dir: t.TempDir()})
+			ch := Run(t.Context(), Config{Provider: tt.provider, Command: []string{bin}}, Request{Dir: t.TempDir()})
 			last := assertOneTerminal(t, collect(t, ch, 5*time.Second))
 			if last.Kind != EventError {
 				t.Fatalf("last = %+v", last)
@@ -366,7 +396,7 @@ func TestRunErrors(t *testing.T) {
 
 func TestRunStderrTail(t *testing.T) {
 	bin := writeScript(t, "i=0\nwhile [ $i -lt 500 ]; do echo \"line $i\" >&2; i=$((i+1)); done\necho END >&2\nexit 2")
-	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Claude, Binary: bin}, Request{}), 5*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Claude, Command: []string{bin}}, Request{}), 5*time.Second))
 	msg := last.Err.Error()
 	if !strings.Contains(msg, "END") || strings.Contains(msg, "line 1\n") || len(msg) > stderrTailSize+100 {
 		t.Errorf("unexpected error message (%d bytes): %.200q", len(msg), msg)
@@ -375,7 +405,7 @@ func TestRunStderrTail(t *testing.T) {
 
 func TestRunDoneThenNonZeroExit(t *testing.T) {
 	bin := writeScript(t, "/bin/cat "+fixturePath(t, "claude_stream.jsonl")+"\nexit 3")
-	events := collect(t, Run(t.Context(), Config{Provider: Claude, Binary: bin}, Request{}), 5*time.Second)
+	events := collect(t, Run(t.Context(), Config{Provider: Claude, Command: []string{bin}}, Request{}), 5*time.Second)
 	if last := assertOneTerminal(t, events); last.Kind != EventDone {
 		t.Errorf("last = %+v", last)
 	}
@@ -385,7 +415,7 @@ func TestRunCancel(t *testing.T) {
 	bin := writeScript(t, `echo '{"type":"system","session_id":"s1"}'`+"\nsleep 30")
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	ch := Run(ctx, Config{Provider: Claude, Binary: bin}, Request{})
+	ch := Run(ctx, Config{Provider: Claude, Command: []string{bin}}, Request{})
 	first := <-ch
 	if first.Kind != EventSession || first.SessionID != "s1" {
 		t.Fatalf("first = %+v", first)
@@ -402,7 +432,7 @@ func TestRunCancelledBeforeStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	bin := writeScript(t, "sleep 30")
-	last := assertOneTerminal(t, collect(t, Run(ctx, Config{Provider: Codex, Binary: bin}, Request{}), 2*time.Second))
+	last := assertOneTerminal(t, collect(t, Run(ctx, Config{Provider: Codex, Command: []string{bin}}, Request{}), 2*time.Second))
 	if !errors.Is(last.Err, context.Canceled) {
 		t.Errorf("err = %v", last.Err)
 	}
@@ -410,8 +440,8 @@ func TestRunCancelledBeforeStart(t *testing.T) {
 
 func TestRunBinaryNotFound(t *testing.T) {
 	tests := []Config{
-		{Provider: Claude, Binary: "/nonexistent/claude"},
-		{Provider: Codex, Binary: "agentdiff-no-such-binary"},
+		{Provider: Claude, Command: []string{"/nonexistent/claude"}},
+		{Provider: Codex, Command: []string{"agentdiff-no-such-binary"}},
 		{Provider: "gemini"},
 	}
 	for _, cfg := range tests {
@@ -424,8 +454,17 @@ func TestRunBinaryNotFound(t *testing.T) {
 
 func TestAvailable(t *testing.T) {
 	bin := writeScript(t, `[ "$1" = "--version" ] && echo "2.1.0 (Claude Code)"`)
-	path, version, err := Available(t.Context(), Config{Provider: Claude, Binary: bin})
+	path, version, err := Available(t.Context(), Config{Provider: Claude, Command: []string{bin}})
 	if err != nil || path != bin || version != "2.1.0 (Claude Code)" {
+		t.Errorf("Available = %q, %q, %v", path, version, err)
+	}
+}
+
+func TestAvailableThroughLauncher(t *testing.T) {
+	launcher := writeScript(t, `exec "$@"`)
+	bin := writeScript(t, `[ "$1" = "--version" ] && echo "1.0 (in a container)"`)
+	path, version, err := Available(t.Context(), Config{Provider: OpenCode, Command: []string{launcher, bin}})
+	if err != nil || path != launcher || version != "1.0 (in a container)" {
 		t.Errorf("Available = %q, %q, %v", path, version, err)
 	}
 }
@@ -436,9 +475,9 @@ func TestAvailableErrors(t *testing.T) {
 		name string
 		cfg  Config
 	}{
-		{"not found", Config{Provider: Codex, Binary: "agentdiff-no-such-binary"}},
-		{"not executable", Config{Provider: Codex, Binary: fixturePath(t, "codex_exec.jsonl")}},
-		{"version fails", Config{Provider: Claude, Binary: failing}},
+		{"not found", Config{Provider: Codex, Command: []string{"agentdiff-no-such-binary"}}},
+		{"not executable", Config{Provider: Codex, Command: []string{fixturePath(t, "codex_exec.jsonl")}}},
+		{"version fails", Config{Provider: Claude, Command: []string{failing}}},
 		{"unknown provider", Config{Provider: "x"}},
 	}
 	for _, tt := range tests {
@@ -455,7 +494,7 @@ func TestAvailableTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if _, _, err := Available(ctx, Config{Provider: Claude, Binary: bin}); !errors.Is(err, context.DeadlineExceeded) {
+	if _, _, err := Available(ctx, Config{Provider: Claude, Command: []string{bin}}); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("err = %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {

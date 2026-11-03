@@ -112,9 +112,9 @@ func resolveBinary(cfg Config, env []string) (string, error) {
 	if _, ok := lookup(cfg.Provider); !ok {
 		return "", fmt.Errorf("unknown provider %q", cfg.Provider)
 	}
-	name := cfg.Binary
-	if name == "" {
-		name = string(cfg.Provider)
+	name := string(cfg.Provider)
+	if len(cfg.Command) > 0 {
+		name = cfg.Command[0]
 	}
 	if rest, ok := strings.CutPrefix(name, "~/"); ok {
 		if home, err := os.UserHomeDir(); err == nil {
