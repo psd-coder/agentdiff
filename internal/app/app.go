@@ -733,7 +733,7 @@ func (app *app) setContents(change gitx.FileChange, oldText, newText string, err
 		diff.err = err.Error()
 		return
 	}
-	lang := editor.LanguageFor(change.Path)
+	lang := languageFor(change.Path)
 	before, after := editor.NewBuffer(oldText), editor.NewBuffer(newText)
 	before.SetLanguage(lang)
 	after.SetLanguage(lang)
