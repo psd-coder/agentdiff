@@ -25,6 +25,8 @@ type Exchange struct {
 	rev     *Review
 	cfg     agent.Config
 	changes ChangeSet
+	// source is where the overview prompt came from.
+	source  PromptSource
 	session string
 	// walk is the walk the run writes, nil for the overview.
 	walk *Walk
@@ -37,14 +39,15 @@ type Exchange struct {
 
 // OverviewExchange starts the exchange for a new overview of r. The
 // overview always starts a new session, so it reads the changes as they
-// are now.
-func OverviewExchange(review *Review, changes ChangeSet, cfg agent.Config, prompts Prompts) *Exchange {
+// are now. source is where prompts took the overview prompt from.
+func OverviewExchange(review *Review, changes ChangeSet, cfg agent.Config, prompts Prompts, source PromptSource) *Exchange {
 	prompt := overviewPrompt(prompts, review.Scope.Describe(), changes.Diffstat, review.Scope.NewRev(), changes.Files)
 	return &Exchange{
 		Request: agent.Request{Dir: review.Repo, Prompt: prompt, SystemPrompt: prompts.System()},
 		rev:     review,
 		cfg:     cfg,
 		changes: changes,
+		source:  source,
 	}
 }
 
@@ -209,7 +212,7 @@ func (exchange *Exchange) Answered(answer string, at time.Time) {
 		return
 	}
 	ov := readOverview(answer, exchange.changes.Files)
-	ov.Agent, ov.Model, ov.Generated = exchange.cfg.Provider, exchange.cfg.Model, at
+	ov.Agent, ov.Model, ov.Prompt, ov.Generated = exchange.cfg.Provider, exchange.cfg.Model, exchange.source, at
 	ov.PatchID, ov.Files = exchange.changes.PatchID, exchange.changes.FileIDs
 	if old := exchange.rev.Overview; old != nil {
 		ov.Sessions = maps.Clone(old.Sessions)

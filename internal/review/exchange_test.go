@@ -72,7 +72,7 @@ func TestOverviewExchangeRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			review := New("/repo", tt.scope)
 			review.Overview = &Overview{Walk: &Walkthrough{Summary: "old"}, Sessions: Sessions{agent.Claude: "c0", agent.Codex: "x0"}}
-			req := OverviewExchange(review, testChanges, agent.Config{Provider: tt.provider}, tt.prompts).Request
+			req := OverviewExchange(review, testChanges, agent.Config{Provider: tt.provider}, tt.prompts, SourceDefault).Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
 			}
@@ -123,6 +123,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 				Sessions:  Sessions{agent.Claude: "c0", agent.Codex: "x1"},
 				Agent:     agent.Codex,
 				Model:     "gpt",
+				Prompt:    SourceRepo,
 				Generated: at,
 				PatchID:   "p1",
 				Files:     map[string]string{"a.go": "f1", "b.go": "f2"},
@@ -140,6 +141,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 				Sessions:  Sessions{agent.Codex: "x1"},
 				Agent:     agent.Codex,
 				Model:     "gpt",
+				Prompt:    SourceRepo,
 				Generated: at,
 				PatchID:   "p1",
 				Files:     map[string]string{"a.go": "f1", "b.go": "f2"},
@@ -155,6 +157,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 				Sessions:  Sessions{agent.Claude: "c0", agent.Codex: "x0"},
 				Agent:     agent.Codex,
 				Model:     "gpt",
+				Prompt:    SourceRepo,
 				Generated: at,
 				PatchID:   "p1",
 				Files:     map[string]string{"a.go": "f1", "b.go": "f2"},
@@ -194,7 +197,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
 			review.Overview = tt.old
-			exchange := OverviewExchange(review, testChanges, agent.Config{Provider: agent.Codex, Model: "gpt"}, nil)
+			exchange := OverviewExchange(review, testChanges, agent.Config{Provider: agent.Codex, Model: "gpt"}, nil, SourceRepo)
 			if tt.session != "" {
 				exchange.Started(tt.session)
 			}
@@ -600,7 +603,7 @@ func TestExchangeTargetAndKind(t *testing.T) {
 		target string
 		kind   Kind
 	}{
-		{"overview", OverviewExchange(review, testChanges, cfg, nil), "overview", KindOverview},
+		{"overview", OverviewExchange(review, testChanges, cfg, nil, SourceDefault), "overview", KindOverview},
 		{"deeper", DeeperExchange(review, walk, cfg, nil, ""), walk.ID, KindWalk},
 		{"follow-up", FollowupExchange(review, walk, cfg, nil, "", "And?"), walk.ID, KindWalk},
 		{"thread", ThreadExchange(review, th, cfg, nil, "", "Why?"), th.ID, KindThread},

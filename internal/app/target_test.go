@@ -29,7 +29,7 @@ func TestTargetStateRunBeatsSavedFailure(t *testing.T) {
 	if got := ts.state(rev, review.TargetOverview); got != (targetState{status: targetFailed}) {
 		t.Fatalf("before the run: %+v", got)
 	}
-	agentRunner.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil), "Overview", "", nil)
+	agentRunner.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil, review.SourceDefault), "Overview", "", nil)
 	if got := ts.state(rev, review.TargetOverview); got.status != targetRunning || !got.busy() {
 		t.Errorf("during the run: %+v", got)
 	}
@@ -200,7 +200,7 @@ func TestRunNotice(t *testing.T) {
 func TestOverviewNotice(t *testing.T) {
 	agentRunner, stream := newTestRunner()
 	rev := newRunnerReview()
-	agentRunner.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil), "Overview", "", nil)
+	agentRunner.start(review.OverviewExchange(rev, review.ChangeSet{}, runnerCfg, nil, review.SourceDefault), "Overview", "", nil)
 	stream.last(t, rev, review.TargetOverview).onEvent(done("## 1. Step\nText."))
 	title, body, ok := runNotice(runKey{rev, review.TargetOverview})
 	if title != "Overview ready" || body != "repo — Uncommitted changes" || !ok {

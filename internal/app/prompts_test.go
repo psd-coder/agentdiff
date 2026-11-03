@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -146,5 +148,49 @@ func TestSectionItemKeepsTheThreadOfItsChecklistQuestion(t *testing.T) {
 	snapshot(t, tt, "overview-sections")
 	if !tt.HasText("Check the cache") {
 		t.Errorf("the item does not show its thread: %q", tt.Texts())
+	}
+}
+
+func TestOverviewNamesThePromptItWasWrittenWith(t *testing.T) {
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	app.cfg.DeeperAhead = false
+	fake := newFakeAgent(t, app)
+	fake.answer("s1", "```json\n"+`{"summary": "s", "steps": [{"title": "Keys", "text": "k"}]}`+"\n```")
+	tt := ui.NewTester(app.view, 1300, 1000)
+	generate := func(wantPrompt, wantByline string) {
+		t.Helper()
+		app.generateOverview()
+		pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
+		if prompt := fake.last().Prompt; !strings.Contains(prompt, wantPrompt) {
+			t.Errorf("prompt does not hold %q:\n%s", wantPrompt, prompt)
+		}
+		tt.Frame()
+		if !slices.ContainsFunc(tt.Texts(), func(s string) bool { return strings.HasSuffix(s, wantByline) }) {
+			t.Errorf("no byline ending in %q: %q", wantByline, tt.Texts())
+		}
+	}
+	file := ".agentdiff/prompts/overview.md"
+
+	write(t, app.repo.Root, file, "First version.\n{{format}}\n{{files}}\n")
+	generate("First version.", ", with the prompt in .agentdiff/prompts/overview.md")
+
+	write(t, app.repo.Root, file, "Second version.\n{{format}}\n{{files}}\n")
+	generate("Second version.", ", with the prompt in .agentdiff/prompts/overview.md")
+
+	app.cfg.Prompts = review.Prompts{review.PromptOverview: "From the settings.\n{{format}}\n{{files}}"}
+	if err := os.Remove(filepath.Join(app.repo.Root, file)); err != nil {
+		t.Fatal(err)
+	}
+	generate("From the settings.", ", with the prompt from the settings")
+
+	app.cfg.Prompts = nil
+	generate("Add a section \"Checklist\"", ", with the default prompt")
+
+	app.rev.Overview.Prompt = ""
+	tt.Frame()
+	byline := tt.Texts()[slices.IndexFunc(tt.Texts(), func(s string) bool { return strings.HasPrefix(s, "By Claude Code, ") })]
+	if strings.Contains(byline, "prompt") || strings.HasSuffix(byline, ", ") {
+		t.Errorf("byline of an overview from before the app saved its prompt = %q", byline)
 	}
 }

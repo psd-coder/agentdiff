@@ -205,7 +205,7 @@ func (app *app) overviewPage(ctx *ui.Context) {
 			case !ov.Done():
 				app.overviewIntro(ctx, cfg.Provider.Name())
 			case ov.Walk != nil:
-				ui.Text(ctx, writtenBy(ov.Agent, ov.Model, ov.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(theme.TextMuted)
+				ui.Text(ctx, overviewBy(ov)).FontSize(12).TextColor(theme.TextMuted)
 				app.walkthrough(ctx, "", ov.Walk)
 			default:
 				app.overviewSections(ctx, ov)

@@ -495,6 +495,15 @@ func writtenBy(provider agent.Provider, model, when string) string {
 	return byline + ", " + when
 }
 
+// overviewBy says who wrote the overview, when, and with which prompt.
+func overviewBy(ov *review.Overview) string {
+	byline := writtenBy(ov.Agent, ov.Model, ov.Generated.Format("Jan 2 15:04"))
+	if from := promptFrom(ov.Prompt); from != "" {
+		byline += ", " + from
+	}
+	return byline
+}
+
 // askWalk asks a question about a walkthrough as a whole, and lists the
 // questions asked before.
 func (app *app) askWalk(ctx *ui.Context, parent string) {

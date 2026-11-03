@@ -59,7 +59,7 @@ func TestPromptsFallBackToTheDefault(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			prompts := Prompts{PromptOverview: tt.text}
-			prompt := OverviewExchange(review, testChanges, agent.Config{Provider: agent.Claude}, prompts).Request.Prompt
+			prompt := OverviewExchange(review, testChanges, agent.Config{Provider: agent.Claude}, prompts, SourceDefault).Request.Prompt
 			checkPrompt(t, prompt, []string{tt.want, overviewSchema, "- a.go\n- b.go\n"}, tt.lacks)
 		})
 	}
@@ -72,7 +72,7 @@ func TestRewrittenSystemPromptGoesToEveryRun(t *testing.T) {
 	th := review.AddThread(Anchor{Kind: AnchorGeneral})
 	cfg := agent.Config{Provider: agent.Claude}
 	for name, req := range map[string]agent.Request{
-		"overview":  OverviewExchange(review, testChanges, cfg, prompts).Request,
+		"overview":  OverviewExchange(review, testChanges, cfg, prompts, SourceDefault).Request,
 		"deeper":    DeeperExchange(review, walk, cfg, prompts, "").Request,
 		"follow-up": FollowupExchange(review, walk, cfg, prompts, "", "And?").Request,
 		"thread":    ThreadExchange(review, th, cfg, prompts, "", "Why?").Request,

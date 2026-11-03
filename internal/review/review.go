@@ -83,14 +83,17 @@ type Group struct {
 // Overview is the agent's explanation of the whole change set: a
 // walkthrough, or Markdown when the agent did not write one.
 type Overview struct {
-	Walk      *Walkthrough   `json:"walk,omitempty"`
-	Markdown  string         `json:"markdown,omitempty"`
-	Groups    []Group        `json:"groups,omitempty"`
-	Sessions  Sessions       `json:"sessions,omitempty"`
-	Agent     agent.Provider `json:"agent"`
-	Model     string         `json:"model,omitempty"`
-	Generated time.Time      `json:"generated"`
-	Err       string         `json:"err,omitempty"`
+	Walk     *Walkthrough   `json:"walk,omitempty"`
+	Markdown string         `json:"markdown,omitempty"`
+	Groups   []Group        `json:"groups,omitempty"`
+	Sessions Sessions       `json:"sessions,omitempty"`
+	Agent    agent.Provider `json:"agent"`
+	Model    string         `json:"model,omitempty"`
+	// Prompt is where the overview prompt came from. It is empty for an
+	// overview written before the app saved it.
+	Prompt    PromptSource `json:"prompt,omitempty"`
+	Generated time.Time    `json:"generated"`
+	Err       string       `json:"err,omitempty"`
 	// PatchID and Files identify the changes the overview was written
 	// for, see gitx.Fingerprint.
 	PatchID string            `json:"patchId,omitempty"`

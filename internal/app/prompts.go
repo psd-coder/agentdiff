@@ -61,6 +61,32 @@ func (app *app) prompts(root string) review.Prompts {
 	return out
 }
 
+// promptSource is where the prompts of the last run took the prompt from:
+// a file of the repository, the settings or the default text.
+func (app *app) promptSource(name review.PromptName) review.PromptSource {
+	switch {
+	case app.repoPrompts.Has(name):
+		return review.SourceRepo
+	case app.cfg.Prompts.Has(name):
+		return review.SourceSettings
+	}
+	return review.SourceDefault
+}
+
+// promptFrom says which prompt an overview was written with. It is empty
+// for an overview written before the app saved it.
+func promptFrom(source review.PromptSource) string {
+	switch source {
+	case review.SourceRepo:
+		return "with the prompt in " + repoPromptFile(review.PromptOverview)
+	case review.SourceSettings:
+		return "with the prompt from the settings"
+	case review.SourceDefault:
+		return "with the default prompt"
+	}
+	return ""
+}
+
 // touchesPrompts reports whether a change in the working tree under dir,
 // as the watch hints it, can change the prompt files of the repository.
 func touchesPrompts(dir string) bool {
