@@ -9,27 +9,33 @@ import (
 
 // languageFor returns the language that highlights a file in the diff.
 func languageFor(file string) *editor.Language {
-	if strings.EqualFold(path.Ext(file), ".astro") {
+	switch strings.ToLower(path.Ext(file)) {
+	case ".astro":
 		return astroLanguage
+	case ".vue":
+		return vueLanguage
+	case ".svelte":
+		return svelteLanguage
 	}
 	return editor.LanguageFor(file)
 }
 
-var astroLanguage = func() *editor.Language {
-	html := editor.LanguageNamed("html")
-	astro := *html
-	astro.Name = "Astro"
-	astro.Extensions = []string{".astro"}
-	astro.Tokenizer = astroTokenizer{
-		frontmatter: editor.LanguageNamed("typescript").Tokenizer,
-		template:    html.Tokenizer,
-	}
-	return &astro
-}()
+var (
+	vueLanguage    = componentLanguage("Vue", ".vue", componentTokenizer{braces: "{{"})
+	svelteLanguage = componentLanguage("Svelte", ".svelte", componentTokenizer{braces: "{"})
+	astroLanguage  = func() *editor.Language {
+		astro := componentLanguage("Astro", ".astro", componentTokenizer{braces: "{", tsScripts: true})
+		astro.Tokenizer = astroTokenizer{
+			frontmatter: editor.LanguageNamed("typescript").Tokenizer,
+			template:    astro.Tokenizer,
+		}
+		return astro
+	}()
+)
 
-// The inner tokenizers keep their state below bit 56, so the two top bits
-// are free for the part of the file a line is in. A state without either
-// bit is the start of the file.
+// The template tokenizer keeps its state below bit 50, so the two top
+// bits are free for the part of the file a line is in. A state without
+// either bit is the start of the file.
 const (
 	astroInFrontmatter uint64 = 1 << 63
 	astroInTemplate    uint64 = 1 << 62
@@ -37,7 +43,7 @@ const (
 )
 
 // astroTokenizer highlights an Astro component: the TypeScript between the
-// --- fences at the top as TypeScript, and the template after it as HTML.
+// --- fences at the top as TypeScript, and the template after it.
 type astroTokenizer struct {
 	frontmatter, template editor.Tokenizer
 }
