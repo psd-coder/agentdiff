@@ -134,12 +134,18 @@ func (template Template) Check(text string) error {
 // A prompt that is missing, blank or broken gets its default text.
 type Prompts map[PromptName]string
 
+// Has reports whether prompts give a text of their own for the prompt,
+// one that is not blank and works.
+func (prompts Prompts) Has(name PromptName) bool {
+	text := prompts[name]
+	return strings.TrimSpace(text) != "" && TemplateOf(name).Check(text) == nil
+}
+
 func (prompts Prompts) text(name PromptName) string {
-	template := TemplateOf(name)
-	if text := prompts[name]; strings.TrimSpace(text) != "" && template.Check(text) == nil {
-		return text
+	if prompts.Has(name) {
+		return prompts[name]
 	}
-	return template.Default
+	return TemplateOf(name).Default
 }
 
 var blankLines = regexp.MustCompile(`\n{3,}`)

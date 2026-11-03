@@ -121,13 +121,23 @@ func (app *app) gitChanged(repo *gitx.Repo, gitDir string) {
 	})
 }
 
-// worktreeChanged reads the uncommitted changes again when they are under
-// review and a changed directory is one git does not ignore, so a build
-// or a package install does not reload the window.
+// worktreeChanged reads the prompt files of the repository again when a
+// change can touch them, also when git ignores them. It reads the
+// uncommitted changes again when they are under review and a changed
+// directory is one git does not ignore, so a build or a package install
+// does not reload the window.
 func (app *app) worktreeChanged(ctx context.Context, repo *gitx.Repo, events []mygo.FileEvent) {
 	dirs := make([]string, len(events))
 	for i, e := range events {
 		dirs[i] = e.Path
+	}
+	if slices.ContainsFunc(dirs, touchesPrompts) {
+		prompts, problems := readRepoPrompts(repo.Root)
+		app.update(func() {
+			if app.repo == repo {
+				app.repoPrompts, app.promptProblems = prompts, problems
+			}
+		})
 	}
 	ignored, err := repo.Ignored(ctx, dirs)
 	if err != nil {

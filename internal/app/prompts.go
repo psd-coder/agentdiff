@@ -60,3 +60,9 @@ func (app *app) prompts(root string) review.Prompts {
 	maps.Copy(out, repo)
 	return out
 }
+
+// touchesPrompts reports whether a change in the working tree under dir,
+// as the watch hints it, can change the prompt files of the repository.
+func touchesPrompts(dir string) bool {
+	return dir == "." || dir == repoPromptDir || strings.HasPrefix(repoPromptDir, dir+"/")
+}
