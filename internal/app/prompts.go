@@ -52,7 +52,7 @@ func readRepoPrompts(root string) (review.Prompts, []string) {
 // the files for the overview page.
 func (app *app) prompts(root string) review.Prompts {
 	repo, problems := readRepoPrompts(root)
-	app.promptProblems = problems
+	app.repoPrompts, app.promptProblems = repo, problems
 	out := maps.Clone(app.cfg.Prompts)
 	if out == nil {
 		out = review.Prompts{}

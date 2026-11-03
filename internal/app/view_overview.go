@@ -31,6 +31,21 @@ func (app *app) staleBanner(ctx *ui.Context) {
 	})
 }
 
+// repoPromptsNote names the prompt files of the repository that the runs
+// send in place of the prompts in the settings.
+func (app *app) repoPromptsNote(ctx *ui.Context) {
+	var files []string
+	for _, t := range review.Templates {
+		if _, ok := app.repoPrompts[t.Name]; ok {
+			files = append(files, repoPromptFile(t.Name))
+		}
+	}
+	if len(files) == 0 {
+		return
+	}
+	ui.Text(ctx, "The agent runs use the prompts of this repository: "+strings.Join(files, ", ")).FontSize(12).TextColor(ctx.Theme().TextMuted).Selectable()
+}
+
 // promptBanner warns about the prompt files of the repository that the
 // runs leave out.
 func (app *app) promptBanner(ctx *ui.Context) {
@@ -174,6 +189,7 @@ func (app *app) overviewPage(ctx *ui.Context) {
 				}
 				ui.Text(ctx, verb+" here from "+strings.ToLower(from.Label())+", which had the same changes.").FontSize(12).TextColor(theme.TextMuted)
 			}
+			app.repoPromptsNote(ctx)
 			app.staleBanner(ctx)
 			app.promptBanner(ctx)
 			switch {
