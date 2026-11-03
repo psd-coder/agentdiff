@@ -93,13 +93,15 @@ func TestResumedSession(t *testing.T) {
 			fork bool
 		}{{"new", "", false}, {"new with fork", "", true}, {"resume", session, false}, {"fork", session, true}} {
 			t.Run(string(p)+" "+tt.name, func(t *testing.T) {
-				cfg := Config{Provider: p, Model: "m", Effort: "low", ExtraArgs: []string{"--x", "it's"}}
-				req := tricky
-				req.ResumeID, req.Fork = tt.id, tt.fork
-				bin, args := command(cfg, req, "/bin/"+string(p))
-				line := commandLine(req.Dir, providerEnv(cfg, req), bin, args)
-				if got := ResumedSession(p, line); got != tt.id {
-					t.Errorf("session %q, want %q\n%s", got, tt.id, line)
+				for _, launched := range [][]string{nil, {"dev", "run", string(p)}} {
+					cfg := Config{Provider: p, Model: "m", Effort: "low", Command: launched, ExtraArgs: []string{"--x", "it's"}}
+					req := tricky
+					req.ResumeID, req.Fork = tt.id, tt.fork
+					bin, args, env := command(cfg, req, "/bin/"+string(p))
+					line := commandLine(req.Dir, env, bin, args)
+					if got := ResumedSession(p, line); got != tt.id {
+						t.Errorf("session %q, want %q\n%s", got, tt.id, line)
+					}
 				}
 			})
 		}

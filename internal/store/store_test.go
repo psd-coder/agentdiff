@@ -43,11 +43,11 @@ func TestLoadConfigMovesTheAgentOfAnOlderConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := store.LoadConfig()
-	want := agent.Config{Provider: agent.Codex, Model: "gpt-5", AutoEffort: "low", Binary: "/bin/codex"}
+	want := agent.Config{Provider: agent.Codex, Model: "gpt-5", AutoEffort: "low", Command: []string{"/bin/codex"}}
 	if got := cfg.Agent(); !reflect.DeepEqual(got, want) {
 		t.Errorf("agent = %+v, want %+v", got, want)
 	}
-	if got := cfg.AgentOf(agent.Claude); got.Model != "" || got.Binary != "" {
+	if got := cfg.AgentOf(agent.Claude); got.Model != "" || got.Command != nil {
 		t.Errorf("Claude Code got the settings of Codex: %+v", got)
 	}
 }

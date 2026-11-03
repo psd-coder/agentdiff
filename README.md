@@ -49,6 +49,16 @@ Effort is passed to OpenCode as `--variant`. The variants differ from model to m
 
 Claude Code and Codex take a key too. Claude Code uses `ANTHROPIC_API_KEY` when your shell exports it. For Codex, run `printenv OPENAI_API_KEY | codex login --with-api-key`.
 
+## Run the agent in a container
+
+When the agent CLI lives in a dev container, set Command in Settings > Agent to the command that runs it there, for example `dev claude`, `devcontainer exec --workspace-folder . claude` or `docker exec -i -w /workspaces/app box opencode`. The last word is the CLI, and the words before it are the launcher. Put a word with spaces in quotes.
+
+- The CLI must start in the folder of the repository inside the container. The app starts the launcher in the folder of the repository on your Mac. `devcontainer exec --workspace-folder .` finds the matching folder in the container itself. `docker exec` starts in the working directory of the image, so give it the folder of the repository in the container with `-w`.
+- The launcher must pass the arguments on as a list and keep stdin open, as `docker exec -i` does. `ssh` joins the arguments into one line for the remote shell, so it does not work.
+- A launcher may not pass the app's environment variables on. So the app gives OpenCode its config through `env`, which the image must have. Alpine and other usual images have it.
+- The macOS sandbox of OpenCode does not reach into the container. There, only OpenCode's permission rules keep it read-only, and a shell redirect at the end of a pipeline gets past them.
+- Settings > Agent checks the command with `--version`, through the launcher, a moment after you stop typing.
+
 ## Features
 
 - **Walkthrough by your own agent**: Claude Code, Codex or OpenCode reads the changes through its CLI, on your subscription or your API key. It writes a summary and 3 to 7 steps, each with up to two snippets cut from the real diff. A click on a snippet opens the file's diff at those lines.
@@ -63,7 +73,7 @@ Claude Code and Codex take a key too. Claude Code uses `ANTHROPIC_API_KEY` when 
 - **Feedback for the agent**: one Markdown document with a `path:line (+)` heading per comment, the quoted code, and the agent's answers if you want them. Copy it, or save it and copy a prompt that points to the file.
 - **Agent log**: every run of an agent CLI is logged, with the command line, the prompt, each tool call and its output, and how the run ended. Each run shows its context size, the tokens in its last request, as Claude Code does. Codex does not report the context size, so a Codex run shows the tokens it processed. Every request reads the whole conversation again, so this number is much larger. The run details list the processed tokens (input, cache read, cache write, output) and the cost at API prices that Claude reports. The panel shows the context its runs built up. A run that resumes or forks an earlier session, as a deeper walkthrough or a follow-up question does, starts with that session's context, so it counts only the context it added. When no run reports a context size, the panel shows the processed total. The log panel opens on the right, for all runs of the review, or for the overview, one walkthrough or one thread.
 - **Read-only agents**: Codex runs in its `read-only` sandbox. Claude runs in `dontAsk` mode with an allow list of read commands (`git diff`, `git show`, `grep`, `cat` and a few more), so any other Bash call is refused. OpenCode gets the same allow list, and it refuses a command with a `>` redirect or `--output`. OpenCode also runs in a macOS sandbox that refuses every write in the repository. By default a run also leaves out your own agent setup, so your hooks do not run during a review.
-- **Settings**: agent, model, effort, a model and effort for automatic runs, binary path, extra CLI arguments, prompts.
+- **Settings**: agent, model, effort, a model and effort for automatic runs, the command that runs the CLI, also in a container, extra CLI arguments, prompts.
 - **Your own shortcuts**: any command can get a shortcut in Settings, also the ones outside the menu bar, as Mark File as Viewed.
 - **Native UI**: built with [MyGo](https://mygo.egoist.dev) in Go, drawn with Metal, no webview. The app bundle is 10.9 MB.
 
@@ -180,7 +190,7 @@ Shortcuts lists every command with its shortcut. Click a shortcut and press the 
 | Effort | CLI default | Passed as `--effort` (Claude), `-c model_reasoning_effort=` (Codex) or `--variant` (OpenCode) |
 | Model for automatic runs | same as Model | Used by the overview and the deeper walkthroughs written ahead |
 | Effort for automatic runs | `low` | Used by the overview and the deeper walkthroughs written ahead |
-| Binary | found on the login shell's `PATH` | Full path to the CLI, `~/` allowed |
+| Command | the CLI found on the login shell's `PATH` | The name or full path of the CLI, `~/` allowed, or a launcher command that ends with it, as `dev claude` |
 | Extra arguments | none | Added to the CLI call, split at spaces |
 | Load my own instructions, skills, hooks and MCP servers | off | Lets the CLI load your own setup, as in a run you start yourself |
 
@@ -274,7 +284,7 @@ MyGo's native UI ships a diff viewer with gutter buttons and room for comments u
 The agent can read the files around the change, the commit messages and the tests. It also sees the reasons behind a change that a diff does not show, which is what the questions about non-pretty changes ask for.
 
 **Can the review agent change my code?**
-Codex cannot: it runs in its `read-only` sandbox. Claude refuses every Bash call that matches neither the app's allow list nor an allow rule in your own Claude settings. So Claude can only write when your settings allow a write command. OpenCode refuses every tool except reading files and the allowed read commands, and its macOS sandbox stops any change to the files of the repository. Your coding agent applies the feedback, in its own session.
+Codex cannot: it runs in its `read-only` sandbox. Claude refuses every Bash call that matches neither the app's allow list nor an allow rule in your own Claude settings. So Claude can only write when your settings allow a write command. OpenCode refuses every tool except reading files and the allowed read commands, and its macOS sandbox stops any change to the files of the repository. In a container, the sandbox does not apply, see [Run the agent in a container](#run-the-agent-in-a-container). Your coding agent applies the feedback, in its own session.
 
 **When should I not use it?**
 For a two-line change: `git diff` is faster. `agentdiff` does not post to GitHub either. Review pull requests of other people in GitHub.

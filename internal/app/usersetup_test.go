@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -134,5 +136,44 @@ func TestAgentLabel(t *testing.T) {
 				t.Errorf("agentLabel = %q, %q, want %q, %q", label, tip, c.label, c.tip)
 			}
 		})
+	}
+}
+
+func TestCommandHelpWarnsWhenTheSandboxDoesNotReach(t *testing.T) {
+	const warning = "The macOS sandbox does not reach into the container"
+	tests := []struct {
+		name     string
+		provider agent.Provider
+		command  []string
+		warns    bool
+	}{
+		{"OpenCode on the host", agent.OpenCode, []string{"/opt/bin/opencode"}, false},
+		{"OpenCode in a container", agent.OpenCode, []string{"dev", "opencode"}, true},
+		{"Claude Code in a container", agent.Claude, []string{"dev", "claude"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := strings.Contains(commandHelp(tt.provider, tt.command), warning); got != tt.warns {
+				t.Errorf("warns = %v, want %v", got, tt.warns)
+			}
+		})
+	}
+}
+
+func TestCommandFieldKeepsQuotedWords(t *testing.T) {
+	app := newTestApp(t)
+	app.openSettings()
+	app.settings.tab = agentTab
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
+	app.settings.agent.command = `docker exec -i "my box" claude`
+	tt.Frame()
+	want := []string{"docker", "exec", "-i", "my box", "claude"}
+	if got := app.store.LoadConfig().Agent().Command; !slices.Equal(got, want) {
+		t.Errorf("command = %q, want %q", got, want)
+	}
+	app.closeSettings()
+	app.openSettings()
+	if got := app.settings.agent.command; got != `docker exec -i 'my box' claude` {
+		t.Errorf("settings opened again with %q", got)
 	}
 }

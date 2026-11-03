@@ -884,7 +884,7 @@ func TestAgentLog(t *testing.T) {
 	if err := os.Chmod(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	app.cfg.SetAgent(agent.Config{Provider: agent.Claude, Binary: bin})
+	app.cfg.SetAgent(agent.Config{Provider: agent.Claude, Command: []string{bin}})
 	app.generateOverview()
 	waitForExit(t, app.store, app.repo.Root, app.scope)
 
