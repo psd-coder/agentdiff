@@ -648,6 +648,8 @@ func (app *app) firstPaint(rev *review.Review, page page, fresh bool) []string {
 		}
 	}
 	switch {
+	case page.kind == kindOverview && rev.OverviewOf(page.key) != nil:
+		walk(rev.OverviewOf(page.key).Walk)
 	case page.kind == kindOverview && rev.Overview != nil:
 		walk(rev.Overview.Walk)
 	case page.kind == kindWalk:
@@ -899,7 +901,7 @@ func (app *app) startOver() {
 }
 
 func (app *app) confirmStartOver() {
-	app.confirm("Start this review over?", "The overview, the deeper walkthroughs, all comments and threads, and the viewed marks of this scope are deleted.", "Start Over", app.startOver)
+	app.confirm("Start this review over?", "Every version of the overview, the deeper walkthroughs, all comments and threads, and the viewed marks of this scope are deleted.", "Start Over", app.startOver)
 }
 
 // confirm runs fn after the user agrees in a warning dialog. A test can

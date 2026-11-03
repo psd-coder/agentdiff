@@ -42,6 +42,10 @@ func TestParseWalkthrough(t *testing.T) {
 		}}},
 		Sections: []Section{{Title: "Risks", Items: []Step{{Title: "Data?", Text: "None.", Refs: []Ref{{File: "a.go", Side: SideNew, Start: 2, End: 2}}}}}},
 	}
+	if walkthrough.Steps[0].ID == "" {
+		t.Error("the step has no ID")
+	}
+	walkthrough.Steps[0].ID = ""
 	if !reflect.DeepEqual(walkthrough, want) {
 		t.Errorf("got  %+v\nwant %+v", walkthrough, want)
 	}
@@ -82,12 +86,12 @@ func TestParseWalkthroughFallbacks(t *testing.T) {
 
 func TestWalkTree(t *testing.T) {
 	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	review.Overview = &Overview{Walk: &Walkthrough{Steps: []Step{{Title: "One"}, {Title: "Two"}}}}
-	deeper := review.AddWalk("", 1, "")
-	deeper.Content = &Walkthrough{Steps: []Step{{Title: "Inner"}}}
-	question := review.AddWalk(deeper.ID, 0, " why? ")
-	followUp := review.AddWalk(question.ID, -1, "and then?")
-	other := review.AddWalk("", -1, "general")
+	review.Overview = &Overview{ID: "ov", Walk: &Walkthrough{Steps: []Step{{ID: "s1", Title: "One"}, {ID: "s2", Title: "Two"}}}}
+	deeper := review.AddWalk("ov", "s2", "")
+	deeper.Content = &Walkthrough{Steps: []Step{{ID: "s1", Title: "Inner"}}}
+	question := review.AddWalk(deeper.ID, "s1", " why? ")
+	followUp := review.AddWalk(question.ID, "", "and then?")
+	other := review.AddWalk("ov", "", "general")
 
 	if got := review.WalkTitle(deeper); got != "Two" {
 		t.Errorf("title of a = %q", got)
@@ -104,13 +108,13 @@ func TestWalkTree(t *testing.T) {
 	if got := review.WalkPath(followUp.ID); len(got) != 3 || got[0] != deeper || got[2] != followUp {
 		t.Errorf("path = %+v", got)
 	}
-	if got := review.WalksOn("", 1); len(got) != 1 || got[0] != deeper {
+	if got := review.WalksOn("ov", "s2"); len(got) != 1 || got[0] != deeper {
 		t.Errorf("walks on step 1 = %+v", got)
 	}
-	if !review.HasStepWalks("") || review.HasStepWalks(followUp.ID) {
+	if !review.HasStepWalks("ov") || review.HasStepWalks(followUp.ID) {
 		t.Error("HasStepWalks")
 	}
-	review.DeleteStepWalks("")
+	review.DeleteStepWalks("ov")
 	if len(review.Walks) != 1 || review.Walks[0] != other {
 		t.Errorf("walks after deleting the step walks = %+v", review.Walks)
 	}

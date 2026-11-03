@@ -61,7 +61,7 @@ func startWalk(agentRunner *runner, rev *review.Review, walk *review.Walk) {
 func writeAhead(agentRunner *runner, rev *review.Review, count int) []*review.Walk {
 	var walks []*review.Walk
 	for i := range count {
-		walk := rev.AddWalk("", i, "")
+		walk := addWalk(rev, "", i, "")
 		walks = append(walks, walk)
 		agentRunner.ahead(rev, walk.ID, func() (*review.Exchange, string, bool) {
 			if rev.Walk(walk.ID) == nil {
@@ -86,7 +86,7 @@ func TestQuestionSkipsWriteAheadQueue(t *testing.T) {
 	agentRunner, _ := newTestRunner()
 	rev := newRunnerReview()
 	walks := writeAhead(agentRunner, rev, 4)
-	question := rev.AddWalk("", -1, "Why?")
+	question := addWalk(rev, "", -1, "Why?")
 	startWalk(agentRunner, rev, question)
 	if agentRunner.run(rev, question.ID) == nil {
 		t.Fatal("the question waits")
@@ -100,7 +100,7 @@ func TestOtherReviewTakesNoWriteAheadSlot(t *testing.T) {
 	agentRunner, _ := newTestRunner()
 	other, rev := newRunnerReview(), newRunnerReview()
 	for range 3 {
-		startWalk(agentRunner, other, other.AddWalk("", -1, "Why?"))
+		startWalk(agentRunner, other, addWalk(other, "", -1, "Why?"))
 	}
 	walks := writeAhead(agentRunner, rev, 4)
 	if got := running(agentRunner, rev, walks); !slices.Equal(got, []bool{true, true, true, false}) || !agentRunner.queued(rev, walks[3].ID) {
@@ -211,7 +211,7 @@ func TestReleaseFreesSlotsForOtherReviews(t *testing.T) {
 func TestReplacedRunIsSilent(t *testing.T) {
 	agentRunner, stream := newTestRunner()
 	rev := newRunnerReview()
-	walk := rev.AddWalk("", -1, "Why?")
+	walk := addWalk(rev, "", -1, "Why?")
 	var ended []bool
 	agentRunner.start(review.DeeperExchange(rev, walk, runnerCfg, nil, ""), "Old", "", func(answered bool) { ended = append(ended, answered) })
 	old := stream.last(t, rev, walk.ID)
@@ -228,7 +228,7 @@ func TestReplacedRunIsSilent(t *testing.T) {
 func TestStopWalkRecordsStoppedOnce(t *testing.T) {
 	agentRunner, stream := newTestRunner()
 	rev := newRunnerReview()
-	walk := rev.AddWalk("", -1, "Why?")
+	walk := addWalk(rev, "", -1, "Why?")
 	var ended []bool
 	agentRunner.start(review.DeeperExchange(rev, walk, runnerCfg, nil, ""), "Question", "", func(answered bool) { ended = append(ended, answered) })
 	agentRunner.stop(rev, walk.ID)
@@ -260,8 +260,8 @@ func TestStopThreadRecordsStoppedOnce(t *testing.T) {
 func TestSameWalkInReviewAndCopy(t *testing.T) {
 	agentRunner, stream := newTestRunner()
 	rev, cp := newRunnerReview(), newRunnerReview()
-	walk := rev.AddWalk("", -1, "Why?")
-	wc := &review.Walk{ID: walk.ID, Step: -1, Question: "Why?"}
+	walk := addWalk(rev, "", -1, "Why?")
+	wc := &review.Walk{ID: walk.ID, Parent: walk.Parent, Question: "Why?"}
 	cp.Walks = append(cp.Walks, wc)
 	startWalk(agentRunner, rev, walk)
 	startWalk(agentRunner, cp, wc)

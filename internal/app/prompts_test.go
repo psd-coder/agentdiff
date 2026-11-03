@@ -54,7 +54,7 @@ func TestRepoPromptFilesGoBeforeTheSettings(t *testing.T) {
 		t.Errorf("the overview does not name the prompt files it uses: %q", tt.Texts())
 	}
 
-	app.deeper("", 0, "")
+	app.deeper(parentOf(app.rev, ""), stepAt(app.rev, "", 0))
 	walk := app.rev.Walks[0]
 	pump(t, app, "the deeper walkthrough", func() bool { return !app.busy(walk.ID) })
 	if prompt := fake.last().Prompt; !strings.Contains(prompt, "Deeper from the settings.") {
@@ -137,9 +137,9 @@ func TestPromptsTabShowsTheTextOfABlock(t *testing.T) {
 
 func TestSectionItemKeepsTheThreadOfItsChecklistQuestion(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary:  "s",
-		Sections: []review.Section{{Title: "Checklist", Items: []review.Step{{Title: "What data changes?", Text: "None."}}}},
+		Sections: []review.Section{{Title: "Checklist", Items: []review.Step{{ID: "s1", Title: "What data changes?", Text: "None."}}}},
 	}}
 	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorSection, Section: "Checklist › What data changes?"})
 	th.Messages = []review.Message{{Role: review.RoleUser, Text: "Check the cache", Time: time.Now()}}

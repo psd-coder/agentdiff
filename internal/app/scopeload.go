@@ -275,10 +275,13 @@ const (
 	overviewStale
 )
 
-func (app *app) freshness() freshness {
-	ov := app.rev.Overview
+func (app *app) freshness() freshness { return app.freshnessOf(app.rev.Overview) }
+
+// freshnessOf is the freshness of a version of the overview. Only the
+// latest one has a run that writes it.
+func (app *app) freshnessOf(ov *review.Overview) freshness {
 	switch {
-	case !ov.Done() || app.loader.firstLoad() || ov.PatchID != "" && !app.patchKnown || app.busy(review.TargetOverview):
+	case !ov.Done() || app.loader.firstLoad() || ov.PatchID != "" && !app.patchKnown || ov == app.rev.Overview && app.busy(review.TargetOverview):
 		return freshnessUnknown
 	case ov.Stale(app.fp.Patch, app.fileNames()):
 		return overviewStale

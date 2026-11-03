@@ -522,7 +522,11 @@ func (app *app) reviewNav(ctx *ui.Context) {
 			ContextMenu(func(m *ui.Menu) {
 				app.cmdMenu(ctx, m, "", "explain", "stop-overview", "regenerate-overview", "overview-log", "", "start-over")
 			})
-		app.walkItems(ctx, "", 1)
+		top := ""
+		if ov := app.versionOn(app.nav.page); ov != nil {
+			top = ov.ID
+		}
+		app.walkItems(ctx, top, 1)
 		ui.SidebarItem(ctx, page{kind: kindAll}.String(), filesIcon, "All files diff").Tooltip(app.keyTip("All files diff", "go-all"))
 		threads := len(app.rev.Threads)
 		ui.SidebarItem(ctx, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Tooltip(app.keyTip("Questions & comments", "go-threads")).Children(func() {
@@ -743,7 +747,7 @@ func (app *app) main(ctx *ui.Context) {
 		}
 		switch current := app.nav.page; current.kind {
 		case kindOverview:
-			app.overviewPage(ctx)
+			app.overviewPage(ctx, current.key)
 		case kindThreads:
 			app.threadsPage(ctx)
 		case kindFeedback:

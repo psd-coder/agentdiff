@@ -32,7 +32,7 @@ func TestStopOverviewKeepsOldContent(t *testing.T) {
 	app := newTestApp(t)
 	app.queue = make(chan func(), 64)
 	fake := newFakeAgent(t, app)
-	app.rev.Overview = &review.Overview{Markdown: "## Summary\nThe old overview.", Generated: time.Now()}
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "## Summary\nThe old overview.", Generated: time.Now()}
 	fake.hold()
 	app.generateOverview()
 	app.runner.stop(app.rev, store.TargetOverview)
@@ -56,10 +56,10 @@ func TestStopOverviewKeepsOldContent(t *testing.T) {
 	}
 }
 
-// TestRegenerateAfterReloadInDialog confirms Regenerate after a reload
-// put another review of the scope on screen: the review on screen
-// regenerates, and the one that went to the archive keeps its walks.
-func TestRegenerateAfterReloadInDialog(t *testing.T) {
+// TestRegenerateWalkAfterReloadInDialog confirms Regenerate of a deeper
+// walkthrough after a reload put another review of the scope on screen:
+// the review that went to the archive keeps its walks, and nothing runs.
+func TestRegenerateWalkAfterReloadInDialog(t *testing.T) {
 	app := newTestApp(t)
 	dir := app.repo.Root
 	answer := "```json\n" + `{"summary": "Lower-case keys.", "steps": [{"title": "A", "text": "a"}], "groups": []}` + "\n```"
@@ -70,10 +70,12 @@ func TestRegenerateAfterReloadInDialog(t *testing.T) {
 	app.generateOverview()
 	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })
 	old := app.rev
-	step := old.AddWalk("", 0, "")
+	deeper := addWalk(old, "", 0, "")
+	deeper.Content = &review.Walkthrough{Steps: []review.Step{{ID: "s1", Title: "Inner"}}}
+	step := addWalk(old, deeper.ID, 0, "")
 	var confirmed func()
 	app.askConfirm = func(_, _, _ string, fn func()) { confirmed = fn }
-	app.regenerate("")
+	app.regenerate(deeper.ID)
 	if confirmed == nil {
 		t.Fatal("Regenerate did not ask")
 	}
@@ -87,9 +89,8 @@ func TestRegenerateAfterReloadInDialog(t *testing.T) {
 	if old.Walk(step.ID) == nil {
 		t.Error("the archived review lost its step walk")
 	}
-	if app.runner.run(app.rev, store.TargetOverview) == nil || app.runner.run(old, store.TargetOverview) != nil {
-		t.Errorf("overview runs on screen %v, in the archived review %v",
-			app.runner.run(app.rev, store.TargetOverview) != nil, app.runner.run(old, store.TargetOverview) != nil)
+	if app.runner.reviewBusy(app.rev) || app.runner.reviewBusy(old) {
+		t.Errorf("runs on screen %v, in the archived review %v", app.runner.reviewBusy(app.rev), app.runner.reviewBusy(old))
 	}
 }
 
@@ -121,7 +122,7 @@ func TestStreamingRunsShowProgress(t *testing.T) {
 
 	streaming("overview-streaming", "## Summary\nKeys are lower-cased now.", "Reading cache/cache.go", app.generateOverview, "Keys are lower-cased now.")
 
-	walk := app.rev.AddWalk("", -1, "Why lower-case?")
+	walk := addWalk(app.rev, "", -1, "Why lower-case?")
 	app.nav.goTo(page{kindWalk, walk.ID})
 	streaming("walk-streaming", "Partial walkthrough", "Searching for callers", func() { app.runWalk(app.rev, walk) })
 

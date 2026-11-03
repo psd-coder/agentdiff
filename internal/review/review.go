@@ -83,6 +83,10 @@ type Group struct {
 // Overview is the agent's explanation of the whole change set: a
 // walkthrough, or Markdown when the agent did not write one.
 type Overview struct {
+	// ID names the version for the walks into its steps, and Version is
+	// its number among the versions of the review, from 1.
+	ID       string         `json:"id,omitempty"`
+	Version  int            `json:"version,omitempty"`
 	Walk     *Walkthrough   `json:"walk,omitempty"`
 	Markdown string         `json:"markdown,omitempty"`
 	Groups   []Group        `json:"groups,omitempty"`
@@ -112,9 +116,11 @@ func (overview *Overview) Done() bool {
 }
 
 type Review struct {
-	Repo     string          `json:"repo"`
-	Scope    gitx.Scope      `json:"scope"`
-	Overview *Overview       `json:"overview,omitempty"`
+	Repo     string     `json:"repo"`
+	Scope    gitx.Scope `json:"scope"`
+	Overview *Overview  `json:"overview,omitempty"`
+	// Previous are the earlier versions of the overview, oldest first.
+	Previous []*Overview     `json:"previous,omitempty"`
 	Threads  []*Thread       `json:"threads"`
 	Walks    []*Walk         `json:"walks,omitempty"`
 	Viewed   map[string]bool `json:"viewed,omitempty"`

@@ -72,7 +72,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 	checkRefs(t, ctx, repo, scope, ov.Walk)
 
-	walk := rev.AddWalk("", 0, "")
+	walk := addWalk(rev, "", 0, "")
 	deeper := review.DeeperExchange(rev, walk, cfg, nil, stat)
 	session := ov.Sessions[provider]
 	if deeper.Request.ResumeID != session || !deeper.Request.Fork {

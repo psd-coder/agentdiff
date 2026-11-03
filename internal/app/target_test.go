@@ -25,7 +25,7 @@ func failed(msg string) agent.Event { return agent.Event{Kind: agent.EventError,
 func TestTargetStateRunBeatsSavedFailure(t *testing.T) {
 	ts, agentRunner, _, _ := newTestTargets()
 	rev := newRunnerReview()
-	rev.Overview = &review.Overview{Markdown: "Old.", Err: "boom"}
+	rev.Overview = &review.Overview{ID: "ov", Markdown: "Old.", Err: "boom"}
 	if got := ts.state(rev, review.TargetOverview); got != (targetState{status: targetFailed}) {
 		t.Fatalf("before the run: %+v", got)
 	}

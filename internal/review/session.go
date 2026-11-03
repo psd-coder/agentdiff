@@ -30,6 +30,8 @@ func (legacy legacySession) into(sessions *Sessions, provider agent.Provider) {
 	}
 }
 
+// UnmarshalJSON reads an overview. One saved before overviews had
+// versions is the first version.
 func (overview *Overview) UnmarshalJSON(data []byte) error {
 	type plain Overview
 	var old legacySession
@@ -40,12 +42,20 @@ func (overview *Overview) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	old.into(&overview.Sessions, overview.Agent)
+	if overview.ID == "" {
+		overview.ID, overview.Version = legacyOverviewID, 1
+	}
 	return nil
 }
 
+// UnmarshalJSON reads a walk. One saved before steps had IDs names its
+// step by its place, as a number from 0, or -1 for the parent as a whole.
 func (walk *Walk) UnmarshalJSON(data []byte) error {
 	type plain Walk
-	var old legacySession
+	var old struct {
+		legacySession
+		Step *int `json:"step"`
+	}
 	if err := json.Unmarshal(data, (*plain)(walk)); err != nil {
 		return err
 	}
@@ -53,6 +63,9 @@ func (walk *Walk) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	old.into(&walk.Sessions, walk.Agent)
+	if walk.StepID == "" && old.Step != nil && *old.Step >= 0 {
+		walk.StepID = legacyStepID(*old.Step)
+	}
 	return nil
 }
 

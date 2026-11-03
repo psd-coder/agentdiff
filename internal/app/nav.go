@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"path"
 
 	"github.com/egoist/mygo/ui"
@@ -10,11 +11,13 @@ func (app *app) goBack() { app.nav.back(app.pageGone) }
 
 func (app *app) goForward() { app.nav.forward(app.pageGone) }
 
-// pageGone reports whether the target of p is gone: a deleted walk, a
-// file out of the changes, a group that no longer exists or a dropped
-// earlier review.
+// pageGone reports whether the target of p is gone: a deleted walk or
+// version of the overview, a file out of the changes, a group that no
+// longer exists or a dropped earlier review.
 func (app *app) pageGone(page page) bool {
 	switch page.kind {
+	case kindOverview:
+		return page.key != "" && app.rev.OverviewOf(page.key) == nil
 	case kindWalk:
 		return app.rev.Walk(page.key) == nil
 	case kindFile:
@@ -24,7 +27,7 @@ func (app *app) pageGone(page page) bool {
 	case kindGroup:
 		_, found := app.groupIndex(page.key)
 		return !found
-	case kindOverview, kindThreads, kindFeedback, kindAll:
+	case kindThreads, kindFeedback, kindAll:
 	}
 	return false
 }
@@ -92,6 +95,9 @@ func (app *app) cardsOf(page page) *cardPage {
 func (app *app) pageLabel(page page) string {
 	switch page.kind {
 	case kindOverview:
+		if ov := app.rev.OverviewOf(page.key); ov != nil && ov != app.rev.Overview {
+			return fmt.Sprintf("Overview v%d", ov.Version)
+		}
 		return "Overview"
 	case kindThreads:
 		return "Comments"

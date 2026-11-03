@@ -2,6 +2,7 @@ package review
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -71,7 +72,7 @@ func TestOverviewExchangeRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			review := New("/repo", tt.scope)
-			review.Overview = &Overview{Walk: &Walkthrough{Summary: "old"}, Sessions: Sessions{agent.Claude: "c0", agent.Codex: "x0"}}
+			review.Overview = &Overview{ID: "ov", Walk: &Walkthrough{Summary: "old"}, Sessions: Sessions{agent.Claude: "c0", agent.Codex: "x0"}}
 			req := OverviewExchange(review, testChanges, agent.Config{Provider: tt.provider}, tt.prompts, SourceDefault).Request
 			if req.Dir != "/repo" || req.SystemPrompt != systemPrompt {
 				t.Errorf("dir %q, system prompt %q", req.Dir, req.SystemPrompt)
@@ -89,6 +90,8 @@ func TestOverviewExchangeResults(t *testing.T) {
 	at := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
 	done := func() *Overview {
 		return &Overview{
+			ID:        "ov",
+			Version:   1,
 			Walk:      &Walkthrough{Summary: "old"},
 			Groups:    []Group{{Title: "Old", Files: []string{"a.go"}}},
 			Sessions:  Sessions{agent.Claude: "c0", agent.Codex: "x0"},
@@ -108,16 +111,21 @@ func TestOverviewExchangeResults(t *testing.T) {
 		old     *Overview
 		session string
 		apply   func(exchange *Exchange)
-		want    Overview
+		// want has no ID when the overview gets a new one.
+		want Overview
+		// kept is set when the old overview becomes an earlier version.
+		kept bool
 	}{
 		{
-			name:    "a JSON answer replaces the overview and keeps the other provider's session",
+			name:    "a JSON answer is the next version and keeps the other provider's session",
 			old:     done(),
+			kept:    true,
 			session: "x1",
 			apply: func(e *Exchange) {
 				e.Answered("```json\n"+`{"summary": "s", "steps": [{"title": "t", "text": "x"}], "groups": [{"title": "A", "files": ["a.go"]}]}`+"\n```", at)
 			},
 			want: Overview{
+				Version:   2,
 				Walk:      &Walkthrough{Summary: "s", Steps: []Step{{Title: "t", Text: "x"}}},
 				Groups:    []Group{{Title: "A", Files: []string{"a.go"}}, {Title: "Other changes", Files: []string{"b.go"}}},
 				Sessions:  Sessions{agent.Claude: "c0", agent.Codex: "x1"},
@@ -136,6 +144,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 				e.Answered("## High level\nText.\n\n```json\n"+`{"groups": [{"title": "Keys", "files": ["b.go", "a.go"]}]}`+"\n```", at)
 			},
 			want: Overview{
+				Version:   1,
 				Markdown:  "## High level\nText.",
 				Groups:    []Group{{Title: "Keys", Files: []string{"b.go", "a.go"}}},
 				Sessions:  Sessions{agent.Codex: "x1"},
@@ -150,8 +159,10 @@ func TestOverviewExchangeResults(t *testing.T) {
 		{
 			name:  "an answer without a session keeps the sessions of the old overview",
 			old:   done(),
+			kept:  true,
 			apply: func(e *Exchange) { e.Answered("Plain text.", at) },
 			want: Overview{
+				Version:   2,
 				Markdown:  "Plain text.",
 				Groups:    []Group{{Title: "Repository root", Files: []string{"a.go", "b.go"}}},
 				Sessions:  Sessions{agent.Claude: "c0", agent.Codex: "x0"},
@@ -173,13 +184,30 @@ func TestOverviewExchangeResults(t *testing.T) {
 		{
 			name:  "a failure without an overview shows only the error",
 			apply: func(e *Exchange) { e.Failed("boom", at) },
-			want:  Overview{Generated: at, Err: "boom"},
+			want:  Overview{Version: 1, Generated: at, Err: "boom"},
 		},
 		{
 			name:  "a failure after a failure shows only the new error",
-			old:   &Overview{Generated: written, Err: "first"},
+			old:   &Overview{ID: "ov", Version: 1, Generated: written, Err: "first"},
 			apply: func(e *Exchange) { e.Failed("boom", at) },
-			want:  Overview{Generated: at, Err: "boom"},
+			want:  Overview{ID: "ov", Version: 1, Generated: at, Err: "boom"},
+		},
+		{
+			name:  "an answer after a failure takes the place of the failure",
+			old:   &Overview{ID: "ov", Version: 1, Generated: written, Err: "first"},
+			apply: func(e *Exchange) { e.Answered("Plain text.", at) },
+			want: Overview{
+				ID:        "ov",
+				Version:   1,
+				Markdown:  "Plain text.",
+				Groups:    []Group{{Title: "Repository root", Files: []string{"a.go", "b.go"}}},
+				Agent:     agent.Codex,
+				Model:     "gpt",
+				Prompt:    SourceRepo,
+				Generated: at,
+				PatchID:   "p1",
+				Files:     map[string]string{"a.go": "f1", "b.go": "f2"},
+			},
 		},
 		{
 			name:  "a stopped run shows Stopped over the old overview",
@@ -190,7 +218,7 @@ func TestOverviewExchangeResults(t *testing.T) {
 		{
 			name:  "a stopped run without an overview shows only Stopped",
 			apply: func(e *Exchange) { e.Stopped(at) },
-			want:  Overview{Generated: at, Err: "Stopped"},
+			want:  Overview{Version: 1, Generated: at, Err: "Stopped"},
 		},
 	}
 	for _, tt := range tests {
@@ -202,8 +230,30 @@ func TestOverviewExchangeResults(t *testing.T) {
 				exchange.Started(tt.session)
 			}
 			tt.apply(exchange)
-			if !reflect.DeepEqual(*review.Overview, tt.want) {
-				t.Errorf("overview = %+v\nwant       %+v", *review.Overview, tt.want)
+			got := *review.Overview
+			if got.ID == "" || tt.want.ID == "" && tt.old != nil && got.ID == tt.old.ID {
+				t.Errorf("overview ID = %q, old %+v", got.ID, tt.old)
+			}
+			if tt.want.ID == "" {
+				got.ID = ""
+			}
+			if got.Walk != nil {
+				for i, step := range got.Walk.Steps {
+					if step.ID == "" {
+						t.Errorf("step %d has no ID", i)
+					}
+					got.Walk.Steps[i].ID = ""
+				}
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("overview = %+v\nwant       %+v", got, tt.want)
+			}
+			var previous []*Overview
+			if tt.kept {
+				previous = []*Overview{tt.old}
+			}
+			if !slices.Equal(review.Previous, previous) {
+				t.Errorf("earlier versions = %v, want %v", review.Previous, previous)
 			}
 		})
 	}
@@ -214,14 +264,14 @@ func TestOverviewExchangeResults(t *testing.T) {
 // that walk's step.
 func walkReview(scope gitx.Scope) (review *Review, inner, question *Walk) {
 	review = New("/repo", scope)
-	review.Overview = &Overview{
-		Walk:     &Walkthrough{Steps: []Step{{Title: "Cache", Text: "c"}, {Title: "Keys", Text: "k"}}},
+	review.Overview = &Overview{ID: "ov",
+		Walk:     &Walkthrough{Steps: []Step{{ID: "s1", Title: "Cache", Text: "c"}, {ID: "s2", Title: "Keys", Text: "k"}}},
 		Sessions: Sessions{agent.Claude: "root"},
 	}
-	inner = review.AddWalk("", 0, "")
-	inner.Content = &Walkthrough{Steps: []Step{{Title: "Lower-case keys", Text: "Get lower-cases.", Refs: []Ref{{File: "c.go", Side: SideNew, Start: 6, End: 6, Why: "the change"}}}}}
+	inner = review.AddWalk("ov", "s1", "")
+	inner.Content = &Walkthrough{Steps: []Step{{ID: "s1", Title: "Lower-case keys", Text: "Get lower-cases.", Refs: []Ref{{File: "c.go", Side: SideNew, Start: 6, End: 6, Why: "the change"}}}}}
 	inner.Sessions = Sessions{agent.Claude: "inner"}
-	question = review.AddWalk(inner.ID, -1, "Is it tested?")
+	question = review.AddWalk(inner.ID, "", "Is it tested?")
 	return review, inner, question
 }
 
@@ -238,7 +288,7 @@ func TestDeeperExchangeRequest(t *testing.T) {
 		{
 			name:     "a step of the overview forks the overview session",
 			provider: agent.Claude,
-			walk:     func(r *Review, _, _ *Walk) *Walk { return r.AddWalk("", 1, "") },
+			walk:     func(r *Review, _, _ *Walk) *Walk { return r.AddWalk("ov", "s2", "") },
 			resume:   "root",
 			want:     []string{"### Keys\nk\n", "more detail", walkSchema},
 			lacks:    []string{"Diffstat", "went deeper"},
@@ -247,7 +297,7 @@ func TestDeeperExchangeRequest(t *testing.T) {
 			name:     "a step of the overview without a session of the provider starts with the change set",
 			provider: agent.Codex,
 			scope:    gitx.Scope{Kind: gitx.ScopeUncommitted},
-			walk:     func(r *Review, _, _ *Walk) *Walk { return r.AddWalk("", 1, "") },
+			walk:     func(r *Review, _, _ *Walk) *Walk { return r.AddWalk("ov", "s2", "") },
 			want: []string{
 				"the uncommitted changes in the working tree",
 				"Diffstat:\n```\na.go | 1 +\n b.go | 2 +-\n```",
@@ -258,7 +308,7 @@ func TestDeeperExchangeRequest(t *testing.T) {
 		{
 			name:     "a step of a walk forks the walk session",
 			provider: agent.Claude,
-			walk:     func(r *Review, inner, _ *Walk) *Walk { return r.AddWalk(inner.ID, 0, "") },
+			walk:     func(r *Review, inner, _ *Walk) *Walk { return r.AddWalk(inner.ID, "s1", "") },
 			resume:   "inner",
 			want:     []string{"### Lower-case keys", "c.go:6 (+): the change"},
 			lacks:    []string{"Diffstat"},
@@ -279,7 +329,7 @@ func TestDeeperExchangeRequest(t *testing.T) {
 		{
 			name:     "a question two levels down names the whole path",
 			provider: agent.Codex,
-			walk:     func(r *Review, _, question *Walk) *Walk { return r.AddWalk(question.ID, -1, "And then?") },
+			walk:     func(r *Review, _, question *Walk) *Walk { return r.AddWalk(question.ID, "", "And then?") },
 			want:     []string{"went deeper into: Cache > Is it tested?.\n", "The reviewer asks: And then?"},
 		},
 	}
@@ -304,7 +354,7 @@ func TestDeeperExchangeClearsTheWalkAndItsSessions(t *testing.T) {
 	inner.Markdown, inner.Err, inner.Agent, inner.Model = "old", "boom", agent.Claude, "opus"
 	inner.More = []Turn{{Question: "And then?"}}
 	DeeperExchange(review, inner, agent.Config{Provider: agent.Claude}, nil, "")
-	want := Walk{ID: inner.ID, Step: 0, Generated: inner.Generated}
+	want := Walk{ID: inner.ID, Parent: "ov", StepID: "s1", Generated: inner.Generated}
 	if !reflect.DeepEqual(*inner, want) {
 		t.Errorf("walk = %+v\nwant   %+v", *inner, want)
 	}
@@ -338,7 +388,7 @@ func TestFollowupExchangeRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-			walk := review.AddWalk("", -1, "Why?")
+			walk := review.AddWalk("ov", "", "Why?")
 			walk.Content = &Walkthrough{Summary: "Because."}
 			walk.Sessions = Sessions{agent.Claude: "q1"}
 			walk.More = []Turn{{Question: "How?", Err: "boom"}}
@@ -359,11 +409,11 @@ func TestWalkExchangeResults(t *testing.T) {
 	json := "```json\n" + `{"summary": "s", "steps": [{"title": "t", "text": "x"}]}` + "\n```"
 	cfg := agent.Config{Provider: agent.Codex, Model: "gpt"}
 	first := func(r *Review) (*Walk, *Exchange) {
-		walk := r.AddWalk("", -1, "Why?")
+		walk := r.AddWalk("ov", "", "Why?")
 		return walk, DeeperExchange(r, walk, cfg, nil, "")
 	}
 	followup := func(r *Review) (*Walk, *Exchange) {
-		walk := r.AddWalk("", -1, "Why?")
+		walk := r.AddWalk("ov", "", "Why?")
 		walk.Content, walk.Agent, walk.Model = &Walkthrough{Summary: "Because."}, agent.Claude, "opus"
 		walk.Sessions = Sessions{agent.Claude: "c0"}
 		return walk, FollowupExchange(r, walk, cfg, nil, "", "And then?")
@@ -380,6 +430,9 @@ func TestWalkExchangeResults(t *testing.T) {
 			apply: func(e *Exchange) { e.Started("x1"); e.Answered(json, at) },
 			check: func(t *testing.T, w *Walk) {
 				want := &Walkthrough{Summary: "s", Steps: []Step{{Title: "t", Text: "x"}}}
+				if w.Content != nil && len(w.Content.Steps) == 1 && w.Content.Steps[0].ID != "" {
+					w.Content.Steps[0].ID = ""
+				}
 				if !reflect.DeepEqual(w.Content, want) || w.Markdown != "" || !w.Generated.Equal(at) {
 					t.Errorf("content %+v, markdown %q, generated %v", w.Content, w.Markdown, w.Generated)
 				}
@@ -498,7 +551,7 @@ func TestThreadExchangeRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			review := New("/repo", gitx.Scope{Kind: gitx.ScopeCommit, Commit: "abc123"})
-			review.Overview = &Overview{Sessions: tt.overview}
+			review.Overview = &Overview{ID: "ov", Sessions: tt.overview}
 			th := review.AddThread(lines)
 			th.Sessions = tt.thread
 			th.Messages = append([]Message(nil), tt.messages...)
@@ -594,7 +647,7 @@ func TestThreadExchangeResults(t *testing.T) {
 
 func TestExchangeTargetAndKind(t *testing.T) {
 	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	walk := review.AddWalk("", -1, "Why?")
+	walk := review.AddWalk("ov", "", "Why?")
 	th := review.AddThread(Anchor{Kind: AnchorGeneral})
 	cfg := agent.Config{Provider: agent.Claude}
 	tests := []struct {

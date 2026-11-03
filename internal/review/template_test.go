@@ -68,7 +68,7 @@ func TestPromptsFallBackToTheDefault(t *testing.T) {
 func TestRewrittenSystemPromptGoesToEveryRun(t *testing.T) {
 	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
 	prompts := Prompts{PromptSystem: "  Answer in Spanish.\n"}
-	walk := review.AddWalk("", -1, "Why?")
+	walk := review.AddWalk("ov", "", "Why?")
 	th := review.AddThread(Anchor{Kind: AnchorGeneral})
 	cfg := agent.Config{Provider: agent.Claude}
 	for name, req := range map[string]agent.Request{
@@ -85,8 +85,8 @@ func TestRewrittenSystemPromptGoesToEveryRun(t *testing.T) {
 
 func TestRenderPutsValuesInOnce(t *testing.T) {
 	review := New("/repo", gitx.Scope{Kind: gitx.ScopeUncommitted})
-	review.Overview = &Overview{Walk: &Walkthrough{Steps: []Step{{Title: "Keys", Text: "Uses {{format}} literally."}}}, Sessions: Sessions{agent.Claude: "root"}}
-	walk := review.AddWalk("", 0, "")
+	review.Overview = &Overview{ID: "ov", Walk: &Walkthrough{Steps: []Step{{ID: "s1", Title: "Keys", Text: "Uses {{format}} literally."}}}, Sessions: Sessions{agent.Claude: "root"}}
+	walk := review.AddWalk("ov", "s1", "")
 	prompts := Prompts{PromptDeeper: "{{context}}\n\n\n\n{{step}}\n\n{{question}}\n\n{{format}}"}
 	prompt := DeeperExchange(review, walk, agent.Config{Provider: agent.Claude}, prompts, "").Request.Prompt
 	if !strings.HasPrefix(prompt, "Go one level deeper into this step") {

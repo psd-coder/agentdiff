@@ -9,11 +9,15 @@ One call of the agent that writes into one run target of a review. A review has 
 _Avoid_: job, task, request
 
 **Run target**:
-What a run writes into: the overview, a walkthrough, or a thread. Each run target has an ID.
+What a run writes into: the overview, a walkthrough, or a thread. Each run target has an ID. The overview is one run target over all its versions: a run writes the next version.
 _Avoid_: key, destination
 
+**Overview version**:
+One overview that an agent wrote for a review. Regenerate writes the next version, and the earlier ones stay with the walkthroughs and questions under their steps. The latest version is the one that continuity, freshness and threads use.
+_Avoid_: revision, snapshot, history
+
 **Write-ahead**:
-The deeper walkthroughs that the app queues and writes before the reviewer asks for them, so that Go deeper opens a written page. Only a few run at once over all reviews, and the others wait in order.
+The deeper walkthroughs that the app queues and writes before the reviewer asks for them, so that Go deeper opens a written page. Only a few run at once over all reviews, and the others wait in order. The write-ahead of an earlier overview version goes on until it ends or the reviewer stops it.
 _Avoid_: prefetch, auto walk, background walk
 
 **Runner**:

@@ -327,6 +327,7 @@ func (rs *Reviews) took(out *Outcome, src *review.Review, moved bool) error {
 		rev := *src
 		rev.Repo, rev.Scope = repo, cur.Scope
 		rev.Viewed = maps.Clone(src.Viewed)
+		rev.Previous = slices.Clone(src.Previous)
 		out.Rev = &rev
 	}
 	rs.Replace(out.Rev)

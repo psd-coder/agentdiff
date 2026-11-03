@@ -36,7 +36,7 @@ func (app *app) archivedPage(ctx *ui.Context, id string) {
 			seen := map[string]bool{}
 			switch {
 			case ov.Walk != nil:
-				app.savedWalkthrough(ctx, rev, "", true, ov.Walk, seen)
+				app.savedWalkthrough(ctx, rev, ov.ID, true, ov.Walk, seen)
 			case ov.Markdown != "":
 				markdown.View(ctx, ov.Markdown, &app.md)
 			}
@@ -63,7 +63,7 @@ func (app *app) earlierStatus(earlier *continuity.Earlier) string {
 
 // savedWalkthrough shows a walkthrough of an archived review. With
 // nested, the walks under its steps show inside them. parent is the walk
-// it belongs to, empty for the overview. seen keeps a walk from showing
+// or the overview version it belongs to. seen keeps a walk from showing
 // twice.
 func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent string, nested bool, walkthrough *review.Walkthrough, seen map[string]bool) {
 	theme := ctx.Theme()
@@ -82,7 +82,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 			if !nested {
 				return
 			}
-			for _, sub := range rev.WalksOn(parent, i) {
+			for _, sub := range rev.WalksOn(parent, s.ID) {
 				app.savedWalk(ctx, rev, sub, seen)
 			}
 		})
@@ -108,7 +108,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 	if !nested {
 		return
 	}
-	for _, q := range rev.WalksOn(parent, -1) {
+	for _, q := range rev.WalksOn(parent, "") {
 		app.savedWalk(ctx, rev, q, seen)
 	}
 }

@@ -83,7 +83,7 @@ func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.
 		}
 		var deeper *review.Walk
 		var asked []*review.Walk
-		for _, w := range app.rev.WalksOn(parent, index) {
+		for _, w := range app.rev.WalksOn(parent, step.ID) {
 			if w.Question == "" && deeper == nil {
 				deeper = w
 			} else {
@@ -97,9 +97,9 @@ func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.
 					ui.Spinner(ctx).Size(12, 12)
 				}
 			} else {
-				ui.PrimaryButton(ctx, "Go deeper").Tooltip("A walkthrough of this step, one level closer to the code").OnClick(func() { app.deeper(parent, index, "") })
+				ui.PrimaryButton(ctx, "Go deeper").Tooltip("A walkthrough of this step, one level closer to the code").OnClick(func() { app.deeper(parent, step.ID) })
 			}
-			ui.Button(ctx, "Ask about this step").Tooltip("Ask in the side panel").OnClick(func() { app.askAbout(parent, index) })
+			ui.Button(ctx, "Ask about this step").Tooltip("Ask in the side panel").OnClick(func() { app.askAbout(parent, step.ID) })
 		})
 		for _, w := range asked {
 			app.walkRow(ctx, w)
@@ -415,12 +415,13 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 	theme := ctx.Theme()
 	walk := app.rev.Walk(id)
 	if walk == nil {
-		app.overviewPage(ctx)
+		app.overviewPage(ctx, "")
 		return
 	}
 	run := app.runner.run(app.rev, walk.ID)
 	st := app.state(walk.ID)
 	path := app.rev.WalkPath(walk.ID)
+	version := app.versionOn(page{kindWalk, walk.ID})
 	app.pageScroll(ctx, page{kindWalk, walk.ID}).Grow(1).FillWidth().Children(func() {
 		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(ctx).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
@@ -431,7 +432,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 					}
 					ui.Text(ctx, "›").FontSize(12).TextColor(theme.TextMuted)
 				}
-				crumb("Overview", overview)
+				crumb(app.pageLabel(app.versionPage(version)), app.versionPage(version))
 				for _, p := range path[:len(path)-1] {
 					crumb(app.rev.WalkTitle(p), page{kindWalk, p.ID})
 				}
@@ -445,7 +446,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 			if step, ok := app.rev.StepOf(walk); ok && walk.Question != "" {
 				ui.Text(ctx, "About the step: "+step.Title).FontSize(12).TextColor(theme.TextMuted)
 			}
-			app.staleBanner(ctx)
+			app.staleBanner(ctx, version)
 			switch {
 			case run != nil && len(walk.More) == 0:
 				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -508,12 +509,12 @@ func overviewBy(ov *review.Overview) string {
 // questions asked before.
 func (app *app) askWalk(ctx *ui.Context, parent string) {
 	theme := ctx.Theme()
-	key := app.questionDraftKey(nil, askTarget{parent, -1})
+	key := app.questionDraftKey(nil, askTarget{parent, ""})
 	draft := app.drafts[key]
 	submit := func() {
 		if question := strings.TrimSpace(draft); question != "" {
 			app.drafts[key] = ""
-			app.askQuestion(parent, -1, question)
+			app.askQuestion(parent, "", question)
 		}
 	}
 	ui.Column(ctx).Gap(8).Margin(8, 0, 0, 0).Children(func() {
@@ -526,7 +527,7 @@ func (app *app) askWalk(ctx *ui.Context, parent string) {
 			}
 			ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "").OnClick(submit)
 		})
-		for _, w := range app.rev.WalksOn(parent, -1) {
+		for _, w := range app.rev.WalksOn(parent, "") {
 			app.walkRow(ctx, w)
 		}
 	})

@@ -46,12 +46,12 @@ func lastResumed(app *app) string { return app.logsOf(app.rev)[0].info.Resumed }
 
 // goDeeper starts the walkthrough of a step as Go deeper does.
 func goDeeper(app *app, parent string, step int) {
-	app.runWalk(app.rev, app.rev.AddWalk(parent, step, ""))
+	app.runWalk(app.rev, addWalk(app.rev, parent, step, ""))
 }
 
 func withRootOverview(app *app) {
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
-		Summary: "s", Steps: []review.Step{{Title: "A", Text: "a"}},
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "s", Steps: []review.Step{{ID: "s1", Title: "A", Text: "a"}},
 	}}
 }
 
@@ -102,7 +102,7 @@ func TestSessionsPerProvider(t *testing.T) {
 	t.Run("follow-up question", func(t *testing.T) {
 		app, fake := sessionsApp(t)
 		useAgent(app, fake, agent.Claude, "c1")
-		app.askQuestion("", -1, "Why?")
+		app.askQuestion(parentOf(app.rev, ""), stepAt(app.rev, "", -1), "Why?")
 		idle(t, app, "the question")
 		walk := app.rev.Walks[0]
 		useAgent(app, fake, agent.Codex, "x1")
@@ -162,7 +162,7 @@ func TestFailedStartKeepsSessions(t *testing.T) {
 	app.generateOverview()
 	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral})
 	app.ask(app.rev, th, "Why?")
-	app.askQuestion("", -1, "What?")
+	app.askQuestion(parentOf(app.rev, ""), stepAt(app.rev, "", -1), "What?")
 	idle(t, app, "the claude runs")
 	walk := app.rev.Walks[0]
 

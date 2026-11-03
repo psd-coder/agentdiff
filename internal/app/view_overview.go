@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -13,15 +14,16 @@ import (
 	"github.com/psd-coder/agentdiff/internal/store"
 )
 
-// staleBanner warns when the review was written for other changes, and
-// names the commit that holds those changes now.
-func (app *app) staleBanner(ctx *ui.Context) {
-	if app.freshness() != overviewStale {
+// staleBanner warns when a version of the overview was written for other
+// changes. For the latest, it names the commit that holds those changes
+// now.
+func (app *app) staleBanner(ctx *ui.Context, ov *review.Overview) {
+	if app.freshnessOf(ov) != overviewStale {
 		return
 	}
 	warningBox(ctx).Gap(10).Children(func() {
-		ui.Text(ctx, staleText(app.rev.Overview.Drift(app.fp.Files)))
-		if sha := app.movedTo; sha != "" {
+		ui.Text(ctx, staleText(ov.Drift(app.fp.Files)))
+		if sha := app.movedTo; sha != "" && ov == app.rev.Overview {
 			ui.Row(ctx).Gap(10).AlignItems(ui.Center).Children(func() {
 				ui.Text(ctx, "Those changes are now commit "+shortSHA(sha)+". The review moves there when you open it.").Grow(1).Shrink(1)
 				app.cmdPrimaryButton(ctx, "open-moved-commit", "", "Open commit")
@@ -167,18 +169,33 @@ func (app *app) commitName(sha string) string {
 	return shortSHA(sha)
 }
 
-func (app *app) overviewPage(ctx *ui.Context) {
+// overviewPage shows a version of the overview: the latest for an empty
+// key.
+func (app *app) overviewPage(ctx *ui.Context, key string) {
 	theme := ctx.Theme()
 	cfg := app.cfg.Agent()
-	run := app.runner.run(app.rev, store.TargetOverview)
-	ov := app.rev.Overview
-	app.pageScroll(ctx, overview).Grow(1).FillWidth().Children(func() {
+	ov := app.versionOn(page{kindOverview, key})
+	latest := ov == app.rev.Overview
+	var run *agentRun
+	if latest {
+		run = app.runner.run(app.rev, store.TargetOverview)
+	}
+	parent := ""
+	if ov != nil {
+		parent = ov.ID
+	}
+	app.pageScroll(ctx, page{kindOverview, key}).Grow(1).FillWidth().Children(func() {
 		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(ctx, "Overview").FontSize(22).Bold()
 				ui.Spacer(ctx)
-				app.cmdButton(ctx, "stop-overview", "", "Stop")
-				app.moreButton(ctx, "", "regenerate-overview", "overview-log", "", "start-over")
+				app.versionSwitcher(ctx, ov)
+				if latest {
+					app.cmdButton(ctx, "stop-overview", "", "Stop")
+					app.moreButton(ctx, "", "regenerate-overview", "overview-log", "", "start-over")
+				} else {
+					app.moreButton(ctx, ov.ID, "regenerate-overview", "overview-log", "", "delete-overview-version")
+				}
 			})
 			app.commitMessage(ctx)
 			app.summaryLine(ctx)
@@ -190,7 +207,8 @@ func (app *app) overviewPage(ctx *ui.Context) {
 				ui.Text(ctx, verb+" here from "+strings.ToLower(from.Label())+", which had the same changes.").FontSize(12).TextColor(theme.TextMuted)
 			}
 			app.repoPromptsNote(ctx)
-			app.staleBanner(ctx)
+			app.aheadBanner(ctx)
+			app.staleBanner(ctx, ov)
 			app.promptBanner(ctx)
 			switch {
 			case app.loader.firstLoad():
@@ -206,20 +224,56 @@ func (app *app) overviewPage(ctx *ui.Context) {
 				app.overviewIntro(ctx, cfg.Provider.Name())
 			case ov.Walk != nil:
 				ui.Text(ctx, overviewBy(ov)).FontSize(12).TextColor(theme.TextMuted)
-				app.walkthrough(ctx, "", ov.Walk)
+				app.walkthrough(ctx, ov.ID, ov.Walk)
 			default:
 				app.overviewSections(ctx, ov)
 			}
-			if status := app.state(review.TargetOverview).status; status == targetFailed || status == targetStopped {
+			if status := app.state(review.TargetOverview).status; latest && (status == targetFailed || status == targetStopped) {
 				failureBox(ctx, ov.Err)
 			}
 			if len(app.files) > 0 && !app.loader.firstLoad() {
 				app.groupCards(ctx)
-				app.askWalk(ctx, "")
+				app.askWalk(ctx, parent)
 				app.generalThreads(ctx)
 			}
 			app.earlierList(ctx)
 		})
+	})
+}
+
+// versionSwitcher picks a version of the overview to show, once there is
+// more than one. The latest version comes first.
+func (app *app) versionSwitcher(ctx *ui.Context, shown *review.Overview) {
+	versions := app.rev.Versions()
+	if len(versions) < 2 || shown == nil {
+		return
+	}
+	slices.Reverse(versions)
+	labels := versionLabels(versions, app.rev.Overview)
+	picked := labels[slices.Index(versions, shown)]
+	ui.Toolbar(ctx, func() {
+		popUp(ctx, &picked, labels).Label("Overview version").FontSize(12).TextColor(ctx.Theme().TextMuted).OnChange(func() {
+			if index := slices.Index(labels, picked); index >= 0 {
+				app.nav.goTo(app.versionPage(versions[index]))
+			}
+		})
+	}).Label("Overview version")
+}
+
+// aheadBanner lists the earlier versions of the overview whose deeper
+// walkthroughs the app still writes ahead, each with a Stop button.
+func (app *app) aheadBanner(ctx *ui.Context) {
+	versions := app.versionsAhead()
+	if len(versions) == 0 {
+		return
+	}
+	warningBox(ctx).Gap(8).Children(func() {
+		for _, ov := range versions {
+			ui.Row(ctx.Key("ahead-" + ov.ID)).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Text(ctx, fmt.Sprintf("Overview v%d still writes %s ahead.", ov.Version, plural(len(app.aheadOf(ov.ID)), "deeper walkthrough"))).Grow(1).Shrink(1)
+				app.cmdButton(ctx, "stop-ahead", ov.ID, "Stop")
+			})
+		}
 	})
 }
 

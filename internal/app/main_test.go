@@ -123,7 +123,7 @@ func TestOverviewAndGroups(t *testing.T) {
 	app := newTestApp(t)
 	md := "## 1. High level\n- Keys are lower-cased in `cache/cache.go:6`.\n\n## 2. Data changes\nNone.\n\n```json\n{\"groups\":[{\"title\":\"Cache keys\",\"summary\":\"Lower-case keys.\",\"files\":[\"cache/cache.go\"]},{\"title\":\"API\",\"summary\":\"New handler.\",\"files\":[\"api/handler.go\"]}]}\n```"
 	body, groups := review.ParseOverview(md, app.fileNames())
-	app.rev.Overview = &review.Overview{Markdown: body, Groups: groups, Agent: agent.Claude, Generated: time.Now(), Sessions: review.Sessions{agent.Claude: "s"}}
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: body, Groups: groups, Agent: agent.Claude, Generated: time.Now(), Sessions: review.Sessions{agent.Claude: "s"}}
 	tt := ui.NewTester(app.view, 1300, 900)
 	tt.Frame()
 	for _, want := range []string{"1. High level", "2. Data changes", "Cache keys", "Review order", "Lower-case keys."} {
@@ -243,8 +243,8 @@ func TestResultStaysUnseenWhileInactive(t *testing.T) {
 // and one chosen there runs on it.
 func TestWalkMoreMenu(t *testing.T) {
 	app := newTestApp(t)
-	walk := app.rev.AddWalk("", 0, "")
-	walk.Content = &review.Walkthrough{Summary: "Inside Get.", Steps: []review.Step{{Title: "ToLower call", Text: "Uses strings."}}}
+	walk := addWalk(app.rev, "", 0, "")
+	walk.Content = &review.Walkthrough{Summary: "Inside Get.", Steps: []review.Step{{ID: "s1", Title: "ToLower call", Text: "Uses strings."}}}
 	walk.Agent, walk.Generated = agent.Claude, time.Now()
 	app.nav.goTo(page{kindWalk, walk.ID})
 	tt := ui.NewTester(app.view, 1300, 800)
@@ -272,7 +272,7 @@ func TestMoreButtonHidesWithoutActions(t *testing.T) {
 	if _, ok := tt.Find("More"); ok {
 		t.Error("More shows on an overview without actions")
 	}
-	app.rev.Overview = &review.Overview{Markdown: "## 1. High level\nKeys.", Agent: agent.Claude, Generated: time.Now()}
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "## 1. High level\nKeys.", Agent: agent.Claude, Generated: time.Now()}
 	tt.Frame()
 	if _, ok := tt.Find("More"); !ok {
 		t.Error("More is missing on a written overview")
@@ -309,7 +309,7 @@ func TestSidebarTooltipShowsShortcut(t *testing.T) {
 // The context menu of a part of the overview starts a thread about it.
 func TestPartContextMenuDiscusses(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "## 1. High level\nKeys are lower-cased.", Agent: agent.Claude, Generated: time.Now()}
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "## 1. High level\nKeys are lower-cased.", Agent: agent.Claude, Generated: time.Now()}
 	tt := ui.NewTester(app.view, 1300, 800)
 	if err := tt.RightClick("1. High level"); err != nil {
 		t.Fatal(err)
@@ -613,7 +613,7 @@ func TestArchiveAndAdoptShowsWhereTheReviewCameFrom(t *testing.T) {
 
 func TestStaleOverviewAndStartOver(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "## A\nx", Groups: []review.Group{{Title: "Old", Files: []string{"gone.go"}}}, Agent: agent.Claude}
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "## A\nx", Groups: []review.Group{{Title: "Old", Files: []string{"gone.go"}}}, Agent: agent.Claude}
 	app.comment(app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "old note")
 	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
@@ -713,7 +713,7 @@ func TestStartOverDuringRuns(t *testing.T) {
 	app.ask(app.rev, app.rev.AddThread(review.Anchor{Kind: review.AnchorGeneral}), "Why?")
 	thread := app.logs[app.rev][0]
 	fake.hold()
-	app.askQuestion("", -1, "What?")
+	app.askQuestion(parentOf(app.rev, ""), stepAt(app.rev, "", -1), "What?")
 	runs := slices.Clone(app.logs[app.rev])
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -829,13 +829,13 @@ func TestDeleteWalkStopsItsRuns(t *testing.T) {
 	app.setScope(gitx.Scope{Kind: gitx.ScopeCommit, Commit: "HEAD"})
 	waitLoad(t, app, "the commit")
 	otherRev := app.rev
-	other := otherRev.AddWalk("", -1, "Other review?")
+	other := addWalk(otherRev, "", -1, "Other review?")
 	app.runWalk(otherRev, other)
 	app.setScope(gitx.Scope{Kind: gitx.ScopeUncommitted})
 	waitLoad(t, app, "the uncommitted changes")
-	parent := app.rev.AddWalk("", -1, "Parent?")
-	child := app.rev.AddWalk(parent.ID, -1, "Child?")
-	sibling := app.rev.AddWalk("", -1, "Sibling?")
+	parent := addWalk(app.rev, "", -1, "Parent?")
+	child := addWalk(app.rev, parent.ID, -1, "Child?")
+	sibling := addWalk(app.rev, "", -1, "Sibling?")
 	for _, w := range []*review.Walk{parent, child, sibling} {
 		app.runWalk(app.rev, w)
 	}
@@ -968,7 +968,7 @@ func TestGroupsFollowChanges(t *testing.T) {
 	loaded("the reload")
 	want("reload", "api", "cache", "docs")
 
-	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{{Title: "Docs first", Files: []string{"docs/new.md"}}}}
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "x", Groups: []review.Group{{Title: "Docs first", Files: []string{"docs/new.md"}}}}
 	want("overview written", "Docs first", "Other changes")
 
 	app.regenerate("")
@@ -1156,7 +1156,7 @@ func TestFileContextMenu(t *testing.T) {
 // A walk's context menu in the sidebar deletes it.
 func TestWalkContextMenuDeletes(t *testing.T) {
 	app := newTestApp(t)
-	walk := app.rev.AddWalk("", 0, "")
+	walk := addWalk(app.rev, "", 0, "")
 	tt := ui.NewTester(app.view, 1300, 800)
 	if err := tt.RightClick("    Deeper"); err != nil {
 		t.Fatalf("%v: %q", err, tt.Texts())
@@ -1367,17 +1367,17 @@ func pump(t *testing.T, app *app, what string, ok func() bool) {
 
 func TestWalkthrough(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "Cache keys are lower-cased now.",
 		Steps: []review.Step{
-			{Title: "Lower-case keys", Text: "`Get` lower-cases its key.", Refs: []review.Ref{
+			{ID: "s1", Title: "Lower-case keys", Text: "`Get` lower-cases its key.", Refs: []review.Ref{
 				{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7, Why: "the new call"},
 				{File: "README.md", Side: review.SideNew, Start: 1, End: 1, Why: "unchanged file"},
 				{File: "cache/cache.go", Side: review.SideNew, Start: 90, End: 91},
 			}},
-			{Title: "New handler", Text: "A stub."},
+			{ID: "s2", Title: "New handler", Text: "A stub."},
 		},
-		Sections: []review.Section{{Title: "Checklist", Items: []review.Step{{Title: "What data changes?", Text: "None."}}}},
+		Sections: []review.Section{{Title: "Checklist", Items: []review.Step{{ID: "s1", Title: "What data changes?", Text: "None."}}}},
 	}}
 	deeper := "```json\n" + `{"summary": "Inside Get.", "steps": [{"title": "ToLower call", "text": "Uses strings.", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
 	fake := newFakeAgent(t, app)
@@ -1397,7 +1397,7 @@ func TestWalkthrough(t *testing.T) {
 		t.Fatal(err)
 	}
 	walk := app.rev.Walks[0]
-	if walk.Parent != "" || walk.Step != 0 || app.nav.page != (page{kindWalk, walk.ID}) {
+	if walk.Parent != app.rev.Overview.ID || walk.StepID != stepAt(app.rev, "", 0) || app.nav.page != (page{kindWalk, walk.ID}) {
 		t.Fatalf("walk = %+v, page %q", walk, app.nav.page.String())
 	}
 	pump(t, app, "the deeper walkthrough", func() bool { return app.runner.run(app.rev, walk.ID) == nil })
@@ -1438,7 +1438,7 @@ func TestDeeperAhead(t *testing.T) {
 		t.Fatalf("%d walks, the third runs %v, the fourth waits %v", len(app.rev.Walks), app.runner.run(app.rev, app.rev.Walks[2].ID) != nil, app.runner.queued(app.rev, app.rev.Walks[3].ID))
 	}
 	for i, w := range app.rev.Walks {
-		if w.Step != i || w.Question != "" {
+		if w.StepID != stepAt(app.rev, "", i) || w.Question != "" {
 			t.Errorf("walk %d = %+v", i, w)
 		}
 	}
@@ -1487,7 +1487,7 @@ func TestDeeperAhead(t *testing.T) {
 	}
 	snapshot(t, tt, "deeper-ahead")
 
-	app.askQuestion("", -1, "Why?")
+	app.askQuestion(parentOf(app.rev, ""), stepAt(app.rev, "", -1), "Why?")
 	pump(t, app, "the question", func() bool { return !app.runner.reviewBusy(app.rev) })
 	if run := app.logsOf(app.rev)[0]; run.info.Effort != "high" {
 		t.Errorf("a question ran at %q effort, want the main one", run.info.Effort)
@@ -1510,10 +1510,10 @@ func TestWalkRowShowsWhetherTheLatestAnswerFailed(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			app := newTestApp(t)
-			app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
-				Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
+			app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+				Summary: "s", Steps: []review.Step{{ID: "s1", Title: "Lower-case keys", Text: "t"}},
 			}}
-			app.rev.Walks = append(app.rev.Walks, &review.Walk{ID: "q", Step: 0, Question: "Why?", Err: tc.err, More: tc.more})
+			app.rev.Walks = append(app.rev.Walks, &review.Walk{ID: "q", Parent: "ov", StepID: "s1", Question: "Why?", Err: tc.err, More: tc.more})
 			tt := ui.NewTester(app.view, 1300, 800)
 			tt.Frame()
 			if !tt.HasText("Why?") {
@@ -1590,8 +1590,8 @@ func TestUnseenAnswerMarksItsRows(t *testing.T) {
 
 func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
 	app := newTestApp(t)
-	parent := app.rev.AddWalk("", 0, "")
-	child := app.rev.AddWalk(parent.ID, 0, "")
+	parent := addWalk(app.rev, "", 0, "")
+	child := addWalk(app.rev, parent.ID, 0, "")
 	app.nav.goTo(page{kindFile, "cache/cache.go"})
 	app.nav.goTo(page{kindWalk, parent.ID})
 	app.nav.goTo(page{kindWalk, child.ID})
@@ -1613,8 +1613,8 @@ func TestDeleteOpenWalkLeavesNoHistory(t *testing.T) {
 // it is in the history: both leave the history, and Back skips them.
 func TestDeleteWalkForgetsItsPagesInHistory(t *testing.T) {
 	app := newTestApp(t)
-	parent := app.rev.AddWalk("", 0, "")
-	child := app.rev.AddWalk(parent.ID, 0, "")
+	parent := addWalk(app.rev, "", 0, "")
+	child := addWalk(app.rev, parent.ID, 0, "")
 	app.nav.goTo(page{kindFile, "cache/cache.go"})
 	app.nav.goTo(page{kindWalk, parent.ID})
 	app.nav.goTo(page{kindWalk, child.ID})
@@ -1658,7 +1658,7 @@ func TestBackFromSnippet(t *testing.T) {
 	for i := range 8 {
 		steps = append(steps, review.Step{Title: fmt.Sprintf("Step %d", i), Text: "Text.\n\nMore text.", Refs: []review.Ref{{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7}}})
 	}
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: steps}}
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: steps}}
 	tt := ui.NewTester(app.view, 1300, 600)
 	tt.Frame()
 	app.scrollOf("overview").Y = 400
@@ -1682,8 +1682,8 @@ func TestBackFromSnippet(t *testing.T) {
 
 func TestQuestionPanel(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
-		Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Sessions: review.Sessions{agent.Claude: "root"}, Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "s", Steps: []review.Step{{ID: "s1", Title: "Lower-case keys", Text: "t"}},
 	}}
 	reply := "```json\n" + `{"summary": "Callers pass mixed case.", "steps": [{"title": "Caller", "text": "x", "refs": [{"file": "cache/cache.go", "start": 6, "end": 6}]}]}` + "\n```"
 	fake := newFakeAgent(t, app)
@@ -1703,7 +1703,7 @@ func TestQuestionPanel(t *testing.T) {
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyEnter)
 	walk := app.rev.Walk(app.questionID())
-	if walk == nil || walk.Question != "Why lower-case?" || walk.Step != 0 || app.nav.page != overview {
+	if walk == nil || walk.Question != "Why lower-case?" || walk.StepID != stepAt(app.rev, "", 0) || app.nav.page != overview {
 		t.Fatalf("question = %+v, page %q", walk, app.nav.page.String())
 	}
 	pump(t, app, "the answer", func() bool { return !app.busy(walk.ID) })
@@ -1761,8 +1761,8 @@ func TestLeavingReviewClosesAskPanel(t *testing.T) {
 			fake.answer("q1", "Because.")
 			app.queue = make(chan func(), 64)
 			left := app.rev
-			left.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
-				Summary: "s", Steps: []review.Step{{Title: "Lower-case keys", Text: "t"}},
+			left.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+				Summary: "s", Steps: []review.Step{{ID: "s1", Title: "Lower-case keys", Text: "t"}},
 			}}
 			app.saveReview()
 			tt := ui.NewTester(app.view, 1400, 900)
@@ -1802,7 +1802,7 @@ func archiveOnReload(t *testing.T, app *app) {
 // the feedback page of the new review shows no "Saved to" note.
 func TestArchiveDropsSavedNote(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Markdown: "x"}
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Markdown: "x"}
 	app.saveReview()
 	app.savedPath = "/tmp/feedback.md"
 	app.nav.page = page{kind: kindFeedback}
@@ -1848,12 +1848,12 @@ func TestScopeSwitchKeepsGroupsFolded(t *testing.T) {
 // turn: each one closes the one before.
 func TestSidePanelShowsOne(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
-		Summary: "s", Steps: []review.Step{{Title: "One", Text: "t"}},
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "s", Steps: []review.Step{{ID: "s1", Title: "One", Text: "t"}},
 	}}
-	question := app.rev.AddWalk("", 0, "Why?")
+	question := addWalk(app.rev, "", 0, "Why?")
 	th := app.rev.AddThread(review.Anchor{Kind: review.AnchorFile, File: "cache/cache.go"})
-	app.askAbout("", 0)
+	app.askAbout(parentOf(app.rev, ""), stepAt(app.rev, "", 0))
 	app.openThread(th.ID)
 	if app.questionOpen() || app.threadID() != th.ID {
 		t.Errorf("after the thread: question open %v, thread %q", app.questionOpen(), app.threadID())
@@ -1899,21 +1899,24 @@ func TestLeavingReviewDropsEmptyThread(t *testing.T) {
 // Deleting another walk keeps it.
 func TestDeleteWalkClosesItsAskPanel(t *testing.T) {
 	app := newTestApp(t)
-	parent := app.rev.AddWalk("", 0, "")
-	child := app.rev.AddWalk(parent.ID, 1, "")
-	other := app.rev.AddWalk("", 1, "")
-	app.askAbout(other.ID, 0)
-	app.deleteWalk(app.rev.AddWalk("", 2, ""))
+	parent := addWalk(app.rev, "", 0, "")
+	child := addWalk(app.rev, parent.ID, 1, "")
+	other := addWalk(app.rev, "", 1, "")
+	for _, w := range []*review.Walk{child, other} {
+		w.Content = &review.Walkthrough{Steps: []review.Step{{ID: "s1", Title: "Inner"}}}
+	}
+	app.askAbout(parentOf(app.rev, other.ID), stepAt(app.rev, other.ID, 0))
+	app.deleteWalk(addWalk(app.rev, "", 2, ""))
 	if !app.questionOpen() {
 		t.Fatal("deleting another walk closed the Ask panel")
 	}
-	app.askAbout(child.ID, 0)
+	app.askAbout(parentOf(app.rev, child.ID), stepAt(app.rev, child.ID, 0))
 	app.deleteWalk(parent)
 	if app.questionOpen() {
 		t.Error("the Ask panel of a deleted walk stayed open")
 	}
-	parent = app.rev.AddWalk("", 0, "")
-	app.openQuestion(app.rev.AddWalk(parent.ID, 0, "Why?").ID)
+	parent = addWalk(app.rev, "", 0, "")
+	app.openQuestion(addWalk(app.rev, parent.ID, 0, "Why?").ID)
 	app.deleteWalk(parent)
 	if app.questionID() != "" {
 		t.Error("the panel of a deleted question stayed open")
@@ -1927,9 +1930,9 @@ func TestRegenerateClosesAskPanelOfItsStepWalk(t *testing.T) {
 	app := newTestApp(t)
 	newFakeAgent(t, app).answer("w1", "Because.")
 	app.queue = make(chan func(), 64)
-	parent := app.rev.AddWalk("", 0, "")
-	deeper := app.rev.AddWalk(parent.ID, 0, "")
-	app.askAbout(deeper.ID, 0)
+	parent := addWalk(app.rev, "", 0, "")
+	deeper := addWalk(app.rev, parent.ID, 0, "")
+	app.askAbout(parentOf(app.rev, deeper.ID), stepAt(app.rev, deeper.ID, 0))
 	app.regenerate(parent.ID)
 	pump(t, app, "the regenerated walk", func() bool { return !app.busy(parent.ID) })
 	if app.rev.Walk(deeper.ID) != nil || app.questionOpen() {
@@ -1941,11 +1944,11 @@ func TestRegenerateClosesAskPanelOfItsStepWalk(t *testing.T) {
 // the reply box of two questions: each text comes back with its target.
 func TestQuestionDraftsPerTarget(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
-		Summary: "s", Steps: []review.Step{{Title: "One", Text: "t"}, {Title: "Two", Text: "t"}},
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+		Summary: "s", Steps: []review.Step{{ID: "s1", Title: "One", Text: "t"}, {ID: "s2", Title: "Two", Text: "t"}},
 	}}
-	q1 := app.rev.AddWalk("", 0, "First?")
-	q2 := app.rev.AddWalk("", 1, "Second?")
+	q1 := addWalk(app.rev, "", 0, "First?")
+	q2 := addWalk(app.rev, "", 1, "Second?")
 	tt := ui.NewTester(app.view, 1400, 900)
 	// shown is the text of the focused box, read through the clipboard.
 	shown := func(open func()) string {
@@ -1962,8 +1965,8 @@ func TestQuestionDraftsPerTarget(t *testing.T) {
 		open func()
 		text string
 	}{
-		{func() { app.askAbout("", 0) }, "draft of step one"},
-		{func() { app.askAbout("", 1) }, "draft of step two"},
+		{func() { app.askAbout(parentOf(app.rev, ""), stepAt(app.rev, "", 0)) }, "draft of step one"},
+		{func() { app.askAbout(parentOf(app.rev, ""), stepAt(app.rev, "", 1)) }, "draft of step two"},
 		{func() { app.openQuestion(q1.ID) }, "reply to the first"},
 		{func() { app.openQuestion(q2.ID) }, "reply to the second"},
 	}
@@ -2149,7 +2152,7 @@ func TestSpentContext(t *testing.T) {
 
 func TestFlatFiles(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
 	tt := ui.NewTester(app.view, 1300, 800)
@@ -2287,7 +2290,7 @@ func TestSelectLineRange(t *testing.T) {
 // files from the sidebar.
 func TestViewedFiles(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
 	app.nav.page = page{kindGroup, "Cache keys"}
@@ -2358,7 +2361,7 @@ func TestViewedFiles(t *testing.T) {
 // and hides its files with the chevron.
 func TestGroupItem(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
 	tt := ui.NewTester(app.view, 1300, 800)
@@ -2776,8 +2779,8 @@ func TestShortcutSettings(t *testing.T) {
 // then shows them with the files of the code snippets already read.
 func TestScopeShowsAtOnce(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
-		{Title: "A", Text: "a", Refs: []review.Ref{{File: "api/handler.go", Start: 1, End: 2}}},
+	app.rev.Overview = &review.Overview{ID: "ov", Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
+		{ID: "s1", Title: "A", Text: "a", Refs: []review.Ref{{File: "api/handler.go", Start: 1, End: 2}}},
 	}}}
 	app.queue = make(chan func(), 64)
 	app.reload()
@@ -2938,7 +2941,7 @@ func TestOverlayFocus(t *testing.T) {
 // the pointer is over the card.
 func TestReviewGroupOnHover(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
 	tt := ui.NewTester(app.view, 1300, 800)
@@ -2997,7 +3000,7 @@ func TestFocusPage(t *testing.T) {
 // of their groups, and marks them all viewed.
 func TestAllFiles(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "x", Groups: []review.Group{
 		{Title: "Cache keys", Files: []string{"cache/cache.go"}}, {Title: "API", Files: []string{"api/handler.go"}},
 	}}
 	tt := ui.NewTester(app.view, 1300, 800)
@@ -3273,16 +3276,16 @@ func TestEarlierReviewPage(t *testing.T) {
 func TestEarlierReviewInFull(t *testing.T) {
 	app := newTestApp(t)
 	rev := review.New(app.repo.Root, gitx.Scope{Kind: gitx.ScopeArchived, From: "p1"})
-	rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
+	rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{
 		Summary: "Root summary.",
-		Steps: []review.Step{{Title: "Root step", Refs: []review.Ref{
+		Steps: []review.Step{{ID: "s1", Title: "Root step", Refs: []review.Ref{
 			{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7},
 		}}},
 	}}
 	rev.Walks = []*review.Walk{
-		{ID: "d1", Parent: "", Step: 0, Content: &review.Walkthrough{Steps: []review.Step{{Title: "Deeper step"}}}},
-		{ID: "q1", Parent: "", Step: -1, Question: "Why lower case?", Markdown: "Callers compare keys.", More: []review.Turn{
-			{Question: "Which callers?", Content: &review.Walkthrough{Steps: []review.Step{{Title: "Follow-up step"}}}},
+		{ID: "d1", Parent: "ov", StepID: "s1", Content: &review.Walkthrough{Steps: []review.Step{{ID: "s1", Title: "Deeper step"}}}},
+		{ID: "q1", Parent: "ov", Question: "Why lower case?", Markdown: "Callers compare keys.", More: []review.Turn{
+			{Question: "Which callers?", Content: &review.Walkthrough{Steps: []review.Step{{ID: "s1", Title: "Follow-up step"}}}},
 		}},
 	}
 	th := rev.AddThread(review.Anchor{Kind: review.AnchorLines, File: "cache/cache.go", Side: review.SideNew, Start: 6, End: 6, Quote: "\treturn strings.ToLower(key)"})
@@ -3404,4 +3407,32 @@ func TestSettingsTabsLineUpControls(t *testing.T) {
 	if left["Theme"] != left["Model"] || left["Model"] != left["Prompt"] {
 		t.Errorf("controls start at %v", left)
 	}
+}
+
+// parentOf is the parent a test names: the latest overview for "".
+func parentOf(rev *review.Review, parent string) string {
+	if parent == "" && rev.Overview != nil {
+		return rev.Overview.ID
+	}
+	return parent
+}
+
+// stepAt is the ID of the step of parent at index, or "" for -1. A
+// parent without that step gives the ID the step would have in a saved
+// review.
+func stepAt(rev *review.Review, parent string, index int) string {
+	steps := rev.Steps(parentOf(rev, parent))
+	switch {
+	case index < 0:
+		return ""
+	case index >= len(steps):
+		return fmt.Sprintf("s%d", index+1)
+	}
+	return steps[index].ID
+}
+
+// addWalk adds a walk into the step of parent at index, or about parent
+// as a whole for -1. An empty parent is the latest overview.
+func addWalk(rev *review.Review, parent string, index int, question string) *review.Walk {
+	return rev.AddWalk(parentOf(rev, parent), stepAt(rev, parent, index), question)
 }

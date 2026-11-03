@@ -62,7 +62,7 @@ func DeeperExchange(review *Review, walk *Walk, cfg agent.Config, prompts Prompt
 	parentSession := ""
 	if parent := review.Walk(walk.Parent); parent != nil {
 		parentSession = parent.Sessions[cfg.Provider]
-	} else if ov := review.Overview; walk.Parent == "" && ov != nil {
+	} else if ov := review.OverviewOf(walk.Parent); ov != nil {
 		parentSession = ov.Sessions[cfg.Provider]
 	}
 	deeper := deeperRequest{Question: walk.Question, Known: parentSession != "", NewRev: review.Scope.NewRev()}
@@ -193,7 +193,9 @@ func (exchange *Exchange) Started(session string) {
 
 // Answered writes the agent's answer into the review. A thread gets the
 // answer as a message. A walk's answer is a walkthrough, or the answer as
-// Markdown when it holds none. The new overview keeps the sessions of the
+// Markdown when it holds none. A new overview is the next version: the
+// one before it, when it has an explanation, stays as an earlier version
+// with the walks under it. The new overview keeps the sessions of the
 // other providers.
 func (exchange *Exchange) Answered(answer string, at time.Time) {
 	if exchange.thread != nil {
@@ -212,10 +214,25 @@ func (exchange *Exchange) Answered(answer string, at time.Time) {
 		return
 	}
 	ov := readOverview(answer, exchange.changes.Files)
+	ov.ID, ov.Version = newID(), 1
 	ov.Agent, ov.Model, ov.Prompt, ov.Generated = exchange.cfg.Provider, exchange.cfg.Model, exchange.source, at
 	ov.PatchID, ov.Files = exchange.changes.PatchID, exchange.changes.FileIDs
 	if old := exchange.rev.Overview; old != nil {
 		ov.Sessions = maps.Clone(old.Sessions)
+		if old.Done() {
+			// The error of a failed regenerate was about the new version.
+			old.Err = ""
+			ov.Version = old.Version + 1
+			exchange.rev.Previous = append(exchange.rev.Previous, old)
+		} else {
+			ov.ID, ov.Version = old.ID, old.Version
+		}
+	}
+	// Questions asked before the first overview belong to it.
+	for _, w := range exchange.rev.Walks {
+		if w.Parent == "" {
+			w.Parent = ov.ID
+		}
 	}
 	if exchange.session != "" {
 		ov.Sessions.Set(exchange.cfg.Provider, exchange.session)
@@ -235,9 +252,11 @@ func (exchange *Exchange) Failed(msg string, at time.Time) {
 		exchange.walk.setAnswer(nil, "", msg, at)
 		return
 	}
-	ov := Overview{Generated: at}
+	ov := Overview{ID: newID(), Version: 1, Generated: at}
 	if old := exchange.rev.Overview; old.Done() {
 		ov = *old
+	} else if old != nil {
+		ov.ID, ov.Version = old.ID, old.Version
 	}
 	ov.Err = msg
 	exchange.rev.Overview = &ov

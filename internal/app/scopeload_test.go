@@ -247,7 +247,7 @@ func fileNamesOf(files []gitx.FileChange) []string {
 func TestLoaderOnGoroutines(t *testing.T) {
 	lt := newLoaderTest(t)
 	earlier := review.New(lt.repo.Root, gitx.ArchivedScope("pz"))
-	earlier.Overview = &review.Overview{Markdown: "earlier", PatchID: "pz", Files: map[string]string{"README.md": "x"}, Generated: time.Unix(1, 0)}
+	earlier.Overview = &review.Overview{ID: "ov", Markdown: "earlier", PatchID: "pz", Files: map[string]string{"README.md": "x"}, Generated: time.Unix(1, 0)}
 	if err := lt.store.SaveReview(earlier); err != nil {
 		t.Fatal(err)
 	}
