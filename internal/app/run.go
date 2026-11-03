@@ -89,7 +89,8 @@ func (app *app) generateOverview() {
 	rev := app.rev
 	cfg := app.cfg.Agent().Auto()
 	changes := review.ChangeSet{Diffstat: app.diffstatOf(rev), Files: app.fileNames(), PatchID: app.fp.Patch, FileIDs: app.fp.Files}
-	ex := review.OverviewExchange(rev, changes, cfg, app.prompts(rev.Repo))
+	prompts := app.prompts(rev.Repo)
+	ex := review.OverviewExchange(rev, changes, cfg, prompts, app.promptSource(review.PromptOverview))
 	app.runner.start(ex, "Overview", "", func(answered bool) {
 		if rev == app.rev {
 			app.leaveGone()

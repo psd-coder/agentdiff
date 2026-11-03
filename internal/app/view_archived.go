@@ -31,7 +31,7 @@ func (app *app) archivedPage(ctx *ui.Context, id string) {
 				app.cmdButton(ctx, "restore-archived", id, "Restore")
 				app.cmdButton(ctx, "delete-archived", id, "Delete")
 			})
-			ui.Text(ctx, writtenBy(ov.Agent, ov.Model, ov.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(theme.TextMuted)
+			ui.Text(ctx, overviewBy(ov)).FontSize(12).TextColor(theme.TextMuted)
 			ui.Text(ctx, app.earlierStatus(earlier)).FontSize(12).TextColor(theme.TextMuted)
 			seen := map[string]bool{}
 			switch {

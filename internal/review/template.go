@@ -148,6 +148,15 @@ func (prompts Prompts) text(name PromptName) string {
 	return TemplateOf(name).Default
 }
 
+// PromptSource is where the text of a prompt came from.
+type PromptSource string
+
+const (
+	SourceDefault  PromptSource = "default"
+	SourceSettings PromptSource = "settings"
+	SourceRepo     PromptSource = "repo"
+)
+
 var blankLines = regexp.MustCompile(`\n{3,}`)
 
 // render puts the values of the blocks into the prompt in one pass, so a

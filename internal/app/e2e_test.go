@@ -55,7 +55,7 @@ func TestEndToEnd(t *testing.T) {
 		names[i] = f.Path
 	}
 	rev := review.New(repo.Root, scope)
-	ex := review.OverviewExchange(rev, review.ChangeSet{Diffstat: stat, Files: names}, cfg, nil)
+	ex := review.OverviewExchange(rev, review.ChangeSet{Diffstat: stat, Files: names}, cfg, nil, review.SourceDefault)
 	final, started := runAgent(t, ctx, cfg, ex.Request)
 	ex.Started(started)
 	ex.Answered(final, time.Now())
