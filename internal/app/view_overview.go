@@ -302,11 +302,14 @@ func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
 // discussMenu gives the card of a part a context menu that starts a
 // thread about it.
 func (app *app) discussMenu(card ui.Element, title, body string) {
-	card.ContextMenu(func(menu *ui.Menu) {
-		if menu.Item("Discuss").Chosen() {
-			app.newThread(review.Anchor{Kind: review.AnchorSection, Section: title, Quote: body})
-		}
-	})
+	card.ContextMenu(func(menu *ui.Menu) { app.discussItem(menu, title, body) })
+}
+
+// discussItem adds the menu item that starts a thread about a part.
+func (app *app) discussItem(menu *ui.Menu, title, body string) {
+	if menu.Item("Discuss").Chosen() {
+		app.newThread(review.Anchor{Kind: review.AnchorSection, Section: title, Quote: body})
+	}
 }
 
 func (app *app) sectionThreads(ctx *ui.Context, title, body string) {

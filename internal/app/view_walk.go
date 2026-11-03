@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -17,6 +18,7 @@ import (
 // alone, read when a snippet first needs it.
 type extraFile struct {
 	lines   []string
+	code    editor.Highlighter
 	err     string
 	loading bool
 }
@@ -43,6 +45,7 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 		}
 		for i, it := range sec.Items {
 			label := app.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1)))
+			discuss := func(menu *ui.Menu) { app.discussItem(menu, label, it.Text) }
 			card := ui.Column(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, theme.Border)
 			app.discussMenu(card, label, it.Text)
 			card.Children(func() {
@@ -54,7 +57,7 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 					markdown.View(ctx, it.Text, &app.md)
 				}
 				for ri, r := range it.Refs {
-					app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r)
+					app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r, discuss)
 				}
 			})
 		}
@@ -64,17 +67,19 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.Step) {
 	theme := ctx.Theme()
 	card := ui.Column(ctx).Gap(10).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border)
-	app.discussMenu(card, app.pathLabel(parent, step.Title), step.Text)
+	label := app.pathLabel(parent, step.Title)
+	app.discussMenu(card, label, step.Text)
+	discuss := func(menu *ui.Menu) { app.discussItem(menu, label, step.Text) }
 	card.Children(func() {
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, fmt.Sprintf("%d. %s", index+1, step.Title)).FontSize(16).Bold().Grow(1)
-			app.sectionThreads(ctx, app.pathLabel(parent, step.Title), step.Text)
+			app.sectionThreads(ctx, label, step.Text)
 		})
 		if step.Text != "" {
 			markdown.View(ctx, step.Text, &app.md)
 		}
 		for ri, r := range step.Refs {
-			app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r)
+			app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r, discuss)
 		}
 		var deeper *review.Walk
 		var asked []*review.Walk
@@ -139,6 +144,10 @@ func (app *app) pathLabel(parent string, titles ...string) string {
 type snippet struct {
 	lines   []string
 	changed []bool
+	// code highlights the text the lines come from, where the first of
+	// them is line first. It is nil for a file without a known language.
+	code    editor.Highlighter
+	first   int
 	inDiff  bool
 	loading bool
 	missing string
@@ -159,16 +168,16 @@ func (app *app) loadedSnippet(ref review.Ref) (snippet, bool) {
 		if diff.state == nil {
 			return snippet{loading: diff.loading, missing: diff.err}, true
 		}
-		buf := diff.state.New
+		buf, code := diff.state.New, diff.newCode
 		if ref.Side == review.SideOld {
-			buf = diff.state.Old
+			buf, code = diff.state.Old, diff.oldCode
 		}
 		lineCount := buf.LineCount()
 		if lineCount > 0 && buf.Line(lineCount-1) == "" {
 			lineCount--
 		}
 		snippet := cut(lineCount, buf.Line, ref)
-		snippet.inDiff = true
+		snippet.code, snippet.inDiff = code, true
 		if snippet.missing == "" {
 			hunks := diff.state.Hunks()
 			for i := range snippet.lines {
@@ -184,7 +193,9 @@ func (app *app) loadedSnippet(ref review.Ref) (snippet, bool) {
 	if file.loading || file.err != "" {
 		return snippet{loading: file.loading, missing: file.err}, true
 	}
-	return cut(len(file.lines), func(i int) string { return file.lines[i] }, ref), true
+	snippet := cut(len(file.lines), func(i int) string { return file.lines[i] }, ref)
+	snippet.code = file.code
+	return snippet, true
 }
 
 // savedSnippet is the snippet of a reference from the code the review
@@ -198,6 +209,7 @@ func savedSnippet(ref review.Ref) snippet {
 		snippet.lines = append(snippet.lines, l.Text)
 		snippet.changed = append(snippet.changed, l.Changed)
 	}
+	snippet.code = codeHighlighter(ref.File, strings.Join(snippet.lines, "\n"))
 	return snippet
 }
 
@@ -205,7 +217,7 @@ func cut(count int, line func(int) string, ref review.Ref) snippet {
 	if ref.Start > count {
 		return snippet{missing: fmt.Sprintf("The file has %d lines", count)}
 	}
-	var snippet snippet
+	snippet := snippet{first: ref.Start - 1}
 	for i := ref.Start - 1; i < min(ref.End, count); i++ {
 		snippet.lines = append(snippet.lines, line(i))
 	}
@@ -238,20 +250,22 @@ func (app *app) readExtra(path string) {
 
 // newExtraFile is a file outside the changes, read as text, or failing
 // with err.
-func newExtraFile(text string, err error) *extraFile {
+func newExtraFile(path, text string, err error) *extraFile {
 	if err != nil {
 		return &extraFile{err: err.Error()}
 	}
-	return &extraFile{lines: strings.Split(strings.TrimSuffix(text, "\n"), "\n")}
+	return &extraFile{lines: strings.Split(strings.TrimSuffix(text, "\n"), "\n"), code: codeHighlighter(path, text)}
 }
 
-func (app *app) refView(ctx *ui.Context, ref review.Ref) {
-	app.snippetView(ctx, ref, app.snippetOf(ref))
+// refView shows the snippet of a reference. discuss adds the items of the
+// part the snippet is in to the menu of its lines, when the part has any.
+func (app *app) refView(ctx *ui.Context, ref review.Ref, discuss func(*ui.Menu)) {
+	app.snippetView(ctx, ref, app.snippetOf(ref), discuss)
 }
 
 // snippetView shows the lines of a reference under its label. The label
 // opens the diff when the lines are in it.
-func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet) {
+func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet, discuss func(*ui.Menu)) {
 	theme := ctx.Theme()
 	ui.Column(ctx).Radius(8).Border(1, theme.Border).Clip().Children(func() {
 		ui.Row(ctx).Gap(10).Padding(6, 10).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
@@ -272,21 +286,94 @@ func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet) {
 		case snippet.missing != "":
 			ui.Text(ctx, snippet.missing).FontSize(12).TextColor(theme.TextMuted).Padding(6, 10)
 		}
-		mark := theme.Success.Alpha(0.14)
-		if ref.Side == review.SideOld {
-			mark = theme.Danger.Alpha(0.14)
+		if len(snippet.lines) > 0 {
+			app.snippetLines(ctx, ref, snippet, discuss)
 		}
+	})
+}
+
+// highlightBudget is how long a snippet waits for the lines above it to
+// be tokenized. The highlighter keeps the states of the lines it
+// tokenized, so a file is only tokenized once.
+const highlightBudget = 100 * time.Millisecond
+
+// tokens are the tokens of each line of the snippet, tokenized from the
+// top of its text, or nil for plain text.
+func (snippet snippet) tokens() [][]editor.Token {
+	out := make([][]editor.Token, len(snippet.lines))
+	if snippet.code == nil {
+		return out
+	}
+	snippet.code.Highlight(snippet.first+len(snippet.lines)-1, highlightBudget)
+	for i, line := range snippet.lines {
+		out[i], _ = snippet.code.Tokens(snippet.first+i, line, nil)
+	}
+	return out
+}
+
+// snippetLines shows the highlighted lines of a snippet. Their text is
+// selectable, and their numbers are not.
+func (app *app) snippetLines(ctx *ui.Context, ref review.Ref, snippet snippet, discuss func(*ui.Menu)) {
+	theme := ctx.Theme()
+	colors := app.codeColors
+	numberColor := theme.TextMuted
+	lines := ui.Column(ctx).Selectable()
+	if codeThemeNamed(app.cfg.CodeTheme).ownBackground() {
+		lines.Background(colors.Background)
+		numberColor = colors.LineNumber
+	}
+	if discuss != nil {
+		// The menu of selectable text replaces the menu of the card around
+		// it, so it repeats the card's items.
+		lines.ContextMenu(func(menu *ui.Menu) {
+			discuss(menu)
+			menu.Separator()
+			menu.EditItems()
+		})
+	}
+	tokens := snippet.tokens()
+	mark := theme.Success.Alpha(0.14)
+	if ref.Side == review.SideOld {
+		mark = theme.Danger.Alpha(0.14)
+	}
+	lines.Children(func() {
 		for i, line := range snippet.lines {
 			row := ui.Row(ctx.Key(i)).Gap(10).Padding(1, 10)
 			if snippet.changed[i] {
 				row.Background(mark)
 			}
 			row.Children(func() {
-				ui.Text(ctx, fmt.Sprint(ref.Start+i)).Font("monospace").FontSize(12).TextColor(theme.TextMuted).Width(32).TextAlign(ui.End)
-				ui.Text(ctx, strings.ReplaceAll(line, "\t", "    ")).Font("monospace").FontSize(12).SingleLine().Shrink(1)
+				ui.Text(ctx, fmt.Sprint(ref.Start+i)).Font("monospace").FontSize(12).TextColor(numberColor).Width(32).TextAlign(ui.End).Unselectable()
+				ui.RichText(ctx, codeSpans(line, tokens[i], colors)...).Font("monospace").FontSize(12).SingleLine().Shrink(1)
 			})
 		}
 	})
+}
+
+// codeSpans colors the tokens of a line of code. Tabs show as four
+// spaces.
+func codeSpans(line string, tokens []editor.Token, colors *editor.Theme) []ui.Span {
+	spans := make([]ui.Span, 0, len(tokens)+1)
+	add := func(text string, kind editor.TokenKind) {
+		style := colors.Tokens[kind]
+		span := ui.Span{Text: strings.ReplaceAll(text, "\t", "    "), Color: style.Color, Italic: style.Italic}
+		if style.Bold {
+			span.Weight = 700
+		}
+		spans = append(spans, span)
+	}
+	start := 0
+	for _, tok := range tokens {
+		end := min(tok.End, len(line))
+		if end > start {
+			add(line[start:end], tok.Kind)
+			start = end
+		}
+	}
+	if start < len(line) || len(spans) == 0 {
+		add(line[start:], editor.TokenText)
+	}
+	return spans
 }
 
 // openRef shows a reference in its file's diff, with its lines selected.
