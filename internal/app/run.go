@@ -87,7 +87,7 @@ func (app *app) generateOverview() {
 		return
 	}
 	rev := app.rev
-	cfg := app.cfg.Agent.Auto()
+	cfg := app.cfg.Agent().Auto()
 	changes := review.ChangeSet{Diffstat: app.diffstatOf(rev), Files: app.fileNames(), PatchID: app.fp.Patch, FileIDs: app.fp.Files}
 	ex := review.OverviewExchange(rev, changes, cfg, app.prompts(rev.Repo))
 	app.runner.start(ex, "Overview", "", func(answered bool) {
@@ -204,7 +204,7 @@ func (app *app) runWalk(rev *review.Review, walk *review.Walk) {
 // walkExchange is the exchange for a walk's walkthrough and its title in
 // the run log. An auto walk is one the app writes ahead of the reviewer.
 func (app *app) walkExchange(rev *review.Review, walk *review.Walk, auto bool) (*review.Exchange, string) {
-	cfg := app.cfg.Agent
+	cfg := app.cfg.Agent()
 	if auto {
 		cfg = cfg.Auto()
 	}
@@ -221,7 +221,7 @@ func (app *app) askMore(rev *review.Review, walk *review.Walk, question string) 
 	if question == "" || app.runner.busy(rev, walk.ID) {
 		return
 	}
-	cfg := app.cfg.Agent
+	cfg := app.cfg.Agent()
 	ex := review.FollowupExchange(rev, walk, cfg, app.prompts(rev.Repo), app.diffstatOf(rev), question)
 	app.runner.start(ex, "Follow-up: "+question, "", nil)
 }
@@ -272,7 +272,7 @@ func (app *app) ask(rev *review.Review, thread *review.Thread, text string) {
 	if text == "" || app.runner.busy(rev, thread.ID) {
 		return
 	}
-	cfg := app.cfg.Agent
+	cfg := app.cfg.Agent()
 	ex := review.ThreadExchange(rev, thread, cfg, app.prompts(rev.Repo), app.diffstatOf(rev), text)
 	app.runner.start(ex, thread.Anchor.Label(), excerpt(text, 160), nil)
 }

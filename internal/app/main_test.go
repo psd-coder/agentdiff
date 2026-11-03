@@ -378,15 +378,13 @@ func TestSettings(t *testing.T) {
 	if tt.HasText("This review") {
 		t.Errorf("per-review tab: %q", tt.Texts())
 	}
-	app.settings.agent.provider = 1
+	app.settings.provider = 1
+	tt.Frame()
 	app.settings.agent.model = "gpt-5"
 	app.settings.ahead = false
 	tt.Frame()
-	if got := app.store.LoadConfig(); got.Agent.Provider != agent.Codex || got.Agent.Model != "gpt-5" || got.DeeperAhead {
+	if got := app.store.LoadConfig(); got.Provider != agent.Codex || got.Agent().Model != "gpt-5" || got.DeeperAhead {
 		t.Errorf("not saved as changed: %+v", got)
-	}
-	if got := newAgentForm(app.store.LoadConfig().Agent).provider; got != 1 {
-		t.Errorf("settings opened again on provider %d, want Codex", got)
 	}
 
 	// The tabs stay in place as the tab changes.
@@ -422,7 +420,7 @@ func TestSettings(t *testing.T) {
 		t.Error("closing the window left the settings open")
 	}
 	app.openSettings()
-	if app.settings == nil || app.settings.agent.provider != 1 {
+	if app.settings == nil || app.settings.provider != 1 || app.settings.agent.model != "gpt-5" {
 		t.Errorf("settings opened again with %+v, want the saved Codex", app.settings)
 	}
 }
@@ -886,7 +884,7 @@ func TestAgentLog(t *testing.T) {
 	if err := os.Chmod(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	app.cfg.Agent = agent.Config{Provider: agent.Claude, Binary: bin}
+	app.cfg.SetAgent(agent.Config{Provider: agent.Claude, Binary: bin})
 	app.generateOverview()
 	waitForExit(t, app.store, app.repo.Root, app.scope)
 
@@ -1432,7 +1430,7 @@ func TestDeeperAhead(t *testing.T) {
 	app := newTestApp(t)
 	answer := "```json\n" + `{"summary": "s", "steps": [{"title": "A", "text": "a"}, {"title": "B", "text": "b"}, {"title": "C", "text": "c"}, {"title": "D", "text": "d"}], "groups": []}` + "\n```"
 	newFakeAgent(t, app).answer("s1", answer)
-	app.cfg.Agent = agent.Config{Provider: agent.Claude, Effort: "high", AutoEffort: "low"}
+	app.cfg.SetAgent(agent.Config{Provider: agent.Claude, Effort: "high", AutoEffort: "low"})
 	app.queue = make(chan func(), 256)
 	app.generateOverview()
 	pump(t, app, "the overview", func() bool { return !app.busy(store.TargetOverview) })

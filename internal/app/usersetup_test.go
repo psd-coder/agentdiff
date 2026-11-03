@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/psd-coder/agentdiff/internal/agent"
 )
 
 func TestUserSetupCheckbox(t *testing.T) {
@@ -11,14 +13,14 @@ func TestUserSetupCheckbox(t *testing.T) {
 	app.openSettings()
 	app.settings.tab = agentTab
 	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
-	if app.cfg.Agent.UserSetup {
+	if app.cfg.Agent().UserSetup {
 		t.Fatal("a new config loads the user's own setup")
 	}
 	if !tt.HasText("Claude Code runs in safe mode: without your CLAUDE.md files, skills, plugins, hooks and MCP servers. The Prompts tab holds the instructions it gets.") {
 		t.Errorf("the tab does not say what Claude runs leave out: %q", tt.Texts())
 	}
 
-	app.settings.agent.provider = 1
+	app.settings.provider = 1
 	tt.Frame()
 	snapshot(t, tt, "settings-user-setup")
 	if !tt.HasText("Codex runs without your config.toml, hooks, plugins, apps and the AGENTS.md files of the repository, so a model set in config.toml does not apply. Codex still reads ~/.codex/AGENTS.md and your skills, because the CLI has no option to leave them out. The Prompts tab holds the instructions it gets.") {
@@ -29,7 +31,7 @@ func TestUserSetupCheckbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !app.store.LoadConfig().Agent.UserSetup {
+	if !app.store.LoadConfig().Agent().UserSetup {
 		t.Error("the check box was not saved")
 	}
 	if !tt.HasText("The agent gets your own setup, as in a run you start yourself. Your hooks run outside the read-only rules of the app.") {
@@ -47,10 +49,48 @@ func TestModelFieldShowsHowOpenCodeNamesModels(t *testing.T) {
 		t.Errorf("Claude Code shows the model format of OpenCode: %q", tt.Texts())
 	}
 
-	app.settings.agent.provider = 2
+	app.settings.provider = 2
 	tt.Frame()
 	snapshot(t, tt, "settings-opencode")
 	if !tt.HasText(help) {
 		t.Errorf("OpenCode does not show its model format: %q", tt.Texts())
+	}
+}
+
+func TestEachAgentKeepsItsModel(t *testing.T) {
+	app := newTestApp(t)
+	app.openSettings()
+	app.settings.tab = agentTab
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
+	typeModel := func(model string) {
+		t.Helper()
+		if err := tt.Click("Model"); err != nil {
+			t.Fatal(err)
+		}
+		tt.Type(model)
+		tt.Frame()
+	}
+	choose := func(name string) {
+		t.Helper()
+		if err := tt.Click(name); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+		tt.Frame()
+	}
+	typeModel("opus")
+	choose("OpenCode")
+	if got := app.settings.agent.model; got != "" {
+		t.Errorf("OpenCode shows the model %q", got)
+	}
+	typeModel("opencode/glm")
+	choose("Claude Code")
+	if got := app.settings.agent.model; got != "opus" {
+		t.Errorf("Claude Code shows the model %q, want opus", got)
+	}
+
+	got := app.store.LoadConfig()
+	if got.Provider != agent.Claude || got.Agent().Model != "opus" || got.AgentOf(agent.OpenCode).Model != "opencode/glm" {
+		t.Errorf("saved %+v", got)
 	}
 }
