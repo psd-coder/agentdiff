@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -228,5 +229,64 @@ func TestVersionLabels(t *testing.T) {
 	got = versionLabels(versions, versions[0])
 	if !slices.Equal(got[3:], []string{"11:02:00 Nov 3 · default prompt by Claude (v2)", "11:02:00 Nov 3 · default prompt by Claude (v1)"}) {
 		t.Errorf("labels in the same second = %q", got[3:])
+	}
+}
+
+func TestOverviewLogShowsTheRunsOfTheVersion(t *testing.T) {
+	app := newTestApp(t)
+	app.queue = make(chan func(), 64)
+	app.cfg.DeeperAhead = false
+	fake := newFakeAgent(t, app)
+	first := writeOverview(t, app, fake, "v1", overviewAnswer("First summary.", "Keys"))
+	fake.fail(errors.New("boom"))
+	app.regenerate("")
+	pump(t, app, "the failed regenerate", func() bool { return !app.busy(store.TargetOverview) })
+	second := writeOverview(t, app, fake, "v2", overviewAnswer("Second summary.", "Handler"))
+	fake.fail(errors.New("boom again"))
+	app.regenerate("")
+	pump(t, app, "the failed regenerate", func() bool { return !app.busy(store.TargetOverview) })
+
+	shown := func() []string {
+		var sessions []string
+		for _, r := range app.logsOf(app.rev) {
+			if app.inLog(r) {
+				sessions = append(sessions, r.info.Started.Format("15:04:05.000000"))
+			}
+		}
+		return sessions
+	}
+	// The newest run first.
+	runs := app.logsOf(app.rev)
+	if len(runs) != 4 {
+		t.Fatalf("runs = %d", len(runs))
+	}
+	started := func(i int) string { return runs[i].info.Started.Format("15:04:05.000000") }
+
+	app.nav.goTo(page{kindOverview, first.ID})
+	tt := ui.NewTester(app.view, 1300, 1000)
+	if err := tt.Click("More"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Show Log of the Overview"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if got := shown(); !slices.Equal(got, []string{started(3)}) {
+		t.Errorf("the log of v1 shows runs %v of %v", got, []string{started(0), started(1), started(2), started(3)})
+	}
+	if !tt.HasText("Overview: " + versionLabels([]*review.Overview{first, second}, second)[0]) {
+		t.Errorf("the log does not name v1: %q", tt.Texts())
+	}
+
+	app.nav.goTo(overview)
+	tt.Frame()
+	if err := tt.Click("More"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Show Log of the Overview"); err != nil {
+		t.Fatal(err)
+	}
+	if got := shown(); !slices.Equal(got, []string{started(0), started(1), started(2)}) {
+		t.Errorf("the log of the latest version shows runs %v", got)
 	}
 }

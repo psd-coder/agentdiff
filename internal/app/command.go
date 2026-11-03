@@ -136,9 +136,9 @@ func (app *app) commands() []*command {
 		{id: "regenerate-overview", title: "Regenerate Overview", can: func(string) bool {
 			return !app.busy(store.TargetOverview) && app.rev.Overview.Done() && len(app.files) > 0
 		}, run: func(*ui.Context, string) { app.regenerate("") }},
-		{id: "overview-log", title: "Show Log of the Overview", tip: "What the agent did to write the overview",
-			can: func(string) bool { return app.busy(store.TargetOverview) || app.rev.Overview != nil },
-			run: func(*ui.Context, string) { app.showLog(store.TargetOverview) }},
+		{id: "overview-log", title: "Show Log of the Overview", tip: "What the agent did to write this version of the overview",
+			target: app.targetOverviewLog, can: func(string) bool { return app.busy(store.TargetOverview) || app.rev.Overview != nil },
+			run: func(_ *ui.Context, version string) { app.showOverviewLog(version) }},
 		{id: "delete-overview-version", title: "Delete Overview Version", tip: "Delete this version of the overview and the walkthroughs under it",
 			target: app.targetVersion, can: app.earlierVersion,
 			run: func(_ *ui.Context, id string) { app.confirmDeleteVersion(id) }},
