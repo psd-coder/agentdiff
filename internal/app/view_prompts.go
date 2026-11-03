@@ -79,8 +79,9 @@ func (app *app) promptsTab(ctx *ui.Context, form *promptForm) {
 		}).Description(tpl.About)
 		if _, ok := form.repo[tpl.Name]; ok {
 			ui.Field(ctx, "", func() {
-				ui.Text(ctx, "This repository gives its own prompt in "+repoPromptFile(tpl.Name)+", so its runs use that file. The text below goes to the runs in other repositories.").FontSize(12).
-					Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
+				warningBox(ctx).Children(func() {
+					ui.Text(ctx, "This repository gives its own prompt in "+repoPromptFile(tpl.Name)+", so its runs use that file. The text below goes to the runs in other repositories.").FontSize(12)
+				})
 			})
 		}
 		text := &form.texts[pickedIndex]

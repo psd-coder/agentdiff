@@ -19,8 +19,7 @@ func (app *app) staleBanner(ctx *ui.Context) {
 	if app.freshness() != overviewStale {
 		return
 	}
-	theme := ctx.Theme()
-	ui.Column(ctx).Gap(10).Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning).Children(func() {
+	warningBox(ctx).Gap(10).Children(func() {
 		ui.Text(ctx, staleText(app.rev.Overview.Drift(app.fp.Files)))
 		if sha := app.movedTo; sha != "" {
 			ui.Row(ctx).Gap(10).AlignItems(ui.Center).Children(func() {
@@ -43,7 +42,9 @@ func (app *app) repoPromptsNote(ctx *ui.Context) {
 	if len(files) == 0 {
 		return
 	}
-	ui.Text(ctx, "The agent runs use the prompts of this repository: "+strings.Join(files, ", ")).FontSize(12).TextColor(ctx.Theme().TextMuted).Selectable()
+	warningBox(ctx).Children(func() {
+		ui.Text(ctx, "The agent runs use the prompts of this repository: "+strings.Join(files, ", ")).Selectable()
+	})
 }
 
 // promptBanner warns about the prompt files of the repository that the
@@ -52,8 +53,7 @@ func (app *app) promptBanner(ctx *ui.Context) {
 	if len(app.promptProblems) == 0 {
 		return
 	}
-	theme := ctx.Theme()
-	ui.Column(ctx).Gap(6).Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning).Children(func() {
+	warningBox(ctx).Gap(6).Children(func() {
 		ui.Text(ctx, "The agent runs use the prompts from the settings in place of these files of the repository:")
 		for _, p := range app.promptProblems {
 			ui.Text(ctx, p).FontSize(12).Selectable()
