@@ -43,6 +43,8 @@ var codexShared = []string{"exec", "--json", "-s", "read-only", "--skip-git-repo
 
 var codexBase = with(codexShared, "--ignore-user-config", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "-c", "project_doc_max_bytes=0")
 
+var opencodeBase = []string{"run", "--format", "json", "--agent", "agentdiff", "--title", "AgentDiff"}
+
 func with(base []string, extra ...string) []string {
 	return append(append([]string{}, base...), extra...)
 }
@@ -101,6 +103,21 @@ func TestArgs(t *testing.T) {
 			Request{ResumeID: "t1"},
 			with(codexBase, "-c", "model_reasoning_effort=low", "resume", "t1", "-"),
 		},
+		{"opencode new", Config{Provider: OpenCode}, Request{Dir: "/r", Prompt: "p", SystemPrompt: "s"}, opencodeBase},
+		{
+			"opencode model and effort",
+			Config{Provider: OpenCode, Model: "openrouter/x/y", Effort: "high"},
+			Request{},
+			with(opencodeBase, "-m", "openrouter/x/y", "--variant", "high"),
+		},
+		{"opencode resume", Config{Provider: OpenCode}, Request{ResumeID: "ses_1"}, with(opencodeBase, "--session", "ses_1")},
+		{
+			"opencode fork with extra args last",
+			Config{Provider: OpenCode, ExtraArgs: []string{"--thinking"}},
+			Request{ResumeID: "ses_1", Fork: true},
+			with(opencodeBase, "--session", "ses_1", "--fork", "--thinking"),
+		},
+		{"opencode fork without resume", Config{Provider: OpenCode}, Request{Fork: true}, opencodeBase},
 		{"unknown provider", Config{Provider: "gemini"}, Request{}, nil},
 	}
 	for _, tt := range tests {
@@ -132,6 +149,7 @@ func TestStdinText(t *testing.T) {
 	}{
 		{"claude keeps prompt", Config{Provider: Claude}, Request{Prompt: "q", SystemPrompt: "s"}, "q"},
 		{"codex without system prompt", Config{Provider: Codex}, Request{Prompt: "q"}, "q"},
+		{"opencode keeps prompt", Config{Provider: OpenCode}, Request{Prompt: "q", SystemPrompt: "s"}, "q"},
 		{
 			"codex wraps system prompt",
 			Config{Provider: Codex},
@@ -221,6 +239,7 @@ func TestRunFixtures(t *testing.T) {
 	}{
 		{Claude, "claude_tool.jsonl", "6a699d1b-afa7-40a4-b527-0cf3cd8745ca", "Scaffold MyGo native app"},
 		{Codex, "codex_exec.jsonl", "01a1735a-bf7c-7a33-8851-e43fd5cba799", "hi there"},
+		{OpenCode, "opencode_tools.jsonl", "ses_e5e2a9c03ffewCdJfh3pImwkOs", "DONE-TEXT"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -253,6 +272,48 @@ func TestRunPassesPromptOnStdin(t *testing.T) {
 	}
 	if want := stdinText(Config{Provider: Codex}, req); string(got) != want {
 		t.Errorf("stdin = %q, want %q", got, want)
+	}
+}
+
+func TestRunPassesProviderEnv(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(t.TempDir(), "env.txt")
+	bin := writeScript(t, `echo "$OPENCODE_CONFIG_CONTENT $OPENCODE_DISABLE_PROJECT_CONFIG" > `+out+"\n/bin/cat "+fixturePath(t, "opencode_tools.jsonl"))
+	req := Request{Dir: dir, Prompt: "q", SystemPrompt: "rules"}
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Binary: bin}, req), 5*time.Second))
+	if last.Kind != EventDone {
+		t.Fatalf("last = %+v", last)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := opencodeConfig("rules") + " 1\n"; string(got) != want {
+		t.Errorf("env = %q, want %q", got, want)
+	}
+}
+
+func TestRunSetsPWDToRequestDir(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(t.TempDir(), "pwd.txt")
+	bin := writeScript(t, `echo "$PWD" > `+out+"\n/bin/cat "+fixturePath(t, "codex_exec.jsonl"))
+	assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: Codex, Binary: bin}, Request{Dir: dir}), 5*time.Second))
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != dir+"\n" {
+		t.Errorf("PWD = %q, want %q", got, dir)
+	}
+}
+
+func TestRunOpenCodeErrorKeepsEveryMessage(t *testing.T) {
+	general := `{"type":"error","sessionID":"ses_1","error":{"name":"UnknownError","data":{"message":"Unexpected server error."}}}`
+	cause := `{"type":"error","sessionID":"ses_1","error":{"name":"UnknownError","data":{"message":"Model not found: x/y."}}}`
+	bin := writeScript(t, "echo '"+general+"'\necho '"+cause+"'\nexit 1")
+	last := assertOneTerminal(t, collect(t, Run(t.Context(), Config{Provider: OpenCode, Binary: bin}, Request{Dir: t.TempDir()}), 5*time.Second))
+	if want := "opencode failed: exit status 1: Unexpected server error.\nModel not found: x/y."; last.Kind != EventError || errString(last.Err) != want {
+		t.Errorf("last = %+v, want error %q", last, want)
 	}
 }
 

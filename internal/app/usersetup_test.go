@@ -36,3 +36,21 @@ func TestUserSetupCheckbox(t *testing.T) {
 		t.Errorf("the tab does not warn about the user's hooks: %q", tt.Texts())
 	}
 }
+
+func TestModelFieldShowsHowOpenCodeNamesModels(t *testing.T) {
+	app := newTestApp(t)
+	app.openSettings()
+	app.settings.tab = agentTab
+	tt := ui.NewTester(app.settingsView, settingsWidth, settingsMaxHeight)
+	const help = "OpenCode takes the provider and the model."
+	if tt.HasText(help) {
+		t.Errorf("Claude Code shows the model format of OpenCode: %q", tt.Texts())
+	}
+
+	app.settings.agent.provider = 2
+	tt.Frame()
+	snapshot(t, tt, "settings-opencode")
+	if !tt.HasText(help) {
+		t.Errorf("OpenCode does not show its model format: %q", tt.Texts())
+	}
+}

@@ -9,6 +9,7 @@ func TestProviderOfOldReviewReadsAsClaude(t *testing.T) {
 	}{
 		{Claude, "Claude Code", "low"},
 		{Codex, "Codex", "minimal"},
+		{OpenCode, "OpenCode", "minimal"},
 		{"", "Claude Code", "low"},
 	}
 	for _, tc := range cases {

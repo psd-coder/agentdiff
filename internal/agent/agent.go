@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -105,16 +106,22 @@ func run(ctx context.Context, cfg Config, req Request, ch chan<- Event) {
 		return
 	}
 
-	args := Args(cfg, req)
+	bin, args := command(cfg, req, bin)
 	stdin := stdinText(cfg, req)
-	log.add(LogCommand, commandLine(req.Dir, bin, args))
+	extraEnv := providerEnv(cfg, req)
+	log.add(LogCommand, commandLine(req.Dir, extraEnv, bin, args))
 	log.add(LogStdin, stdin)
 	stderr := &tailBuffer{max: stderrTailSize}
 	stderrLines := &lineWriter{emit: func(line string) { log.add(LogStderr, line) }}
 	pr, pw := io.Pipe()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = req.Dir
-	cmd.Env = env
+	cmd.Env = slices.Concat(env, extraEnv)
+	// The login shell's PWD names the directory the app started in, and
+	// OpenCode takes its directory from PWD.
+	if req.Dir != "" {
+		cmd.Env = append(cmd.Env, "PWD="+req.Dir)
+	}
 	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = pw
 	cmd.Stderr = io.MultiWriter(stderr, stderrLines)
@@ -246,7 +253,26 @@ func Args(cfg Config, req Request) []string {
 	return sp.args(cfg, req)
 }
 
+// command is the program and arguments that run the CLI at bin for a
+// request.
+func command(cfg Config, req Request, bin string) (string, []string) {
+	args := Args(cfg, req)
+	if !specOf(cfg.Provider).sandbox || req.Dir == "" {
+		return bin, args
+	}
+	return sandboxed(req.Dir, bin, args)
+}
+
 func stdinText(cfg Config, req Request) string { return specOf(cfg.Provider).stdin(req) }
+
+// providerEnv are the variables the CLI gets for a request on top of the login
+// shell's.
+func providerEnv(cfg Config, req Request) []string {
+	if env := specOf(cfg.Provider).env; env != nil {
+		return env(cfg, req)
+	}
+	return nil
+}
 
 type tailBuffer struct {
 	mu  sync.Mutex
