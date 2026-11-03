@@ -295,6 +295,13 @@ func failureBox(ctx *ui.Context, err string) {
 	})
 }
 
+// warningBox is the yellow box of a warning or a note the reader should
+// not miss. Callers set its gap and children.
+func warningBox(ctx *ui.Context) ui.Element {
+	theme := ctx.Theme()
+	return ui.Column(ctx).Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
+}
+
 // itemLook is how a row of the list of changes shows that it is chosen.
 type itemLook uint8
 
