@@ -110,12 +110,18 @@ func answer(result, streamed string) string {
 	return streamed
 }
 
-// regenerate rewrites the walkthrough of parent: the overview for "".
-// The deeper walkthroughs into its steps go with the old steps, so the
-// user confirms that first. A reload can put another review on screen
-// while the dialog is open. Regenerate rewrites the review on screen at
-// the moment the user confirms.
+// regenerate writes a new version of the overview for "", which keeps
+// the earlier one with the walks under it. For a walk, it rewrites the
+// walk: the deeper walkthroughs into its steps go with the old steps, so
+// the user confirms that first. A reload can put another review on
+// screen while the dialog is open. Regenerate rewrites the review on
+// screen at the moment the user confirms.
 func (app *app) regenerate(parent string) {
+	if parent == "" {
+		app.nav.goTo(overview)
+		app.generateOverview()
+		return
+	}
 	shown, repo, scope := app.rev, app.rev.Repo, app.rev.Scope
 	run := func() {
 		rev := app.rev
@@ -127,21 +133,15 @@ func (app *app) regenerate(parent string) {
 		if rev != shown && rev.HasStepWalks(parent) {
 			return
 		}
-		var steps []string
-		for _, w := range rev.Walks {
-			if w.Parent == parent && w.Step >= 0 {
-				steps = append(steps, w.ID)
-			}
-		}
-		app.runner.stop(rev, steps...)
+		app.runner.stop(rev, rev.StepWalks(parent)...)
 		rev.DeleteStepWalks(parent)
-		app.closeGoneQuestion()
-		app.leaveGone()
-		if parent == "" {
-			app.generateOverview()
-		} else if walk := rev.Walk(parent); walk != nil {
+		if walk := rev.Walk(parent); walk != nil {
 			app.runWalk(rev, walk)
 		}
+		// After the run cleared the old steps, so a new question about one
+		// of them closes too.
+		app.closeGoneQuestion()
+		app.leaveGone()
 	}
 	if !app.rev.HasStepWalks(parent) {
 		run()
@@ -150,22 +150,22 @@ func (app *app) regenerate(parent string) {
 	app.confirm("Regenerate this walkthrough?", "The new walkthrough has new steps, so the deeper walkthroughs into the current steps are deleted. Questions about the page as a whole stay.", "Regenerate", run)
 }
 
-// deeper starts a walkthrough one level below parent: into one of its
-// steps, or about the question for step -1.
-func (app *app) deeper(parent string, step int, question string) {
-	walk := app.rev.AddWalk(parent, step, question)
+// deeper starts a walkthrough one level below parent, into one of its
+// steps.
+func (app *app) deeper(parent, stepID string) {
+	walk := app.rev.AddWalk(parent, stepID, "")
 	app.nav.goTo(page{kindWalk, walk.ID})
 	app.runWalk(app.rev, walk)
 }
 
 // askQuestion starts a question's conversation about a step of parent, or about
-// parent as a whole for step -1, in the side panel.
-func (app *app) askQuestion(parent string, step int, question string) {
+// parent as a whole for an empty stepID, in the side panel.
+func (app *app) askQuestion(parent, stepID, question string) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return
 	}
-	walk := app.rev.AddWalk(parent, step, question)
+	walk := app.rev.AddWalk(parent, stepID, question)
 	app.openQuestion(walk.ID)
 	app.runWalk(app.rev, walk)
 }
@@ -176,10 +176,11 @@ func (app *app) deeperAhead(rev *review.Review) {
 	if !app.cfg.DeeperAhead || rev.Overview == nil || rev.Overview.Walk == nil {
 		return
 	}
+	ov := rev.Overview
 	var walks []*review.Walk
-	for i := range rev.Overview.Walk.Steps {
-		if !slices.ContainsFunc(rev.WalksOn("", i), func(w *review.Walk) bool { return w.Question == "" }) {
-			walks = append(walks, rev.AddWalk("", i, ""))
+	for _, step := range ov.Walk.Steps {
+		if !slices.ContainsFunc(rev.WalksOn(ov.ID, step.ID), func(w *review.Walk) bool { return w.Question == "" }) {
+			walks = append(walks, rev.AddWalk(ov.ID, step.ID, ""))
 		}
 	}
 	app.saveReviewOf(rev)
@@ -236,8 +237,8 @@ func (app *app) diffstatOf(rev *review.Review) string {
 	return app.diffstat
 }
 
-// deleteWalk deletes a walk and the walks under it, and goes to its
-// parent.
+// deleteWalk deletes a walk and the walks under it. When the page on
+// screen goes with them, it goes to the walk's parent.
 func (app *app) deleteWalk(walk *review.Walk) {
 	walks := slices.Clone(app.rev.Walks)
 	app.rev.DeleteWalk(walk.ID)
@@ -249,8 +250,12 @@ func (app *app) deleteWalk(walk *review.Walk) {
 	}
 	app.runner.stop(app.rev, gone...)
 	app.closeGoneQuestion()
-	if walk.Parent != "" {
+	switch {
+	case !app.pageGone(app.nav.page):
+	case app.rev.Walk(walk.Parent) != nil:
 		app.nav.replace(page{kindWalk, walk.Parent})
+	default:
+		app.nav.replace(app.versionPage(app.rev.OverviewOf(walk.Parent)))
 	}
 	app.leaveGone()
 	app.saveReview()

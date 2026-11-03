@@ -103,6 +103,24 @@ func (runner *runner) reviewBusy(rev *review.Review) bool {
 	return slices.ContainsFunc(runner.waiting, func(q waitingRun) bool { return q.key.rev == rev })
 }
 
+// aheadTargets returns the write-ahead targets of rev: the running ones,
+// then the queued ones in queue order.
+func (runner *runner) aheadTargets(rev *review.Review) []string {
+	var targets []string
+	for key, run := range runner.runs {
+		if key.rev == rev && run.ahead {
+			targets = append(targets, key.target)
+		}
+	}
+	slices.Sort(targets)
+	for _, q := range runner.waiting {
+		if q.key.rev == rev {
+			targets = append(targets, q.key.target)
+		}
+	}
+	return targets
+}
+
 // start asks the agent for ex at once, in place of a run or a queued
 // walk of the same target. title and note go to the run log. ended runs
 // after the run wrote its result, nil for none.

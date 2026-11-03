@@ -106,8 +106,8 @@ func assertSpans(t *testing.T, got, want []ui.Span) {
 
 func TestSnippetCopiesItsCodeWithoutLineNumbers(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
-		{Title: "Lower-case keys", Text: "t", Refs: []review.Ref{{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7}}},
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
+		{ID: "s1", Title: "Lower-case keys", Text: "t", Refs: []review.Ref{{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7}}},
 	}}}
 	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()
@@ -127,8 +127,8 @@ func TestSnippetCopiesItsCodeWithoutLineNumbers(t *testing.T) {
 
 func TestSnippetLineKeepsTheDiscussMenuOfItsStep(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
-		{Title: "Lower-case keys", Text: "t", Refs: []review.Ref{{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7}}},
+	app.rev.Overview = &review.Overview{ID: "ov", Agent: agent.Claude, Generated: time.Now(), Walk: &review.Walkthrough{Summary: "s", Steps: []review.Step{
+		{ID: "s1", Title: "Lower-case keys", Text: "t", Refs: []review.Ref{{File: "cache/cache.go", Side: review.SideNew, Start: 5, End: 7}}},
 	}}}
 	tt := ui.NewTester(app.view, 1300, 800)
 	tt.Frame()

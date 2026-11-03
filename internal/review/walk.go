@@ -32,6 +32,9 @@ type CodeLine struct {
 }
 
 type Step struct {
+	// ID names the step for the walks into it. The app gives it when it
+	// reads the answer.
+	ID    string `json:"id,omitempty"`
 	Title string `json:"title"`
 	Text  string `json:"text"`
 	Refs  []Ref  `json:"refs,omitempty"`
@@ -60,7 +63,8 @@ const checklistTitle = "Checklist"
 
 // UnmarshalJSON reads a walkthrough. The checklist of a walkthrough
 // written before sections becomes its first section, with the questions
-// as item titles.
+// as item titles. A step saved before steps had IDs gets one made from
+// its place.
 func (walkthrough *Walkthrough) UnmarshalJSON(data []byte) error {
 	type plain Walkthrough
 	var decoded struct {
@@ -75,6 +79,11 @@ func (walkthrough *Walkthrough) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*walkthrough = Walkthrough(decoded.plain)
+	for i := range walkthrough.Steps {
+		if walkthrough.Steps[i].ID == "" {
+			walkthrough.Steps[i].ID = legacyStepID(i)
+		}
+	}
 	if len(decoded.Checklist) == 0 {
 		return nil
 	}
@@ -88,12 +97,13 @@ func (walkthrough *Walkthrough) UnmarshalJSON(data []byte) error {
 
 // Walk is a walkthrough one level deeper than its parent: into one of the
 // parent's steps, or answering a question about the parent as a whole
-// (Step -1). Parent is empty for the overview. A walk with a question is
-// a conversation: More holds the follow-up questions and their answers.
+// (StepID empty). Parent is the ID of a walk or of an overview version. A
+// walk with a question is a conversation: More holds the follow-up
+// questions and their answers.
 type Walk struct {
 	ID        string         `json:"id"`
 	Parent    string         `json:"parent,omitempty"`
-	Step      int            `json:"step"`
+	StepID    string         `json:"stepId,omitempty"`
 	Question  string         `json:"question,omitempty"`
 	Content   *Walkthrough   `json:"content,omitempty"`
 	Markdown  string         `json:"markdown,omitempty"`
@@ -132,8 +142,8 @@ func (walk *Walk) setAnswer(content *Walkthrough, markdown, err string, at time.
 	walk.Content, walk.Markdown, walk.Err, walk.Generated = content, markdown, err, at
 }
 
-func (review *Review) AddWalk(parent string, step int, question string) *Walk {
-	walk := &Walk{ID: newID(), Parent: parent, Step: step, Question: strings.TrimSpace(question), Generated: time.Now()}
+func (review *Review) AddWalk(parent, stepID, question string) *Walk {
+	walk := &Walk{ID: newID(), Parent: parent, StepID: stepID, Question: strings.TrimSpace(question), Generated: time.Now()}
 	review.Walks = append(review.Walks, walk)
 	return walk
 }
@@ -148,18 +158,20 @@ func (review *Review) Walk(id string) *Walk {
 }
 
 // WalksOn returns the walks under a step of a parent, or under the parent
-// as a whole for step -1.
-func (review *Review) WalksOn(parent string, step int) []*Walk {
+// as a whole for an empty stepID.
+func (review *Review) WalksOn(parent, stepID string) []*Walk {
 	var out []*Walk
 	for _, w := range review.Walks {
-		if w.Parent == parent && w.Step == step {
+		if w.Parent == parent && w.StepID == stepID {
 			out = append(out, w)
 		}
 	}
 	return out
 }
 
-// EachRef calls fn with every reference of the review's walkthroughs.
+// EachRef calls fn with every reference of the walkthroughs written for
+// the changes of the latest overview: its own, those of the earlier
+// versions with the same changes, and the walks under them.
 func (review *Review) EachRef(fn func(*Ref)) {
 	walkthrough := func(w *Walkthrough) {
 		if w == nil {
@@ -178,10 +190,20 @@ func (review *Review) EachRef(fn func(*Ref)) {
 			}
 		}
 	}
-	if review.Overview != nil {
-		walkthrough(review.Overview.Walk)
+	if review.Overview == nil {
+		return
+	}
+	same := map[string]bool{}
+	for _, ov := range review.Versions() {
+		if ov == review.Overview || ov.PatchID == review.Overview.PatchID {
+			same[ov.ID] = true
+			walkthrough(ov.Walk)
+		}
 	}
 	for _, w := range review.Walks {
+		if !same[review.VersionOf(w.ID)] {
+			continue
+		}
 		walkthrough(w.Content)
 		for _, t := range w.More {
 			walkthrough(t.Content)
@@ -189,7 +211,8 @@ func (review *Review) EachRef(fn func(*Ref)) {
 	}
 }
 
-// WalkPath returns a walk and its ancestors, the overview's child first.
+// WalkPath returns a walk and its ancestors, the child of the overview
+// version first.
 func (review *Review) WalkPath(id string) []*Walk {
 	var path []*Walk
 	for w := review.Walk(id); w != nil && len(path) <= len(review.Walks); w = review.Walk(w.Parent) {
@@ -218,12 +241,42 @@ func (review *Review) DeleteWalk(id string) {
 	review.Walks = kept
 }
 
+// StepWalks returns the IDs of the walks into the steps of a parent and
+// of every walk under them. Questions about the parent as a whole are not
+// in it.
+func (review *Review) StepWalks(parent string) []string {
+	var ids []string
+	for _, w := range review.Walks {
+		if w.Parent == parent && w.StepID != "" {
+			ids = append(ids, w.ID)
+			ids = append(ids, review.WalksUnder(w.ID)...)
+		}
+	}
+	return ids
+}
+
+// WalksUnder returns the IDs of the walks below parent, at any depth.
+func (review *Review) WalksUnder(parent string) []string {
+	under := map[string]bool{parent: true}
+	var ids []string
+	for changed := true; changed; {
+		changed = false
+		for _, w := range review.Walks {
+			if !under[w.ID] && under[w.Parent] {
+				under[w.ID], changed = true, true
+				ids = append(ids, w.ID)
+			}
+		}
+	}
+	return ids
+}
+
 // DeleteStepWalks deletes the walks into the steps of a parent, with the
-// walks under them. They point at steps by index, so they go when the
-// parent gets new steps. Questions about the parent as a whole stay.
+// walks under them. They go when the parent gets new steps. Questions
+// about the parent as a whole stay.
 func (review *Review) DeleteStepWalks(parent string) {
 	for _, w := range slices.Clone(review.Walks) {
-		if w.Parent == parent && w.Step >= 0 {
+		if w.Parent == parent && w.StepID != "" {
 			review.DeleteWalk(w.ID)
 		}
 	}
@@ -232,34 +285,43 @@ func (review *Review) DeleteStepWalks(parent string) {
 // HasStepWalks reports whether a parent has walks into its steps.
 func (review *Review) HasStepWalks(parent string) bool {
 	for _, w := range review.Walks {
-		if w.Parent == parent && w.Step >= 0 {
+		if w.Parent == parent && w.StepID != "" {
 			return true
 		}
 	}
 	return false
 }
 
-// Steps returns the steps of a parent: the overview's for "".
+// Steps returns the steps of a parent: a walk or an overview version.
 func (review *Review) Steps(parent string) []Step {
-	if parent == "" {
-		if review.Overview != nil && review.Overview.Walk != nil {
-			return review.Overview.Walk.Steps
+	if walk := review.Walk(parent); walk != nil {
+		if walk.Content != nil {
+			return walk.Content.Steps
 		}
 		return nil
 	}
-	if walk := review.Walk(parent); walk != nil && walk.Content != nil {
-		return walk.Content.Steps
+	if ov := review.OverviewOf(parent); ov != nil && ov.Walk != nil {
+		return ov.Walk.Steps
 	}
 	return nil
 }
 
 // StepOf returns the step a walk goes deeper into, if it is about one.
 func (review *Review) StepOf(walk *Walk) (Step, bool) {
-	steps := review.Steps(walk.Parent)
-	if walk.Step < 0 || walk.Step >= len(steps) {
+	return review.FindStep(walk.Parent, walk.StepID)
+}
+
+// FindStep returns the step of a parent with the ID.
+func (review *Review) FindStep(parent, stepID string) (Step, bool) {
+	if stepID == "" {
 		return Step{}, false
 	}
-	return steps[walk.Step], true
+	for _, s := range review.Steps(parent) {
+		if s.ID == stepID {
+			return s, true
+		}
+	}
+	return Step{}, false
 }
 
 // WalkTitle is what a walk is about, in a few words.
@@ -276,8 +338,9 @@ func (review *Review) WalkTitle(walk *Walk) string {
 var jsonFence = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*\\})\\s*```")
 
 // parseWalkthrough reads the walkthrough JSON out of an agent's answer:
-// a fenced block, or the outermost braces. It reports false when the
-// answer holds no walkthrough, so the caller can show it as Markdown.
+// a fenced block, or the outermost braces, and gives each step a new ID.
+// It reports false when the answer holds no walkthrough, so the caller
+// can show it as Markdown.
 func parseWalkthrough(answer string) (*Walkthrough, bool) {
 	raw := ""
 	if matches := jsonFence.FindAllStringSubmatch(answer, -1); len(matches) > 0 {
@@ -291,6 +354,9 @@ func parseWalkthrough(answer string) (*Walkthrough, bool) {
 	}
 	walkthrough.Summary = strings.TrimSpace(walkthrough.Summary)
 	walkthrough.Steps = cleanSteps(walkthrough.Steps)
+	for i := range walkthrough.Steps {
+		walkthrough.Steps[i].ID = newID()
+	}
 	var sections []Section
 	for _, s := range walkthrough.Sections {
 		s.Title, s.Items = strings.TrimSpace(s.Title), cleanSteps(s.Items)

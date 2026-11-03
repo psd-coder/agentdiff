@@ -45,7 +45,7 @@ func (app *app) groupPage(ctx *ui.Context, gi string) {
 	theme := ctx.Theme()
 	index, ok := app.groupIndex(gi)
 	if !ok {
-		app.overviewPage(ctx)
+		app.overviewPage(ctx, "")
 		return
 	}
 	group := app.groups()[index]

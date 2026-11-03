@@ -139,6 +139,12 @@ func (app *app) commands() []*command {
 		{id: "overview-log", title: "Show Log of the Overview", tip: "What the agent did to write the overview",
 			can: func(string) bool { return app.busy(store.TargetOverview) || app.rev.Overview != nil },
 			run: func(*ui.Context, string) { app.showLog(store.TargetOverview) }},
+		{id: "delete-overview-version", title: "Delete Overview Version", tip: "Delete this version of the overview and the walkthroughs under it",
+			target: app.targetVersion, can: app.earlierVersion,
+			run: func(_ *ui.Context, id string) { app.confirmDeleteVersion(id) }},
+		{id: "stop-ahead", title: "Stop Writing Ahead", tip: "Stop the deeper walkthroughs the app writes ahead for this version",
+			target: app.targetVersion, can: func(id string) bool { return len(app.aheadOf(id)) > 0 },
+			run: func(_ *ui.Context, id string) { app.stopAhead(id) }},
 		{id: "start-over", title: "Start Over", tip: "Delete the overview and comments of this scope",
 			can: func(string) bool {
 				return app.rev.Overview != nil || len(app.rev.Threads) > 0 || len(app.rev.Walks) > 0

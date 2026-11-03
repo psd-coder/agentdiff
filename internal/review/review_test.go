@@ -244,7 +244,7 @@ func TestThreads(t *testing.T) {
 }
 
 func TestOverviewStale(t *testing.T) {
-	overview := &Overview{Groups: []Group{{Files: []string{"a", "b"}}}}
+	overview := &Overview{ID: "ov", Groups: []Group{{Files: []string{"a", "b"}}}}
 	tests := []struct {
 		files []string
 		want  bool
@@ -260,7 +260,7 @@ func TestOverviewStale(t *testing.T) {
 		}
 	}
 	var none *Overview
-	if none.Stale("", []string{"a"}) || (&Overview{}).Stale("", []string{"a"}) {
+	if none.Stale("", []string{"a"}) || (&Overview{ID: "ov"}).Stale("", []string{"a"}) {
 		t.Error("overview without groups is stale")
 	}
 	overview.PatchID = "p1"
@@ -270,7 +270,7 @@ func TestOverviewStale(t *testing.T) {
 }
 
 func TestDrift(t *testing.T) {
-	ov := &Overview{Files: map[string]string{"a.go": "1", "b.go": "2", "c.go": "3", "bin": ""}}
+	ov := &Overview{ID: "ov", Files: map[string]string{"a.go": "1", "b.go": "2", "c.go": "3", "bin": ""}}
 	drift := ov.Drift(map[string]string{"a.go": "1", "b.go": "9", "bin": "", "new.go": "4"})
 	if drift != (Drift{Written: 4, Changed: 2, Gone: 1, New: 1, Known: true}) || drift.Disjoint() {
 		t.Errorf("drift = %+v", drift)
@@ -281,11 +281,11 @@ func TestDrift(t *testing.T) {
 	if cleanTree := ov.Drift(nil); !cleanTree.Disjoint() {
 		t.Errorf("clean tree: %+v", cleanTree)
 	}
-	old := &Overview{Groups: []Group{{Files: []string{"a.go", "b.go"}}}}
+	old := &Overview{ID: "ov", Groups: []Group{{Files: []string{"a.go", "b.go"}}}}
 	if withoutFileIDs := old.Drift(map[string]string{"a.go": "1"}); withoutFileIDs != (Drift{Written: 2, Gone: 1}) {
 		t.Errorf("overview without file IDs: %+v", withoutFileIDs)
 	}
-	if withoutFiles := (&Overview{Markdown: "x"}).Drift(nil); withoutFiles.Disjoint() {
+	if withoutFiles := (&Overview{ID: "ov", Markdown: "x"}).Drift(nil); withoutFiles.Disjoint() {
 		t.Errorf("an overview without files is disjoint: %+v", withoutFiles)
 	}
 }

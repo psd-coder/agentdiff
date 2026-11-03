@@ -11,10 +11,10 @@ import (
 )
 
 // askTarget is what a new question in the side panel is about: a step of
-// parent, or parent as a whole for step -1.
+// parent, or parent as a whole for an empty stepID.
 type askTarget struct {
 	parent string
-	step   int
+	stepID string
 }
 
 func (app *app) openQuestion(id string) {
@@ -23,9 +23,9 @@ func (app *app) openQuestion(id string) {
 }
 
 // askAbout opens the side panel for a new question about a step.
-func (app *app) askAbout(parent string, step int) {
+func (app *app) askAbout(parent, stepID string) {
 	app.closeEmptyThread("")
-	app.panel = panelAsk{parent, step}
+	app.panel = panelAsk{parent, stepID}
 }
 
 // closeQuestion closes the side panel while it shows a question or asks
@@ -37,13 +37,22 @@ func (app *app) closeQuestion() {
 	}
 }
 
-// closeGoneQuestion closes the side panel when the walk it asks about,
-// or the question it shows, was deleted.
+// closeGoneQuestion closes the side panel when the walk or the step it
+// asks about, or the question it shows, was deleted.
 func (app *app) closeGoneQuestion() {
-	gone := func(id string) bool { return id != "" && app.rev.Walk(id) == nil }
-	if target := app.asking(); target != nil && gone(target.parent) || gone(app.questionID()) {
+	if target := app.asking(); target != nil && app.askGone(*target) || app.questionID() != "" && app.rev.Walk(app.questionID()) == nil {
 		app.closeQuestion()
 	}
+}
+
+// askGone reports whether the parent of a new question, or its step, is
+// no longer in the review.
+func (app *app) askGone(target askTarget) bool {
+	if app.rev.Walk(target.parent) == nil && app.rev.OverviewOf(target.parent) == nil {
+		return true
+	}
+	_, ok := app.rev.FindStep(target.parent, target.stepID)
+	return target.stepID != "" && !ok
 }
 
 // questionDraftKey names the unsent text of a question in drafts: a
@@ -53,7 +62,7 @@ func (app *app) questionDraftKey(walk *review.Walk, target askTarget) string {
 	if walk != nil {
 		return "question:" + walk.ID
 	}
-	return fmt.Sprintf("ask:%s\x00%s:%s:%d", app.rev.Repo, app.rev.Scope.Key(), target.parent, target.step)
+	return fmt.Sprintf("ask:%s\x00%s:%s:%s", app.rev.Repo, app.rev.Scope.Key(), target.parent, target.stepID)
 }
 
 func (app *app) questionOpen() bool {
@@ -61,15 +70,23 @@ func (app *app) questionOpen() bool {
 	return app.asking() != nil || (id != "" && app.rev.Walk(id) != nil)
 }
 
-// targetLabel names what a question is about.
-func (app *app) targetLabel(parent string, step int) string {
-	if steps := app.rev.Steps(parent); step >= 0 && step < len(steps) {
-		return steps[step].Title
+// targetLabel names what a question is about. A question on an earlier
+// version of the overview names the version first.
+func (app *app) targetLabel(parent, stepID string) string {
+	label := "the whole change set"
+	if step, ok := app.rev.FindStep(parent, stepID); ok {
+		label = step.Title
+	} else if walk := app.rev.Walk(parent); walk != nil {
+		label = app.rev.WalkTitle(walk)
 	}
-	if walk := app.rev.Walk(parent); walk != nil {
-		return app.rev.WalkTitle(walk)
+	version := parent
+	if app.rev.Walk(parent) != nil {
+		version = app.rev.VersionOf(parent)
 	}
-	return "the whole change set"
+	if ov := app.rev.OverviewOf(version); ov != nil && ov != app.rev.Overview {
+		return fmt.Sprintf("Overview v%d › %s", ov.Version, label)
+	}
+	return label
 }
 
 func (app *app) questionPanel(ctx *ui.Context) {
@@ -79,7 +96,7 @@ func (app *app) questionPanel(ctx *ui.Context) {
 	walk := rev.Walk(id)
 	target := app.asking()
 	if walk != nil {
-		target = &askTarget{walk.Parent, walk.Step}
+		target = &askTarget{walk.Parent, walk.StepID}
 	}
 	ui.Column(ctx).Fill().Background(theme.Background).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).Children(func() {
 		ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
@@ -94,7 +111,7 @@ func (app *app) questionPanel(ctx *ui.Context) {
 			}
 			app.cmdButton(ctx, "close-question", "", "Close")
 		})
-		ui.Text(ctx, "About: "+app.targetLabel(target.parent, target.step)).FontSize(12).TextColor(theme.TextMuted).
+		ui.Text(ctx, "About: "+app.targetLabel(target.parent, target.stepID)).FontSize(12).TextColor(theme.TextMuted).
 			SingleLine().Padding(6, 12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 		ui.Scroll(ctx.Key("q-" + id)).TrackScroll(app.scrollOf("question:" + id)).Grow(1).FillWidth().Children(func() {
 			ui.Column(ctx).Gap(14).Padding(12).Children(func() {
@@ -126,7 +143,7 @@ func (app *app) questionPanel(ctx *ui.Context) {
 func (app *app) earlierQuestions(ctx *ui.Context, target *askTarget) {
 	theme := ctx.Theme()
 	var earlier []*review.Walk
-	for _, w := range app.rev.WalksOn(target.parent, target.step) {
+	for _, w := range app.rev.WalksOn(target.parent, target.stepID) {
 		if w.Question != "" {
 			earlier = append(earlier, w)
 		}
@@ -212,7 +229,7 @@ func (app *app) questionComposer(ctx *ui.Context, walk *review.Walk, target *ask
 		}
 		app.drafts[key] = ""
 		if walk == nil {
-			app.askQuestion(target.parent, target.step, text)
+			app.askQuestion(target.parent, target.stepID, text)
 			return
 		}
 		app.askMore(app.rev, walk, text)
@@ -259,7 +276,7 @@ func (app *app) questionsList(ctx *ui.Context) {
 			row.Background(theme.SurfaceHover)
 		}
 		row.Children(func() {
-			ui.Text(ctx, "About: "+app.targetLabel(w.Parent, w.Step)).FontSize(12).TextColor(theme.Accent).SingleLine()
+			ui.Text(ctx, "About: "+app.targetLabel(w.Parent, w.StepID)).FontSize(12).TextColor(theme.Accent).SingleLine()
 			ui.Text(ctx, w.Question).MaxLines(2)
 			meta := w.Generated.Format("Jan 2 15:04")
 			if len(w.More) > 0 {

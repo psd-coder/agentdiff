@@ -11,10 +11,10 @@ func TestOutcome(t *testing.T) {
 		want   Outcome
 	}{
 		{name: "no overview", target: TargetOverview, want: OutcomeNone},
-		{name: "an empty overview", rev: Review{Overview: &Overview{}}, target: TargetOverview, want: OutcomeNone},
-		{name: "a written overview", rev: Review{Overview: &Overview{Markdown: "m"}}, target: TargetOverview, want: OutcomeAnswered},
-		{name: "an overview that failed over an earlier one", rev: Review{Overview: &Overview{Walk: answered, Err: "boom"}}, target: TargetOverview, want: OutcomeFailed},
-		{name: "a stopped overview", rev: Review{Overview: &Overview{Err: Stopped}}, target: TargetOverview, want: OutcomeStopped},
+		{name: "an empty overview", rev: Review{Overview: &Overview{ID: "ov"}}, target: TargetOverview, want: OutcomeNone},
+		{name: "a written overview", rev: Review{Overview: &Overview{ID: "ov", Markdown: "m"}}, target: TargetOverview, want: OutcomeAnswered},
+		{name: "an overview that failed over an earlier one", rev: Review{Overview: &Overview{ID: "ov", Walk: answered, Err: "boom"}}, target: TargetOverview, want: OutcomeFailed},
+		{name: "a stopped overview", rev: Review{Overview: &Overview{ID: "ov", Err: Stopped}}, target: TargetOverview, want: OutcomeStopped},
 		{name: "a walk not written yet", rev: Review{Walks: []*Walk{{ID: "w"}}}, target: "w", want: OutcomeNone},
 		{name: "a written walk", rev: Review{Walks: []*Walk{{ID: "w", Content: answered}}}, target: "w", want: OutcomeAnswered},
 		{
@@ -48,7 +48,7 @@ func TestOutcome(t *testing.T) {
 			rev:    Review{Threads: []*Thread{{ID: "t", Messages: []Message{{Role: RoleUser}, {Role: RoleAgent, Err: Stopped}}}}},
 			target: "t", want: OutcomeStopped,
 		},
-		{name: "an unknown target", rev: Review{Overview: &Overview{Markdown: "m"}}, target: "gone", want: OutcomeNone},
+		{name: "an unknown target", rev: Review{Overview: &Overview{ID: "ov", Markdown: "m"}}, target: "gone", want: OutcomeNone},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.rev.Outcome(tc.target); got != tc.want {

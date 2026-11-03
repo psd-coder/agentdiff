@@ -1,5 +1,7 @@
 package agent
 
+import "cmp"
+
 type Provider string
 
 const (
@@ -12,6 +14,8 @@ const (
 type spec struct {
 	id   Provider
 	name string
+	// short is the name where space is tight, empty when it is name.
+	short string
 	// efforts are the effort levels the CLI takes.
 	efforts []string
 	args    func(Config, Request) []string
@@ -42,6 +46,7 @@ var specs = []spec{
 	{
 		id:           Claude,
 		name:         "Claude Code",
+		short:        "Claude",
 		efforts:      []string{"low", "medium", "high", "xhigh", "max"},
 		args:         claudeArgs,
 		stdin:        claudePrompt,
@@ -107,6 +112,11 @@ func Providers() []Provider {
 
 // Name is the name of the provider's CLI, as the app shows it.
 func (provider Provider) Name() string { return specOf(provider).name }
+
+// ShortName is the name of the provider where space is tight, as Claude.
+func (provider Provider) ShortName() string {
+	return cmp.Or(specOf(provider).short, specOf(provider).name)
+}
 
 // Efforts lists the effort levels the CLI of the provider takes.
 func (provider Provider) Efforts() []string { return specOf(provider).efforts }

@@ -72,7 +72,7 @@ func TestGroupPageKeepsGroupAfterReload(t *testing.T) {
 // same title, each with its own page and its own open state.
 func TestDuplicateTitlesGetOwnPageAndOpenState(t *testing.T) {
 	app := newTestApp(t)
-	app.rev.Overview = &review.Overview{Markdown: "x", Groups: []review.Group{
+	app.rev.Overview = &review.Overview{ID: "ov", Markdown: "x", Groups: []review.Group{
 		{Title: "Tests", Files: []string{"cache/cache.go"}}, {Title: "Tests", Files: []string{"api/handler.go"}},
 	}}
 	tt := ui.NewTester(app.view, 1300, 800)
