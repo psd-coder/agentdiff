@@ -77,7 +77,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 				markdown.View(ctx, s.Text, &app.md)
 			}
 			for ri, r := range s.Refs {
-				app.snippetView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r, savedSnippet(r))
+				app.snippetView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r, savedSnippet(r), nil)
 			}
 			if !nested {
 				return
@@ -100,7 +100,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 					markdown.View(ctx, it.Text, &app.md)
 				}
 				for ri, r := range it.Refs {
-					app.snippetView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r, savedSnippet(r))
+					app.snippetView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r, savedSnippet(r), nil)
 				}
 			})
 		}

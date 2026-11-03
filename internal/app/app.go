@@ -35,6 +35,8 @@ type fileDiff struct {
 	state   *editor.DiffState
 	err     string
 	loading bool
+	// oldCode and newCode highlight the code snippets of each side.
+	oldCode, newCode editor.Highlighter
 }
 
 type app struct {
@@ -598,7 +600,7 @@ func (app *app) scopeLanded(ld landing) {
 		if app.diffs[p] != nil {
 			app.setContents(c.change, c.oldText, c.newText, c.err)
 		} else {
-			app.extra[p] = newExtraFile(c.newText, c.err)
+			app.extra[p] = newExtraFile(p, c.newText, c.err)
 		}
 	}
 	app.leaveGone()
@@ -613,7 +615,7 @@ func (app *app) fileRead(fileRead contents) {
 		app.setContents(fileRead.change, fileRead.oldText, fileRead.newText, fileRead.err)
 		return
 	}
-	app.extra[fileRead.change.Path] = newExtraFile(fileRead.newText, fileRead.err)
+	app.extra[fileRead.change.Path] = newExtraFile(fileRead.change.Path, fileRead.newText, fileRead.err)
 	if app.keepSnippets() {
 		app.saveReview()
 	}
@@ -738,6 +740,7 @@ func (app *app) setContents(change gitx.FileChange, oldText, newText string, err
 	before.SetLanguage(lang)
 	after.SetLanguage(lang)
 	diff.state = &editor.DiffState{Old: before, New: after, LineSelection: true, Wrap: false}
+	diff.oldCode, diff.newCode = highlighterOf(before), highlighterOf(after)
 	if app.keepSnippets() {
 		app.saveReview()
 	}

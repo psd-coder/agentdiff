@@ -196,7 +196,7 @@ func (app *app) compactStep(ctx *ui.Context, title string, step review.Step) {
 			markdown.View(ctx, step.Text, &app.md)
 		}
 		for ri, r := range step.Refs {
-			app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r)
+			app.refView(ctx.Key(fmt.Sprintf("ref-%d", ri)), r, nil)
 		}
 	})
 }
