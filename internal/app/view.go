@@ -486,15 +486,11 @@ func (app *app) reviewNav(ctx *ui.Context) {
 		ui.SidebarItem(ctx, page{kind: kindAll}.String(), filesIcon, "All files diff").Tooltip(app.keyTip("All files diff", "go-all"))
 		threads := len(app.rev.Threads)
 		ui.SidebarItem(ctx, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Tooltip(app.keyTip("Questions & comments", "go-threads")).Children(func() {
-			if threads > 0 {
-				ui.Badge(ctx, fmt.Sprint(threads))
-			}
+			countBadge(ctx, threads)
 		})
 		feedback := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
 		ui.SidebarItem(ctx, page{kind: kindFeedback}.String(), sendIcon, "Feedback").Tooltip(app.keyTip("Feedback", "go-feedback")).Children(func() {
-			if feedback > 0 {
-				ui.Badge(ctx, fmt.Sprint(feedback))
-			}
+			countBadge(ctx, feedback)
 		})
 	}).Shrink(0).Background(sidebarBackground(ctx)).Label("Review")
 	if nav.Changed() {
@@ -652,9 +648,7 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 	}
 	diff := app.diffs[file]
 	marks := func() {
-		if threads > 0 {
-			ui.Badge(ctx, fmt.Sprint(threads))
-		}
+		countBadge(ctx, threads)
 		if diff != nil {
 			diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(11)
 		}

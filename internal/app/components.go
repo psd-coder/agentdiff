@@ -143,6 +143,13 @@ func diffStat(ctx *ui.Context, additions, deletions int) ui.Element {
 	})
 }
 
+// countBadge shows a count in a badge, and nothing for zero.
+func countBadge(ctx *ui.Context, count int) {
+	if count > 0 {
+		ui.Badge(ctx, fmt.Sprint(count))
+	}
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {
