@@ -174,10 +174,7 @@ func (app *app) runView(ctx *ui.Context, run *logRun) {
 				app.logItemView(ctx.Key(i), &run.items[i])
 			}
 			if run.running {
-				ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(ctx).Size(12, 12)
-					caption(ctx, "Running…")
-				})
+				activityLine(ctx, "Running…")
 			}
 		})
 	})

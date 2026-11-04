@@ -63,6 +63,14 @@ func errorText(ctx *ui.Context, err string) ui.Element {
 	return ui.Text(ctx, err).FontSize(12).TextColor(ctx.Theme().Danger).Selectable()
 }
 
+// activityLine is a spinner with what the agent or the app does now.
+func activityLine(ctx *ui.Context, text string) ui.Element {
+	return ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Spinner(ctx).Size(12, 12)
+		caption(ctx, text).SingleLine().Shrink(1)
+	})
+}
+
 // pageColumn holds the content of a page that scrolls. Callers set its
 // gap and children.
 func pageColumn(ctx *ui.Context) ui.Element {

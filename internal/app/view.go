@@ -562,10 +562,7 @@ func (app *app) fileNav(ctx *ui.Context) {
 			caption(ctx, "All files are viewed.").Padding(4, 12)
 		}
 		if app.loader.firstLoad() {
-			ui.Row(ctx).Gap(8).Padding(8, 12).Children(func() {
-				ui.Spinner(ctx).Size(12, 12)
-				caption(ctx, "Reading changes…")
-			})
+			activityLine(ctx, "Reading changes…").Padding(8, 12)
 		}
 	}).Grow(1).Shrink(1).MinHeight(0).Background(sidebarBackground(ctx)).Label("Files")
 	app.takeFocus(nav, "files")
