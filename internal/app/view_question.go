@@ -98,8 +98,8 @@ func (app *app) questionPanel(ctx *ui.Context) {
 	if walk != nil {
 		target = &askTarget{walk.Parent, walk.StepID}
 	}
-	ui.Column(ctx).Fill().Background(theme.Background).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).Children(func() {
-		ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+	panelFrame(ctx).Children(func() {
+		panelBar(ctx).Children(func() {
 			title := "New question"
 			if walk != nil {
 				title = rev.WalkTitle(walk)
@@ -130,7 +130,7 @@ func (app *app) questionPanel(ctx *ui.Context) {
 		})
 		app.questionComposer(ctx, walk, target)
 		if walk != nil {
-			ui.Row(ctx).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+			panelFooter(ctx).Children(func() {
 				smallCaption(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04"))).Grow(1)
 				app.cmdButton(ctx, "delete-question", walk.ID, "Delete")
 			})
