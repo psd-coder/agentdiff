@@ -383,12 +383,12 @@ func (app *app) diffBody(ctx *ui.Context, diff *fileDiff, fit bool) {
 // in the panel.
 func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
 	theme := ctx.Theme()
-	card := ui.ButtonBase(ctx.Key("card-"+th.ID)).Height(threadCardHeight).Padding(theme.Space(1.5), theme.Space(2.5)).Gap(theme.Space(2.5)).Radius(radiusBox).AlignItems(ui.Center).
-		Background(theme.Background).Border(1, theme.Border)
-	if th.ID == app.threadID() {
-		card.Border(2, theme.Accent)
-	} else if card.Hovered() {
-		card.Background(theme.SurfaceHover)
+	card := linkRow(ctx.Key("card-"+th.ID)).Height(threadCardHeight).Padding(theme.Space(1.5), theme.Space(2.5)).Gap(theme.Space(2.5)).AlignItems(ui.Center)
+	switch {
+	case th.ID == app.threadID():
+		card.Border(2, theme.Accent).Background(theme.Background)
+	case !card.Hovered():
+		card.Background(theme.Background)
 	}
 	card.Children(func() {
 		ui.Column(ctx).Grow(1).Shrink(1).Gap(theme.Space(0.5)).Children(func() {
