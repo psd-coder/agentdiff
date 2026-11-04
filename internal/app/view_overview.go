@@ -217,7 +217,7 @@ func (app *app) overviewPage(ctx *ui.Context, key string) {
 					ui.Text(ctx, "Reading changes…").TextColor(theme.TextMuted)
 				})
 			case len(app.files) == 0:
-				app.emptyState(ctx, "No changes", "There is nothing to review in "+strings.ToLower(app.scope.Label())+". Pick another scope on the left.")
+				emptyState(ctx, "No changes", "There is nothing to review in "+strings.ToLower(app.scope.Label())+". Pick another scope on the left.")
 			case run != nil:
 				app.streamingOverview(ctx, run)
 			case !ov.Done():

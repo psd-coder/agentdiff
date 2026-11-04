@@ -27,7 +27,7 @@ const (
 func (app *app) filePage(ctx *ui.Context, file string) {
 	diff := app.diffs[file]
 	if diff == nil {
-		app.emptyState(ctx, "File not in this scope", file)
+		emptyState(ctx, "File not in this scope", file)
 		return
 	}
 	ui.Column(ctx).Fill().Children(func() {
