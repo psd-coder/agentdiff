@@ -152,7 +152,7 @@ func (app *app) earlierQuestions(ctx *ui.Context, target *askTarget) {
 		ui.Text(ctx, "Ask the review agent anything about this. The answer is a short walkthrough with the code that shows it, and you can ask follow-up questions in the same conversation.").TextColor(theme.TextMuted)
 		return
 	}
-	ui.Text(ctx, "Asked before").FontSize(12).Bold().TextColor(theme.TextMuted)
+	smallLabel(ctx, "Asked before")
 	for _, w := range earlier {
 		app.walkRow(ctx, w)
 	}

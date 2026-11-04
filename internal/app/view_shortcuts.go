@@ -66,10 +66,9 @@ func (app *app) shortcutsModal(ctx *ui.Context) {
 	if !app.shortcutsOpen {
 		return
 	}
-	theme := ctx.Theme()
 	section := func(title string, list []shortcut) {
 		ui.Column(ctx.Key(title)).Gap(6).Children(func() {
-			ui.Text(ctx, title).FontSize(12).Bold().TextColor(theme.TextMuted)
+			smallLabel(ctx, title)
 			for _, s := range list {
 				ui.Row(ctx.Key(s.keys + s.does)).Gap(16).AlignItems(ui.Start).Children(func() {
 					ui.Text(ctx, s.does).Grow(1).Shrink(1)
