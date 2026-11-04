@@ -38,7 +38,6 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 	for i, s := range walkthrough.Steps {
 		app.stepCard(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i)), parent, i, s)
 	}
-	theme := ctx.Theme()
 	for si, sec := range walkthrough.Sections {
 		if sec.Title != "" {
 			sectionHeading(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title)
@@ -46,7 +45,7 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 		for i, it := range sec.Items {
 			label := app.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1)))
 			discuss := func(menu *ui.Menu) { app.discussItem(menu, label, it.Text) }
-			card := ui.Column(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, theme.Border)
+			card := outlineCard(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6)
 			app.discussMenu(card, label, it.Text)
 			card.Children(func() {
 				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -65,8 +64,7 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 }
 
 func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.Step) {
-	theme := ctx.Theme()
-	card := ui.Column(ctx).Gap(10).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border)
+	card := card(ctx).Gap(10)
 	label := app.pathLabel(parent, step.Title)
 	app.discussMenu(card, label, step.Text)
 	discuss := func(menu *ui.Menu) { app.discussItem(menu, label, step.Text) }
@@ -110,10 +108,7 @@ func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.
 // walkRow links to a walk from the page above it.
 func (app *app) walkRow(ctx *ui.Context, walk *review.Walk) {
 	theme := ctx.Theme()
-	row := ui.ButtonBase(ctx.Key("walk-"+walk.ID)).Padding(8, 12).Gap(8).Radius(8).Border(1, theme.Border).AlignItems(ui.Center)
-	if row.Hovered() {
-		row.Background(theme.SurfaceHover)
-	}
+	row := linkRow(ctx.Key("walk-"+walk.ID)).Padding(8, 12).Gap(8).AlignItems(ui.Center)
 	row.Children(func() {
 		ui.Text(ctx, "›").TextColor(theme.Accent)
 		ui.Text(ctx, app.rev.WalkTitle(walk)).SingleLine().Shrink(1).Grow(1)
@@ -412,7 +407,6 @@ func nearestHunk(hunks []editor.DiffHunk, ref review.Ref) int {
 }
 
 func (app *app) walkPage(ctx *ui.Context, id string) {
-	theme := ctx.Theme()
 	walk := app.rev.Walk(id)
 	if walk == nil {
 		app.overviewPage(ctx, "")
@@ -423,7 +417,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 	path := app.rev.WalkPath(walk.ID)
 	version := app.versionOn(page{kindWalk, walk.ID})
 	app.pageScroll(ctx, page{kindWalk, walk.ID}).Grow(1).FillWidth().Children(func() {
-		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
+		pageColumn(ctx).Gap(16).Children(func() {
 			ui.Row(ctx).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
 				crumb := func(label string, p page) {
 					link := textLink(ctx, excerpt(label, 40), func(e ui.Element) { e.FontSize(12) }).Tooltip(label)
@@ -465,7 +459,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 				markdown.View(ctx, walk.Markdown, &app.md)
 			}
 			for i, turn := range walk.More {
-				ui.Column(ctx.Key(fmt.Sprintf("more-%d", i))).Gap(10).Padding(16, 20).Radius(10).Border(1, theme.Border).Children(func() {
+				outlineCard(ctx.Key(fmt.Sprintf("more-%d", i))).Gap(10).Children(func() {
 					cardTitle(ctx, "Follow-up: "+turn.Question)
 					if i == len(walk.More)-1 && run != nil {
 						ui.Spinner(ctx).Size(14, 14)

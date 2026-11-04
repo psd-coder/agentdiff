@@ -270,10 +270,7 @@ func (app *app) questionsList(ctx *ui.Context) {
 			continue
 		}
 		questionCount++
-		row := ui.ButtonBase(ctx.Key("q-"+w.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, theme.Border).Column().AlignItems(ui.Stretch)
-		if row.Hovered() {
-			row.Background(theme.SurfaceHover)
-		}
+		row := linkRow(ctx.Key("q-"+w.ID)).Padding(10, 12).Gap(4).Column().AlignItems(ui.Stretch)
 		row.Children(func() {
 			ui.Text(ctx, "About: "+app.targetLabel(w.Parent, w.StepID)).FontSize(12).TextColor(theme.Accent).SingleLine()
 			ui.Text(ctx, w.Question).MaxLines(2)

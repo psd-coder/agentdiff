@@ -157,7 +157,7 @@ func (app *app) composer(ctx *ui.Context, th *review.Thread) {
 func (app *app) threadsPage(ctx *ui.Context) {
 	theme := ctx.Theme()
 	app.pageScroll(ctx, page{kind: kindThreads}).Grow(1).FillWidth().Children(func() {
-		ui.Column(ctx).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
+		pageColumn(ctx).Gap(10).Children(func() {
 			pageTitle(ctx, "Questions")
 			app.questionsList(ctx)
 			pageTitle(ctx, "Comments").Margin(16, 0, 0, 0)
@@ -176,15 +176,11 @@ func (app *app) threadsPage(ctx *ui.Context) {
 }
 
 func (app *app) threadRow(ctx *ui.Context, th *review.Thread) {
-	theme := ctx.Theme()
-	row := ui.ButtonBase(ctx.Key("row-"+th.ID)).Padding(10, 12).Gap(4).Radius(8).Border(1, theme.Border).Column().AlignItems(ui.Stretch)
+	row := linkRow(ctx.Key("row-"+th.ID)).Padding(10, 12).Gap(4).Column().AlignItems(ui.Stretch)
 	row.ContextMenu(func(m *ui.Menu) {
 		app.cmdMenu(ctx, m, th.ID, "resolve-thread", "reopen-thread", "include-thread", "exclude-thread",
 			"", "stop-thread", "thread-log", "", "delete-thread")
 	})
-	if row.Hovered() {
-		row.Background(theme.SurfaceHover)
-	}
 	row.Children(func() {
 		anchorLabel(ctx, th.Anchor.Label())
 		first := ""
