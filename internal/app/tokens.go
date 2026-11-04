@@ -31,3 +31,13 @@ const (
 
 // monoFont is the font of code, paths and keys.
 const monoFont = "monospace"
+
+// The opacities of a color laid over what is under it.
+const (
+	// tintHover is the text color over a borderless control the pointer is
+	// on, or that is chosen.
+	tintHover = 0.08
+	// tintFill is the fill of a badge or of a colored box, under its
+	// border or its text.
+	tintFill = 0.15
+)

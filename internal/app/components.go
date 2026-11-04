@@ -155,7 +155,7 @@ func ghostButton(ctx *ui.Context) ui.Element {
 	theme := ctx.Theme()
 	button := ui.ButtonBase(ctx).Padding(theme.Space(1)).Radius(radiusSmall)
 	if button.Hovered() {
-		button.Background(theme.Text.Alpha(0.08))
+		button.Background(theme.Text.Alpha(tintHover))
 	}
 	return button
 }
@@ -200,7 +200,7 @@ func statColors(theme *ui.Theme) (added, deleted ui.Color) {
 // badge is a short text in a pill, as a count. Its pill is a shade
 // darker than MyGo's, so it still shows on a gray chosen row.
 func badge(ctx *ui.Context, text string) {
-	ui.Badge(ctx, text).Background(ctx.Theme().Text.Alpha(0.15))
+	ui.Badge(ctx, text).Background(ctx.Theme().Text.Alpha(tintFill))
 }
 
 // countBadge shows a count in a badge, and nothing for zero.
@@ -280,7 +280,7 @@ func failureBox(ctx *ui.Context, err string) {
 // not miss. Callers set its gap and children.
 func warningBox(ctx *ui.Context) ui.Element {
 	theme := ctx.Theme()
-	return ui.Column(ctx).Padding(theme.Space(2.5), theme.Space(3.5)).Radius(radiusBox).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
+	return ui.Column(ctx).Padding(theme.Space(2.5), theme.Space(3.5)).Radius(radiusBox).Background(theme.Warning.Alpha(tintFill)).Border(1, theme.Warning)
 }
 
 // centerNote fills the page with a title and the detail builds, in its

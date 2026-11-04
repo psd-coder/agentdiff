@@ -376,7 +376,7 @@ func (app *app) settingsToolbar(ctx *ui.Context, form *settingsForm) {
 			button := tabs.Tab(i).Padding(theme.Space(1.25), theme.Space(2.5), theme.Space(1), theme.Space(2.5)).Radius(theme.Radius).TextColor(theme.TextMuted)
 			switch {
 			case i == form.tab:
-				button.TextColor(theme.Accent).Background(theme.Text.Alpha(0.08))
+				button.TextColor(theme.Accent).Background(theme.Text.Alpha(tintHover))
 			case button.Hovered():
 				button.TextColor(theme.Text)
 			}
