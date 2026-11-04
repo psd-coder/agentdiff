@@ -16,7 +16,7 @@ import (
 func (app *app) archivedPage(ctx *ui.Context, id string) {
 	earlier := app.reviews.Find(id)
 	if earlier == nil {
-		app.emptyState(ctx, "Earlier review not found", "It was restored, moved or deleted.")
+		emptyState(ctx, "Earlier review not found", "It was restored, moved or deleted.")
 		return
 	}
 	theme := ctx.Theme()
