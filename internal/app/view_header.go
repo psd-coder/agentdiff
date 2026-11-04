@@ -68,9 +68,7 @@ func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label, tip s
 	tip = cmp.Or(app.keyTip(tip, id), tip)
 	ui.Button(ctx.Key(id), "").Label(label).Tooltip(tip).Disabled(!app.applies(cm, "")).OnClick(func() { cm.run(ctx, "") }).Children(func() {
 		ui.Icon(ctx, svg).FontSize(16)
-		if count > 0 {
-			ui.Badge(ctx, fmt.Sprint(count))
-		}
+		countBadge(ctx, count)
 	})
 }
 
