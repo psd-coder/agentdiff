@@ -69,11 +69,7 @@ func (app *app) groupPage(ctx *ui.Context, gi string) {
 // sidebar lists them.
 func (app *app) allPage(ctx *ui.Context) {
 	theme := ctx.Theme()
-	add, del := 0, 0
-	for _, f := range app.files {
-		add += f.Additions
-		del += f.Deletions
-	}
+	add, del, _ := app.changeTotals()
 	rows := []pageRow{{kind: titleRow}}
 	groups := app.groups()
 	if app.cfg.FlatFiles {
@@ -92,8 +88,7 @@ func (app *app) allPage(ctx *ui.Context) {
 		diffPageHeader(ctx).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, "All files diff").FontSize(18).Bold()
 			ui.Text(ctx, fmt.Sprintf("%d files", len(app.files))).TextColor(theme.TextMuted)
-			ui.Text(ctx, fmt.Sprintf("+%d", add)).TextColor(theme.Success)
-			ui.Text(ctx, fmt.Sprintf("−%d", del)).TextColor(theme.Danger)
+			diffStat(ctx, add, del)
 			ui.Spacer(ctx)
 			app.cmdButton(ctx, "mark-all-viewed", "", "Mark all as viewed")
 			app.cmdButton(ctx, "mark-all-not-viewed", "", "Mark all as not viewed")
@@ -259,8 +254,7 @@ func (app *app) fileHeader(ctx *ui.Context, diff *fileDiff, onPage bool) ui.Elem
 			app.nav.goTo(page{kindFile, change.Path})
 		}
 		ui.Badge(ctx, statusLabel(change))
-		ui.Text(ctx, fmt.Sprintf("+%d", change.Additions)).FontSize(12).TextColor(theme.Success)
-		ui.Text(ctx, fmt.Sprintf("−%d", change.Deletions)).FontSize(12).TextColor(theme.Danger)
+		diffStat(ctx, change.Additions, change.Deletions).FontSize(12)
 		if diff.state != nil {
 			if _, ok := diff.state.SelectedLines(); !ok {
 				smallCaption(ctx, "Click a line number, then Shift+click another to select a range").SingleLine().Shrink(1)

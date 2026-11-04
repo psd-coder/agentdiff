@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -126,6 +127,20 @@ func disclosureArrow(ctx *ui.Context, open bool) ui.Element {
 		arrow.Rotate(-90)
 	}
 	return arrow
+}
+
+// diffStat counts the added and the deleted lines, in green and red. A
+// count of zero does not show. Callers set the font size.
+func diffStat(ctx *ui.Context, additions, deletions int) ui.Element {
+	theme := ctx.Theme()
+	return ui.Row(ctx).Gap(4).Children(func() {
+		if additions > 0 {
+			ui.Text(ctx, fmt.Sprintf("+%d", additions)).TextColor(theme.Success)
+		}
+		if deletions > 0 {
+			ui.Text(ctx, fmt.Sprintf("−%d", deletions)).TextColor(theme.Danger)
+		}
+	})
 }
 
 // failureBox shows the error of a page's answer in a red box, or Stopped
