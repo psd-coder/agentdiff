@@ -301,7 +301,7 @@ func changeItem(ctx *ui.Context, icon *ui.SVG, label string, look itemLook, end 
 	case plainItem:
 	}
 	return item.Children(func() {
-		ui.Icon(ctx, icon).FontSize(16).TextColor(iconColor)
+		ui.Icon(ctx, icon).FontSize(iconTool).TextColor(iconColor)
 		ui.Text(ctx, label).Grow(1).SingleLine()
 		end()
 	})
@@ -653,7 +653,7 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 			diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(11)
 		}
 		if viewed {
-			ui.Icon(ctx, checkIcon).FontSize(12).TextColor(theme.Success).Label("Viewed")
+			ui.Icon(ctx, checkIcon).FontSize(iconSmall).TextColor(theme.Success).Label("Viewed")
 		}
 	}
 	item.Children(func() {

@@ -359,7 +359,7 @@ func (app *app) moreButton(ctx *ui.Context, target string, ids ...string) {
 		return
 	}
 	button := ghostButton(ctx.Key("more-" + target)).Radius(6).TextColor(ctx.Theme().TextMuted).Label("More").Tooltip("More")
-	button.Children(func() { ui.Icon(ctx, moreIcon).FontSize(18) }).Menu(func(menu *ui.Menu) { app.cmdMenu(ctx, menu, target, ids...) })
+	button.Children(func() { ui.Icon(ctx, moreIcon).FontSize(iconMore) }).Menu(func(menu *ui.Menu) { app.cmdMenu(ctx, menu, target, ids...) })
 }
 
 // cmdMenu adds to the context menu the commands ids that apply to

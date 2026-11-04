@@ -2,6 +2,23 @@ package app
 
 import "github.com/egoist/mygo/ui"
 
+// The sizes of the icons, in DIPs. An icon is as high as its font size.
+const (
+	// iconSmall is a chevron, or a mark next to small text.
+	iconSmall = 12
+	// iconRow is the icon of a small button in a row of a list.
+	iconRow = 13
+	// iconMenu is the icon of a picker row, and the magnifier of its
+	// search field.
+	iconMenu = 15
+	// iconTool is the icon of a title bar button or a sidebar item.
+	iconTool = 16
+	// iconMore is the ⋯ button of a page header.
+	iconMore = 18
+	// iconTab is the icon of a Settings tab.
+	iconTab = 22
+)
+
 // icon parses the shapes of a 24x24 stroked icon, drawn in the text color.
 func icon(shapes string) *ui.SVG {
 	return ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + shapes + `</svg>`))

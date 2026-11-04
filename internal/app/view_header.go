@@ -67,7 +67,7 @@ func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label, tip s
 	cm := app.cmd(id)
 	tip = cmp.Or(app.keyTip(tip, id), tip)
 	ui.Button(ctx.Key(id), "").Label(label).Tooltip(tip).Disabled(!app.applies(cm, "")).OnClick(func() { cm.run(ctx, "") }).Children(func() {
-		ui.Icon(ctx, svg).FontSize(16)
+		ui.Icon(ctx, svg).FontSize(iconTool)
 		countBadge(ctx, count)
 	})
 }
@@ -110,13 +110,13 @@ func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add boo
 	list, rows := nav.list(ctx, "Projects", func(addRow pickRow) {
 		for i, p := range recent {
 			row := addRow(ctx.Key(p), func() {
-				ui.Icon(ctx, folderIcon).Size(menuIcon, menuIcon).TextColor(theme.TextMuted)
+				ui.Icon(ctx, folderIcon).FontSize(iconMenu).TextColor(theme.TextMuted)
 				ui.Column(ctx).Grow(1).Shrink(1).Children(func() {
 					ui.Text(ctx, filepath.Base(p)).Bold().SingleLine()
 					smallCaption(ctx, p).SingleLine()
 				})
 				if p == open {
-					ui.Icon(ctx, checkIcon).TextColor(theme.Accent).Label("Open")
+					ui.Icon(ctx, checkIcon).FontSize(iconMenu).TextColor(theme.Accent).Label("Open")
 				}
 			}, nil).Label(filepath.Base(p) + ", " + p)
 			row.ContextMenu(func(m *ui.Menu) {
@@ -132,7 +132,7 @@ func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add boo
 		if add {
 			ui.Divider(ctx).Margin(4, 0)
 			row := addRow(ctx, func() {
-				ui.Icon(ctx, plusIcon).Size(menuIcon, menuIcon).TextColor(theme.TextMuted)
+				ui.Icon(ctx, plusIcon).FontSize(iconMenu).TextColor(theme.TextMuted)
 				ui.Text(ctx, "Add project…")
 			}, nil).Label("Add project…")
 			if row.Clicked() {
@@ -255,7 +255,7 @@ func (app *app) branchItem(ctx *ui.Context, addRow pickRow, row branchRow, openT
 		}
 	}
 	return addRow(ctx.Key(row.name), func() {
-		check := ui.Icon(ctx, checkIcon).Size(menuIcon, menuIcon).TextColor(theme.Accent)
+		check := ui.Icon(ctx, checkIcon).FontSize(iconMenu).TextColor(theme.Accent)
 		if !row.chosen {
 			check.Invisible()
 		}

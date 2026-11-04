@@ -143,7 +143,7 @@ func ghostButton(ctx *ui.Context) ui.Element {
 // disclosureArrow is the chevron of something that folds: it points down
 // while open, and right while folded.
 func disclosureArrow(ctx *ui.Context, open bool) ui.Element {
-	arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(ctx.Theme().TextMuted)
+	arrow := ui.Icon(ctx, chevronIcon).FontSize(iconSmall).TextColor(ctx.Theme().TextMuted)
 	if !open {
 		arrow.Rotate(-90)
 	}

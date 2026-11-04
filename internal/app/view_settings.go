@@ -382,7 +382,7 @@ func (app *app) settingsToolbar(ctx *ui.Context, form *settingsForm) {
 			}
 			button.Children(func() {
 				ui.Column(ctx).AlignItems(ui.Center).Gap(3).Children(func() {
-					ui.Icon(ctx, tab.icon).FontSize(22)
+					ui.Icon(ctx, tab.icon).FontSize(iconTab)
 					ui.Text(ctx, tab.name).SingleLine()
 				})
 			})
