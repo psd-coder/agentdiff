@@ -161,6 +161,12 @@ func noMatch(ctx *ui.Context, things string) ui.Element {
 	return caption(ctx, "No "+things+" match").Padding(6, 8)
 }
 
+// linkCard is a linkRow that stacks lines: what it is about, an excerpt,
+// a meta line.
+func linkCard(ctx *ui.Context) ui.Element {
+	return linkRow(ctx).Padding(10, 12).Gap(4).Column().AlignItems(ui.Stretch)
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {
