@@ -51,6 +51,9 @@ type app struct {
 	// and of the files, whose chosen item shows in the accent color while
 	// they have the focus.
 	reviewSidebar, fileSidebar ui.Handle
+	// uncommittedItem is the row of the uncommitted changes, above the
+	// list of commits.
+	uncommittedItem ui.Handle
 	// settingsSettled is set on the extra frame that measures the
 	// settings window after a change, and settingsShown once the window
 	// has the height of its tab and shows.
