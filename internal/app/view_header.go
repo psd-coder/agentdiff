@@ -281,7 +281,7 @@ func (app *app) branchListNote(ctx *ui.Context, shown int) {
 	case app.cmpr.err != "":
 		errorText(ctx, "Could not list the branches: "+app.cmpr.err).Padding(6, 8)
 	case shown == 0:
-		caption(ctx, "No branches match").Padding(6, 8)
+		noMatch(ctx, "branches")
 	}
 }
 

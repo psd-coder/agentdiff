@@ -150,6 +150,12 @@ func countBadge(ctx *ui.Context, count int) {
 	}
 }
 
+// noMatch tells that a filter left nothing in a list, as "No commands
+// match".
+func noMatch(ctx *ui.Context, things string) ui.Element {
+	return caption(ctx, "No "+things+" match").Padding(6, 8)
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {

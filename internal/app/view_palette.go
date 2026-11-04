@@ -99,7 +99,7 @@ func (app *app) paletteModal(ctx *ui.Context) {
 				}
 			})
 			if len(cmds) == 0 {
-				caption(ctx, "No commands match").Padding(6, 8)
+				noMatch(ctx, "commands")
 			}
 		})
 		if row, ok := nav.active(rows); ok && len(cmds) > 0 {
