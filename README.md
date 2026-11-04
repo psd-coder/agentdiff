@@ -339,7 +339,7 @@ Codex cannot: it runs in its `read-only` sandbox. Claude refuses every Bash call
 For a two-line change: `git diff` is faster. `agentdiff` does not post to GitHub either. Review pull requests of other people in GitHub.
 
 **What does it not do yet?**
-Comments stay on the line numbers they were written on, so after the agent edits a file they can point at other code. The quoted code in the feedback shows what was meant. The app does not watch files: click Refresh (Cmd+R) after the agent changes something. The app is not single-instance: each `open -n` starts another copy with its own window.
+Comments stay on the line numbers they were written on, so after the agent edits a file they can point at other code. The quoted code in the feedback shows what was meant. The app watches the working tree and the git directory, so it shows the changes of the agent by itself. Refresh (Cmd+R) in the menu bar and the command palette reads the changes again. The app is not single-instance: each `open -n` starts another copy with its own window.
 
 ## License
 
