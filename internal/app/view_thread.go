@@ -166,11 +166,7 @@ func (app *app) threadRow(ctx *ui.Context, th *review.Thread) {
 	})
 	row.Children(func() {
 		anchorLabel(ctx, th.Anchor.Label())
-		first := ""
-		if len(th.Messages) > 0 {
-			first = th.Messages[0].Text
-		}
-		ui.Text(ctx, excerpt(first, 300)).MaxLines(2)
+		ui.Text(ctx, excerpt(firstMessage(th), 300)).MaxLines(2)
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 			smallCaption(ctx, app.threadMeta(th))
 			targetMark(ctx, app.state(th.ID))

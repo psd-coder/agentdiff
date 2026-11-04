@@ -378,8 +378,8 @@ func (app *app) sectionThreads(ctx *ui.Context, title, body string) {
 		label := "Thread"
 		if app.busy(th.ID) {
 			label = "Answering…"
-		} else if len(th.Messages) > 0 {
-			label = excerpt(th.Messages[0].Text, 24)
+		} else if first := firstMessage(th); first != "" {
+			label = excerpt(first, 24)
 		}
 		ui.Button(ctx.Key("t-"+th.ID), label).Tooltip("Open the thread").OnClick(func() { app.openThread(th.ID) })
 	}
