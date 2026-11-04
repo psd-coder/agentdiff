@@ -161,9 +161,7 @@ func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add boo
 			app.confirmRemoveProject(recent[nav.hi])
 		}
 	}
-	if row, ok := nav.active(rows); ok {
-		list.ActiveDescendant(row)
-	}
+	nav.activate(list, rows)
 }
 
 func (app *app) toggleProjects() {
@@ -245,9 +243,7 @@ func (app *app) branchList(ctx *ui.Context) {
 			})
 			app.branchListNote(ctx, len(rows))
 		})
-		if item, ok := nav.active(items); ok && len(rows) > 0 {
-			in.ActiveDescendant(item)
-		}
+		nav.activate(in, items)
 	})
 }
 

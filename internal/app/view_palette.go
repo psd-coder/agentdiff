@@ -102,8 +102,6 @@ func (app *app) paletteModal(ctx *ui.Context) {
 				noMatch(ctx, "commands")
 			}
 		})
-		if row, ok := nav.active(rows); ok && len(cmds) > 0 {
-			in.ActiveDescendant(row)
-		}
+		nav.activate(in, rows)
 	})
 }
