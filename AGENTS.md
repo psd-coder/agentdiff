@@ -39,6 +39,12 @@ Threading: the views never block. Git and agent work runs on goroutines and retu
 
 Tests in `internal/app` drive a window-less app: `newTestApp` creates a fixture repo and a temp store, and `ui.NewTester` renders the views headless. Every agent run starts through `app.startAgent`, which is `agent.Run` in the app. Tests replace it with `newFakeAgent` (`fakeagent_test.go`). The fake answers in process and records the requests. It can hold a run until the test releases it or the run is cancelled. `TestAgentLog` runs a real process.
 
+## UI components
+
+Before you build UI, read `components.go` and look at the component gallery. After you change or add a component in `components.go` or a token in `tokens.go`, render the gallery again and check the result in both images. `AGENTDIFF_SNAPSHOTS=<existing dir> go test -run TestComponentGallery ./internal/app` writes `gallery-light.png` and `gallery-dark.png`. Build each part from an existing component, and chain Element methods on it for what differs from its defaults. When a second view needs the same part, move it into `components.go` and add it to `gallery` in `components_test.go`.
+
+Spacing takes `theme.Space(n)`, n units of 4 DIPs. Radii, font sizes, tints and the code font come from `tokens.go`. `TestStylesTakeTokens` goes red on a number or a font name in a style method such as `Padding` or `FontSize`.
+
 ## MyGo rules
 
 Before a UI change, a crash fix or a MyGo upgrade, invoke the `mygo-maintenance` skill.
