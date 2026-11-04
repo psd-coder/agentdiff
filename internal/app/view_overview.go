@@ -359,10 +359,16 @@ func (app *app) discussMenu(card ui.Element, title, body string) {
 	card.ContextMenu(func(menu *ui.Menu) { app.discussItem(menu, title, body) })
 }
 
+// discussPart starts a thread about a part of a page: a step, a section or
+// one of its items.
+func (app *app) discussPart(title, body string) {
+	app.newThread(review.Anchor{Kind: review.AnchorSection, Section: title, Quote: body})
+}
+
 // discussItem adds the menu item that starts a thread about a part.
 func (app *app) discussItem(menu *ui.Menu, title, body string) {
 	if menu.Item("Discuss").Chosen() {
-		app.newThread(review.Anchor{Kind: review.AnchorSection, Section: title, Quote: body})
+		app.discussPart(title, body)
 	}
 }
 
@@ -377,9 +383,7 @@ func (app *app) sectionThreads(ctx *ui.Context, title, body string) {
 		}
 		ui.Button(ctx.Key("t-"+th.ID), label).Tooltip("Open the thread").OnClick(func() { app.openThread(th.ID) })
 	}
-	ui.Button(ctx.Key("discuss-"+title), "Discuss").Tooltip("Start a thread about this part").OnClick(func() {
-		app.newThread(review.Anchor{Kind: review.AnchorSection, Section: title, Quote: body})
-	})
+	ui.Button(ctx.Key("discuss-"+title), "Discuss").Tooltip("Start a thread about this part").OnClick(func() { app.discussPart(title, body) })
 }
 
 func (app *app) groupCards(ctx *ui.Context) {
