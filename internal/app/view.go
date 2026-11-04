@@ -206,7 +206,7 @@ func (app *app) scopeList(ctx *ui.Context) {
 			item := changeItem(ctx, row.icon, row.text, look, func() {
 				app.scopeMark(ctx, row.scope)
 				if row.badge != "" {
-					ui.Badge(ctx, row.badge)
+					badge(ctx, row.badge)
 				}
 			})
 			if row.tooltip != "" {
@@ -303,7 +303,7 @@ func changeItem(ctx *ui.Context, icon *ui.SVG, label string, look itemLook, end 
 	return item.Children(func() {
 		ui.Icon(ctx, icon).FontSize(iconTool).TextColor(iconColor)
 		ui.Text(ctx, label).Grow(1).SingleLine()
-		end()
+		rowEnd(ctx, look == accentItem || look == ringedItem, end)
 	})
 }
 
@@ -471,9 +471,12 @@ func (app *app) scopeHeader(ctx *ui.Context) {
 
 func (app *app) reviewNav(ctx *ui.Context) {
 	chosen := app.nav.page.String()
+	end := func(p page, fn func()) { rowEnd(ctx, app.paintedChosen(ctx, &app.reviewSidebar, p), fn) }
 	nav := ui.Sidebar(ctx, &chosen, func() {
 		sidebarHeading(ctx, "Review", nil)
-		ui.SidebarItem(ctx, overview.String(), overviewIcon, "Overview").Children(func() { targetMark(ctx, app.state(review.TargetOverview)) }).
+		ui.SidebarItem(ctx, overview.String(), overviewIcon, "Overview").Children(func() {
+			end(overview, func() { targetMark(ctx, app.state(review.TargetOverview)) })
+		}).
 			Tooltip(app.keyTip("Overview", "go-overview")).
 			ContextMenu(func(m *ui.Menu) {
 				app.cmdMenu(ctx, m, "", "explain", "stop-overview", "regenerate-overview", "overview-log", "", "start-over")
@@ -486,13 +489,13 @@ func (app *app) reviewNav(ctx *ui.Context) {
 		ui.SidebarItem(ctx, page{kind: kindAll}.String(), filesIcon, "All files diff").Tooltip(app.keyTip("All files diff", "go-all"))
 		threads := len(app.rev.Threads)
 		ui.SidebarItem(ctx, page{kind: kindThreads}.String(), messageIcon, "Questions & comments").Tooltip(app.keyTip("Questions & comments", "go-threads")).Children(func() {
-			countBadge(ctx, threads)
+			end(page{kind: kindThreads}, func() { countBadge(ctx, threads) })
 		})
 		feedback := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
 		ui.SidebarItem(ctx, page{kind: kindFeedback}.String(), sendIcon, "Feedback").Tooltip(app.keyTip("Feedback", "go-feedback")).Children(func() {
-			countBadge(ctx, feedback)
+			end(page{kind: kindFeedback}, func() { countBadge(ctx, feedback) })
 		})
-	}).Shrink(0).Background(sidebarBackground(ctx)).Label("Review")
+	}).Shrink(0).Background(sidebarBackground(ctx)).Label("Review").Bind(&app.reviewSidebar)
 	if nav.Changed() {
 		app.nav.goTo(parsePage(chosen))
 	}
@@ -549,7 +552,7 @@ func (app *app) fileNav(ctx *ui.Context) {
 		if app.loader.firstLoad() {
 			activityLine(ctx, "Reading changes…").Padding(8, 12)
 		}
-	}).Grow(1).Shrink(1).MinHeight(0).Background(sidebarBackground(ctx)).Label("Files")
+	}).Grow(1).Shrink(1).MinHeight(0).Background(sidebarBackground(ctx)).Label("Files").Bind(&app.fileSidebar)
 	app.takeFocus(nav, "files")
 	// Left and Right close and open the group chosen, as in a tree.
 	if chosenPage := parsePage(chosen); chosenPage.kind == kindGroup {
@@ -568,6 +571,13 @@ func (app *app) fileNav(ctx *ui.Context) {
 	}
 }
 
+// paintedChosen reports whether sidebar paints the item that opens page
+// item in the accent color: the item is chosen, and the sidebar has the
+// focus.
+func (app *app) paintedChosen(ctx *ui.Context, sidebar *ui.Handle, item page) bool {
+	return app.nav.page == item && sidebar.Focused(ctx)
+}
+
 // walkItems lists the walks under parent in the sidebar, each indented
 // under the one it goes deeper into.
 func (app *app) walkItems(ctx *ui.Context, parent string, depth int) {
@@ -576,7 +586,9 @@ func (app *app) walkItems(ctx *ui.Context, parent string, depth int) {
 			continue
 		}
 		item := ui.SidebarItem(ctx, page{kindWalk, w.ID}.String(), nil, strings.Repeat("    ", depth)+excerpt(app.rev.WalkTitle(w), 36)).Tooltip(app.rev.WalkTitle(w))
-		item.Children(func() { targetMark(ctx, app.state(w.ID)) })
+		item.Children(func() {
+			rowEnd(ctx, app.paintedChosen(ctx, &app.reviewSidebar, page{kindWalk, w.ID}), func() { targetMark(ctx, app.state(w.ID)) })
+		})
 		item.ContextMenu(func(m *ui.Menu) {
 			app.cmdMenu(ctx, m, w.ID, "stop-walk", "regenerate-walk", "walk-log", "", "delete-walk")
 		})
@@ -602,15 +614,17 @@ func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bo
 	item := ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open)
 	item.ContextMenu(func(m *ui.Menu) { app.cmdMenu(ctx, m, id, "mark-group-viewed", "mark-group-not-viewed") })
 	item.Children(func() {
-		smallCaption(ctx, fmt.Sprint(files))
-		label := "Hide files"
-		if !*open {
-			label = "Show files"
-		}
-		btn := ghostButton(ctx).Padding(2).Label(label).Tooltip(label).Children(func() { disclosureArrow(ctx, *open) })
-		if btn.Clicked() {
-			*open = !*open
-		}
+		rowEnd(ctx, app.paintedChosen(ctx, &app.fileSidebar, page{kindGroup, id}), func() {
+			smallCaption(ctx, fmt.Sprint(files))
+			label := "Hide files"
+			if !*open {
+				label = "Show files"
+			}
+			btn := ghostButton(ctx).Padding(2).Label(label).Tooltip(label).Children(func() { disclosureArrow(ctx, *open) })
+			if btn.Clicked() {
+				*open = !*open
+			}
+		})
 	})
 }
 
@@ -656,12 +670,13 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 			ui.Icon(ctx, checkIcon).FontSize(iconSmall).TextColor(theme.Success).Label("Viewed")
 		}
 	}
+	accent := app.paintedChosen(ctx, &app.fileSidebar, page{kindFile, file})
 	item.Children(func() {
 		if !folder {
-			marks()
+			rowEnd(ctx, accent, marks)
 			return
 		}
-		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(marks)
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() { rowEnd(ctx, accent, marks) })
 		// Opacity keeps the row's text color, so the folder stays readable
 		// on the accent of the chosen row.
 		ui.Text(ctx, dir).FontSize(11).Opacity(0.7).SingleLine().ColumnStart(1).RowStart(2)
