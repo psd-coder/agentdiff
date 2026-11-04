@@ -153,15 +153,27 @@ func disclosureArrow(ctx *ui.Context, open bool) ui.Element {
 // diffStat counts the added and the deleted lines, in green and red. A
 // count of zero does not show. Callers set the font size.
 func diffStat(ctx *ui.Context, additions, deletions int) ui.Element {
-	theme := ctx.Theme()
+	added, deleted := statColors(ctx.Theme())
 	return ui.Row(ctx).Gap(4).Children(func() {
 		if additions > 0 {
-			ui.Text(ctx, fmt.Sprintf("+%d", additions)).TextColor(theme.Success)
+			ui.Text(ctx, fmt.Sprintf("+%d", additions)).TextColor(added)
 		}
 		if deletions > 0 {
-			ui.Text(ctx, fmt.Sprintf("−%d", deletions)).TextColor(theme.Danger)
+			ui.Text(ctx, fmt.Sprintf("−%d", deletions)).TextColor(deleted)
 		}
 	})
+}
+
+// statColors are the colors of the counts of a diffStat. The Success and
+// Danger of a light theme are too faint for small text on the sidebar's
+// material, as low as 2.1:1 for the green, so a light theme takes darker
+// shades of them, of 4.5:1 and more. On a row in the accent color, onAccent
+// made them the row's text color, which stays.
+func statColors(theme *ui.Theme) (added, deleted ui.Color) {
+	if theme.Dark || theme.Success == theme.AccentText {
+		return theme.Success, theme.Danger
+	}
+	return ui.Hex("#166534"), ui.Hex("#b91c1c")
 }
 
 // badge is a short text in a pill, as a count. Its pill is a shade
