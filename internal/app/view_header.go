@@ -189,8 +189,7 @@ func (app *app) branchPicker(ctx *ui.Context) {
 			app.runOn(ctx, "switch-branch", "")
 		}
 		app.takeFocus(anchor, "branch")
-		compare := app.cmd("compare")
-		iconButton(ctx, compareIcon, compare.tip, app.tooltip(compare)).OnClick(func() { app.runOn(ctx, "compare", "") })
+		app.toolButton(ctx, "compare", compareIcon, "Compare", app.cmd("compare").tip, 0)
 		ui.Popover(ctx, anchor, &app.branchesOpen, func() { app.branchList(ctx) })
 	})
 }

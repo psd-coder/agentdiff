@@ -1022,7 +1022,7 @@ func TestCompareBranches(t *testing.T) {
 	snapshot(t, tt, "branch")
 
 	git(t, dir, "update-ref", "refs/remotes/origin/main", "main")
-	if err := tt.Click("Compare with another base, or review a custom range"); err != nil {
+	if err := tt.Click("Compare"); err != nil {
 		t.Fatal(err)
 	}
 	app.compareForm.branch, app.compareForm.base = "main", "origin/main"
