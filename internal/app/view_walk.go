@@ -508,7 +508,7 @@ func (app *app) askWalk(ctx *ui.Context, parent string) {
 		}
 	}
 	ui.Column(ctx).Gap(8).Margin(8, 0, 0, 0).Children(func() {
-		ui.Text(ctx, "Ask about the changes").FontSize(18).Bold()
+		heading(ctx, "Ask about the changes")
 		caption(ctx, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.")
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 			in := ui.TextInput(ctx.Key("ask-"+key), &draft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
