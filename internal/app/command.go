@@ -115,17 +115,15 @@ func (app *app) commands() []*command {
 
 		{id: "copy-feedback", title: "Copy Feedback", target: app.targetFeedback, can: app.hasFeedback, run: func(c *ui.Context, _ string) {
 			text := app.feedback()
-			c.WriteClipboard(text)
+			copyText(c, text, "Feedback copied")
 			app.handedOver = text
-			c.Toast("Feedback copied")
 		}},
 		{id: "save-feedback", title: "Save Feedback to File…", target: app.targetFeedback, can: app.hasFeedback,
 			run: func(c *ui.Context, _ string) { app.saveFeedback(c.Services()) }},
 		{id: "copy-agent-prompt", title: "Copy Prompt for Agent", tip: "Copy a prompt that tells the agent to read the saved feedback", target: app.targetFeedback,
 			can: func(string) bool { return app.savedPath != "" },
 			run: func(c *ui.Context, _ string) {
-				c.WriteClipboard(agentPrompt(app.savedPath))
-				c.Toast("Prompt copied")
+				copyText(c, agentPrompt(app.savedPath), "Prompt copied")
 			}},
 
 		{id: "explain", title: "Explain Changes", can: func(string) bool {
