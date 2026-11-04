@@ -137,14 +137,3 @@ func pickerButton(ctx *ui.Context, svg *ui.SVG, label, detail string, open bool)
 		ui.Icon(ctx, chevronIcon).FontSize(iconSmall).TextColor(theme.TextMuted)
 	})
 }
-
-// textLink is a text that leads to another place in the app. It takes
-// the focus with Tab, and Enter or Space follows it, as a click does.
-// style styles the text.
-func textLink(ctx *ui.Context, label string, style func(text ui.Element)) ui.Element {
-	theme := ctx.Theme()
-	return ui.ButtonBase(ctx).Role(ui.RoleLink).Cursor(ui.CursorPointer).Shrink(1).Radius(radiusSmall).Children(func() {
-		text := ui.Text(ctx, label).TextColor(theme.Accent).SingleLine()
-		style(text)
-	})
-}
