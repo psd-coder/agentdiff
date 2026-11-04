@@ -48,7 +48,7 @@ func (app *app) feedbackPage(ctx *ui.Context) {
 			}
 		})
 		app.pageScroll(ctx, page{kind: kindFeedback}).Grow(1).FillWidth().Children(func() {
-			ui.Text(ctx, text).Font("monospace").FontSize(12).Padding(theme.Space(4), theme.Space(6)).Selectable()
+			codeText(ctx, text).Padding(theme.Space(4), theme.Space(6)).Selectable()
 		})
 	})
 }

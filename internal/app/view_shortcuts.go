@@ -73,7 +73,7 @@ func (app *app) shortcutsModal(ctx *ui.Context) {
 			for _, s := range list {
 				ui.Row(ctx.Key(s.keys + s.does)).Gap(theme.Space(4)).AlignItems(ui.Start).Children(func() {
 					ui.Text(ctx, s.does).Grow(1).Shrink(1)
-					ui.Text(ctx, s.keys).Font("monospace").FontSize(12).Shrink(0)
+					codeText(ctx, s.keys).Shrink(0)
 				})
 			}
 		})

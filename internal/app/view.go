@@ -242,7 +242,7 @@ func (app *app) commitList(ctx *ui.Context, focus bool) *changeRows {
 		case kind == noteRow && app.commits.err != "" && len(rows.commits) > 0:
 			ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(1), theme.Space(2)).Children(func() {
 				errorText(ctx, rows.label(index))
-				textLink(ctx, "Try again", func(e ui.Element) { e.FontSize(12) }).AlignSelf(ui.Start).
+				textLink(ctx, "Try again", func(e ui.Element) { e.FontSize(fontSmall) }).AlignSelf(ui.Start).
 					OnClick(func() { app.readCommitPage(app.commits.failedAt) })
 			})
 		case kind == noteRow && app.commits.err != "":
@@ -323,7 +323,7 @@ func targetMark(ctx *ui.Context, state targetState) {
 		ui.Spinner(ctx).Size(12, 12)
 		return
 	case targetFailed:
-		ui.Text(ctx, "failed").FontSize(11).TextColor(theme.Danger)
+		ui.Text(ctx, "failed").FontSize(fontTiny).TextColor(theme.Danger)
 	case targetStopped:
 		smallCaption(ctx, "stopped")
 	case targetIdle, targetAnswered:
@@ -529,7 +529,7 @@ func (app *app) scopeHeader(ctx *ui.Context) {
 		}
 		ui.Row(ctx).Gap(theme.Space(2)).Children(func() {
 			smallCaption(ctx, plural(len(app.files), "file"))
-			diffStat(ctx, add, del).FontSize(11)
+			diffStat(ctx, add, del).FontSize(fontTiny)
 			smallCaption(ctx, fmt.Sprintf("%d of %d viewed", viewed, len(app.files)))
 		})
 	})
@@ -576,10 +576,10 @@ func (app *app) fileNav(ctx *ui.Context) {
 	threads := app.rev.ThreadCounts()
 	ui.Column(ctx).Padding(0, theme.Space(2.5)).Children(func() {
 		sidebarHeading(ctx, "Files", func() {
-			app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
+			app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(fontTiny)
 		})
 		ui.Row(ctx).Padding(0, theme.Space(2), theme.Space(1), theme.Space(2)).Children(func() {
-			app.cmdCheckbox(ctx, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
+			app.cmdCheckbox(ctx, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(fontSmall)
 		})
 	})
 	nav := ui.Sidebar(ctx, &chosen, func() {
@@ -679,7 +679,7 @@ func (app *app) groupOpen(id string) *bool {
 // the group page, and its chevron shows and hides the group's files.
 func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bool) {
 	theme := ctx.Theme()
-	item := ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open)
+	item := ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(fontSmall).Bold().Expanded(*open)
 	item.ContextMenu(func(m *ui.Menu) { app.cmdMenu(ctx, m, id, "mark-group-viewed", "mark-group-not-viewed") })
 	item.Children(func() {
 		rowEnd(ctx, app.paintedChosen(ctx, &app.fileSidebar, page{kindGroup, id}), func() {
@@ -732,7 +732,7 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 	marks := func() {
 		countBadge(ctx, threads)
 		if diff != nil {
-			diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(11)
+			diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(fontTiny)
 		}
 		if viewed {
 			ui.Icon(ctx, checkIcon).FontSize(iconSmall).TextColor(theme.Success).Label("Viewed")
@@ -747,7 +747,7 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() { rowEnd(ctx, accent, marks) })
 		// Opacity keeps the row's text color, so the folder stays readable
 		// on the accent of the chosen row.
-		ui.Text(ctx, dir).FontSize(11).Opacity(0.7).SingleLine().ColumnStart(1).RowStart(2)
+		ui.Text(ctx, dir).FontSize(fontTiny).Opacity(0.7).SingleLine().ColumnStart(1).RowStart(2)
 	})
 	return item
 }

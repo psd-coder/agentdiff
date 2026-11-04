@@ -196,8 +196,8 @@ func (app *app) logItemView(ctx *ui.Context, it *logItem) {
 			if it.Detail == "" {
 				arrow.Invisible()
 			}
-			ui.Text(ctx, it.time.Format("15:04:05")).Font("monospace").FontSize(11).TextColor(theme.TextMuted)
-			title := ui.Text(ctx, it.Title).FontSize(12).Bold().SingleLine().Shrink(1).Grow(1)
+			ui.Text(ctx, it.time.Format("15:04:05")).Font(monoFont).FontSize(fontTiny).TextColor(theme.TextMuted)
+			title := ui.Text(ctx, it.Title).FontSize(fontSmall).Bold().SingleLine().Shrink(1).Grow(1)
 			if it.Failed {
 				title.TextColor(theme.Danger)
 			}
@@ -206,7 +206,7 @@ func (app *app) logItemView(ctx *ui.Context, it *logItem) {
 			it.expanded = !it.expanded
 		}
 		if it.Detail != "" && it.expanded {
-			codeQuote(ctx, clip(it.Detail)).FontSize(11)
+			codeQuote(ctx, clip(it.Detail)).FontSize(fontTiny)
 		}
 	})
 }

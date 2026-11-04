@@ -36,7 +36,7 @@ func (app *app) threadPanel(ctx *ui.Context) {
 			app.cmdButton(ctx, "close-thread", th.ID, "Close")
 		})
 		if th.Anchor.Quote != "" && th.Anchor.Kind == review.AnchorLines {
-			ui.Text(ctx, strings.TrimRight(th.Anchor.Quote, "\n")).Font("monospace").FontSize(12).MaxLines(8).
+			codeText(ctx, strings.TrimRight(th.Anchor.Quote, "\n")).MaxLines(8).
 				Padding(theme.Space(2), theme.Space(3)).Background(theme.Surface).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Selectable()
 		}
 		ui.Scroll(ctx).Grow(1).FillWidth().Children(func() {

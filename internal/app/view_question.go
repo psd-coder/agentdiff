@@ -193,7 +193,7 @@ func (app *app) compactWalk(ctx *ui.Context, walkthrough *review.Walkthrough) {
 	}
 	for si, sec := range walkthrough.Sections {
 		if sec.Title != "" {
-			ui.Text(ctx.Key(fmt.Sprintf("cp-%d", si)), sec.Title).FontSize(15).Bold()
+			leadText(ctx.Key(fmt.Sprintf("cp-%d", si)), sec.Title).Bold()
 		}
 		for i, it := range sec.Items {
 			app.compactStep(ctx.Key(fmt.Sprintf("cp-%d-%d", si, i)), it.Title, it)
@@ -253,7 +253,7 @@ func (app *app) questionsList(ctx *ui.Context) {
 		questionCount++
 		row := linkCard(ctx.Key("q-" + w.ID))
 		row.Children(func() {
-			ui.Text(ctx, "About: "+app.targetLabel(w.Parent, w.StepID)).FontSize(12).TextColor(theme.Accent).SingleLine()
+			ui.Text(ctx, "About: "+app.targetLabel(w.Parent, w.StepID)).FontSize(fontSmall).TextColor(theme.Accent).SingleLine()
 			ui.Text(ctx, w.Question).MaxLines(2)
 			meta := stamp(w.Generated)
 			if len(w.More) > 0 {

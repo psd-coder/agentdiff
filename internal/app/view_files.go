@@ -251,12 +251,12 @@ func (app *app) fileHeader(ctx *ui.Context, diff *fileDiff, onPage bool) ui.Elem
 			app.foldButton(ctx, change.Path)
 		}
 		if onPage {
-			ui.Text(ctx, change.Path).Font("monospace").Bold().SingleLine().Shrink(1).Selectable()
-		} else if textLink(ctx, change.Path, func(e ui.Element) { e.Font("monospace").Bold().TextColor(theme.Text) }).Tooltip("Open the file on its own page").Clicked() {
+			ui.Text(ctx, change.Path).Font(monoFont).Bold().SingleLine().Shrink(1).Selectable()
+		} else if textLink(ctx, change.Path, func(e ui.Element) { e.Font(monoFont).Bold().TextColor(theme.Text) }).Tooltip("Open the file on its own page").Clicked() {
 			app.nav.goTo(page{kindFile, change.Path})
 		}
 		ui.Badge(ctx, statusLabel(change))
-		diffStat(ctx, change.Additions, change.Deletions).FontSize(12)
+		diffStat(ctx, change.Additions, change.Deletions).FontSize(fontSmall)
 		if diff.state != nil {
 			if _, ok := diff.state.SelectedLines(); !ok {
 				smallCaption(ctx, "Click a line number, then Shift+click another to select a range").SingleLine().Shrink(1)
