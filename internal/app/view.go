@@ -450,11 +450,7 @@ func (app *app) commitsTitle() string {
 // scopeHeader names the changes under review, above their review.
 func (app *app) scopeHeader(ctx *ui.Context) {
 	theme := ctx.Theme()
-	add, del := 0, 0
-	for _, f := range app.files {
-		add += f.Additions
-		del += f.Deletions
-	}
+	add, del, viewed := app.changeTotals()
 	ui.Column(ctx).Gap(2).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 		ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, app.scopeLabel()).Bold().SingleLine().Shrink(1).Tooltip(app.scopeLabel())
@@ -467,14 +463,7 @@ func (app *app) scopeHeader(ctx *ui.Context) {
 		}
 		ui.Row(ctx).Gap(8).Children(func() {
 			smallCaption(ctx, plural(len(app.files), "file"))
-			ui.Text(ctx, fmt.Sprintf("+%d", add)).FontSize(11).TextColor(theme.Success)
-			ui.Text(ctx, fmt.Sprintf("−%d", del)).FontSize(11).TextColor(theme.Danger)
-			viewed := 0
-			for _, f := range app.files {
-				if app.rev.Viewed[f.Path] {
-					viewed++
-				}
-			}
+			diffStat(ctx, add, del).FontSize(11)
 			smallCaption(ctx, fmt.Sprintf("%d of %d viewed", viewed, len(app.files)))
 		})
 	})
@@ -667,14 +656,7 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 			ui.Badge(ctx, fmt.Sprint(threads))
 		}
 		if diff != nil {
-			ui.Row(ctx).Gap(4).Children(func() {
-				if diff.change.Additions > 0 {
-					ui.Text(ctx, fmt.Sprintf("+%d", diff.change.Additions)).FontSize(11).TextColor(theme.Success)
-				}
-				if diff.change.Deletions > 0 {
-					ui.Text(ctx, fmt.Sprintf("−%d", diff.change.Deletions)).FontSize(11).TextColor(theme.Danger)
-				}
-			})
+			diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(11)
 		}
 		if viewed {
 			ui.Icon(ctx, checkIcon).FontSize(12).TextColor(theme.Success).Label("Viewed")

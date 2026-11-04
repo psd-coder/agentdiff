@@ -289,26 +289,28 @@ func (app *app) commitMessage(ctx *ui.Context) {
 	})
 }
 
+// changeTotals counts the added and the deleted lines of the scope's
+// files, and the files the user marked as viewed.
+func (app *app) changeTotals() (additions, deletions, viewed int) {
+	for _, f := range app.files {
+		additions += f.Additions
+		deletions += f.Deletions
+		if app.rev.Viewed[f.Path] {
+			viewed++
+		}
+	}
+	return additions, deletions, viewed
+}
+
 func (app *app) summaryLine(ctx *ui.Context) {
 	theme := ctx.Theme()
 	if len(app.files) == 0 {
 		return
 	}
-	add, del := 0, 0
-	for _, f := range app.files {
-		add += f.Additions
-		del += f.Deletions
-	}
+	add, del, viewed := app.changeTotals()
 	ui.Row(ctx).Gap(12).Children(func() {
 		ui.Text(ctx, plural(len(app.files), "file")).TextColor(theme.TextMuted)
-		ui.Text(ctx, fmt.Sprintf("+%d", add)).TextColor(theme.Success)
-		ui.Text(ctx, fmt.Sprintf("−%d", del)).TextColor(theme.Danger)
-		viewed := 0
-		for _, f := range app.files {
-			if app.rev.Viewed[f.Path] {
-				viewed++
-			}
-		}
+		diffStat(ctx, add, del)
 		ui.Text(ctx, fmt.Sprintf("%d of %d viewed", viewed, len(app.files))).TextColor(theme.TextMuted)
 	})
 }
@@ -424,7 +426,7 @@ func (app *app) groupCards(ctx *ui.Context) {
 						app.nav.goTo(page{kindFile, f})
 					}
 					if diff != nil {
-						smallCaption(ctx, fmt.Sprintf("+%d −%d", diff.change.Additions, diff.change.Deletions))
+						diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(11)
 					}
 				})
 			}
