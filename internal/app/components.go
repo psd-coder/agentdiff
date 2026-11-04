@@ -57,6 +57,16 @@ func anchorLabel(ctx *ui.Context, label string) {
 	ui.Text(ctx, label).Font("monospace").FontSize(12).TextColor(ctx.Theme().Accent).SingleLine()
 }
 
+// messageHeader names who wrote a message of a thread, and when.
+func messageHeader(ctx *ui.Context, who string, at time.Time) {
+	ui.Row(ctx).Gap(6).Children(func() {
+		smallLabel(ctx, who)
+		if !at.IsZero() {
+			smallCaption(ctx, at.Format("15:04"))
+		}
+	})
+}
+
 // bubble is a message the user wrote in a conversation.
 func bubble(ctx *ui.Context, text string) {
 	ui.Text(ctx, text).Selectable().Padding(8, 10).Radius(8).Background(ctx.Theme().Surface)

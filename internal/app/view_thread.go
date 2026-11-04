@@ -2,7 +2,6 @@ package app
 
 import (
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
@@ -70,15 +69,6 @@ func (app *app) threadPanel(ctx *ui.Context) {
 func (app *app) closeThread() {
 	app.closeEmptyThread("")
 	app.panel = nil
-}
-
-func messageHeader(ctx *ui.Context, who string, at time.Time) {
-	ui.Row(ctx).Gap(6).Children(func() {
-		smallLabel(ctx, who)
-		if !at.IsZero() {
-			smallCaption(ctx, at.Format("15:04"))
-		}
-	})
 }
 
 // pendingReply is the answer the agent writes in the thread now.

@@ -179,17 +179,14 @@ func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
 				codeQuote(ctx, strings.ReplaceAll(strings.TrimRight(th.Anchor.Quote, "\n"), "\t", "    ")).FontSize(12)
 			}
 			for i, m := range th.Messages {
-				ui.Column(ctx.Key(i)).Gap(2).Children(func() {
-					who := "You"
-					if m.Role == review.RoleAgent {
-						who = "Agent"
+				ui.Column(ctx.Key(i)).Gap(4).Children(func() {
+					if m.Role == review.RoleUser {
+						messageHeader(ctx, "You", m.Time)
+						bubble(ctx, m.Text)
+						return
 					}
-					smallLabel(ctx, who)
-					if m.Role == review.RoleAgent {
-						markdown.View(ctx, m.Text, &app.md)
-					} else {
-						ui.Text(ctx, m.Text).Selectable()
-					}
+					messageHeader(ctx, th.Agent.Name(), m.Time)
+					markdown.View(ctx, m.Text, &app.md)
 				})
 			}
 		})
