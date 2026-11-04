@@ -159,7 +159,7 @@ func (app *app) threadsPage(ctx *ui.Context) {
 }
 
 func (app *app) threadRow(ctx *ui.Context, th *review.Thread) {
-	row := linkRow(ctx.Key("row-"+th.ID)).Padding(10, 12).Gap(4).Column().AlignItems(ui.Stretch)
+	row := linkCard(ctx.Key("row-" + th.ID))
 	row.ContextMenu(func(m *ui.Menu) {
 		app.cmdMenu(ctx, m, th.ID, "resolve-thread", "reopen-thread", "include-thread", "exclude-thread",
 			"", "stop-thread", "thread-log", "", "delete-thread")
