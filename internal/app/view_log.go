@@ -45,14 +45,14 @@ func (app *app) logPanel(ctx *ui.Context) {
 	ui.Column(ctx).Fill().Background(theme.Background).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).Children(func() {
 		ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			ui.Text(ctx, "Agent log").Bold()
-			ui.Text(ctx, app.logTargetLabel()).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1).Grow(1)
+			caption(ctx, app.logTargetLabel()).SingleLine().Shrink(1).Grow(1)
 			if total, ok := app.logUsage(); ok {
 				label, tip := agent.Count(total.Total())+" tokens processed", total.String()
 				if spent, ok := spentContext(app.logsOf(rev), app.inLog); ok {
 					label = agent.Count(spent) + " tokens of context"
 					tip = "The context the runs built up. A run that resumes or forks an earlier session starts with its context, so it counts only what it added.\n" + tip
 				}
-				ui.Text(ctx, label).FontSize(12).TextColor(theme.TextMuted).Tooltip(tip)
+				caption(ctx, label).Tooltip(tip)
 			}
 			app.cmdButton(ctx, "log-show-all", "", "Show all")
 			app.cmdButton(ctx, "close-log", "", "Close")
@@ -142,7 +142,6 @@ func resumedRun(runs []*logRun, run *logRun) *logRun {
 }
 
 func (app *app) runView(ctx *ui.Context, run *logRun) {
-	theme := ctx.Theme()
 	rev := app.rev
 	ui.Collapsible(ctx.Key("run-"+run.info.ID), run.label(), &run.open, func() {
 		if !run.loaded {
@@ -150,10 +149,10 @@ func (app *app) runView(ctx *ui.Context, run *logRun) {
 		}
 		ui.Column(ctx).Gap(8).Padding(4, 0, 8, 0).Children(func() {
 			if run.info.Note != "" {
-				ui.Text(ctx, run.info.Note).FontSize(12).TextColor(theme.TextMuted).MaxLines(2)
+				caption(ctx, run.info.Note).MaxLines(2)
 			}
 			if usage := run.info.Usage; usage != nil {
-				ui.Text(ctx, usage.String()).FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, usage.String())
 			}
 			ui.Row(ctx).Gap(8).Children(func() {
 				ui.Button(ctx, "Copy").Disabled(!run.loaded).OnClick(func() {
@@ -166,7 +165,7 @@ func (app *app) runView(ctx *ui.Context, run *logRun) {
 				}
 			})
 			if run.err != "" {
-				ui.Text(ctx, run.err).FontSize(12).TextColor(theme.Danger).Selectable()
+				errorText(ctx, run.err)
 			}
 			if run.loading {
 				ui.Spinner(ctx).Size(12, 12)
@@ -177,7 +176,7 @@ func (app *app) runView(ctx *ui.Context, run *logRun) {
 			if run.running {
 				ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(ctx).Size(12, 12)
-					ui.Text(ctx, "Running…").FontSize(12).TextColor(theme.TextMuted)
+					caption(ctx, "Running…")
 				})
 			}
 		})
@@ -213,8 +212,7 @@ func (app *app) logItemView(ctx *ui.Context, it *logItem) {
 			it.expanded = !it.expanded
 		}
 		if it.Detail != "" && it.expanded {
-			ui.Text(ctx, clip(it.Detail)).Font("monospace").FontSize(11).Selectable().
-				Padding(6, 8).Radius(6).Background(theme.Surface)
+			codeQuote(ctx, clip(it.Detail)).FontSize(11)
 		}
 	})
 }

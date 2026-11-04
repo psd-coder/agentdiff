@@ -134,7 +134,7 @@ func (app *app) welcomeView(ctx *ui.Context) {
 				ui.Text(ctx, "No recent repositories").TextColor(theme.TextMuted).AlignSelf(ui.Center).Margin(24, 0, 0, 0)
 				return
 			}
-			ui.Text(ctx, "Recent").FontSize(11).Bold().TextColor(theme.TextMuted).Padding(0, 8, 4, 8)
+			smallLabel(ctx, "Recent").Padding(0, 8, 4, 8)
 			ui.Scroll(ctx).Grow(1).MinHeight(0).FillWidth().Children(func() {
 				app.projectList(ctx, &app.projectNav, "", false, func(i int) { app.openRepo(app.cfg.Recent[i]) })
 			})

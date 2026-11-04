@@ -55,7 +55,6 @@ func (app *app) keyInput(ev ui.InputEvent) bool {
 // shortcutsTab lists the commands with their shortcuts, which a click
 // on the keys records anew.
 func (app *app) shortcutsTab(ctx *ui.Context) {
-	theme := ctx.Theme()
 	filter := strings.ToLower(strings.TrimSpace(app.keysFilter))
 	var cmds []*command
 	for _, cm := range app.cachedCommands() {
@@ -64,7 +63,7 @@ func (app *app) shortcutsTab(ctx *ui.Context) {
 		}
 	}
 	slices.SortFunc(cmds, func(x, y *command) int { return strings.Compare(x.title, y.title) })
-	ui.Text(ctx, "Click a shortcut and press the new keys, with "+app.platform.shortcutMods()+". Escape cancels. A shortcut another command has moves to this one.").FontSize(12).TextColor(theme.TextMuted).PaddingX(24)
+	caption(ctx, "Click a shortcut and press the new keys, with "+app.platform.shortcutMods()+". Escape cancels. A shortcut another command has moves to this one.").PaddingX(24)
 	ui.TextInput(ctx, &app.keysFilter).Placeholder("Filter commands").Label("Filter commands").MarginX(24)
 	// The scroll spans the window, so its bar shows at the window's edge.
 	ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
@@ -73,12 +72,12 @@ func (app *app) shortcutsTab(ctx *ui.Context) {
 				app.shortcutRow(ctx.Key(cm.id), cm)
 			}
 			if len(cmds) == 0 {
-				ui.Text(ctx, "No commands match").FontSize(12).TextColor(theme.TextMuted).Padding(6, 0)
+				caption(ctx, "No commands match").Padding(6, 0)
 			}
 		})
 	})
 	ui.Row(ctx).Gap(8).AlignItems(ui.Center).PaddingX(24).Children(func() {
-		ui.Text(ctx, app.keysNote).FontSize(12).TextColor(theme.TextMuted).Grow(1).Shrink(1)
+		caption(ctx, app.keysNote).Grow(1).Shrink(1)
 		ui.Button(ctx, "Reset all shortcuts").Disabled(len(app.cfg.Keys) == 0).OnClick(func() {
 			app.keymap().reset()
 			app.keysChanged()
@@ -102,7 +101,7 @@ func (app *app) shortcutRow(ctx *ui.Context, cm *command) {
 					if held := app.platform.modsLabel(ctx.Modifiers()); held != "" {
 						ui.Text(ctx, held+"…").Font("monospace").FontSize(12)
 					} else {
-						ui.Text(ctx, "Press keys…").FontSize(12).TextColor(theme.TextMuted)
+						caption(ctx, "Press keys…")
 					}
 				})
 			switch {

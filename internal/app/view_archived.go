@@ -19,20 +19,19 @@ func (app *app) archivedPage(ctx *ui.Context, id string) {
 		emptyState(ctx, "Earlier review not found", "It was restored, moved or deleted.")
 		return
 	}
-	theme := ctx.Theme()
 	rev, ov := earlier.Rev, earlier.Rev.Overview
 	app.pageScroll(ctx, page{kindArchived, id}).Grow(1).FillWidth().Children(func() {
 		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Text(ctx, "Earlier review").FontSize(22).Bold()
+				pageTitle(ctx, "Earlier review")
 				ui.Spacer(ctx)
 				app.cmdPrimaryButton(ctx, "open-archived-commit", id, "Open commit")
 				app.cmdPrimaryButton(ctx, "move-archived", id, "Move review to the commit")
 				app.cmdButton(ctx, "restore-archived", id, "Restore")
 				app.cmdButton(ctx, "delete-archived", id, "Delete")
 			})
-			ui.Text(ctx, overviewBy(ov)).FontSize(12).TextColor(theme.TextMuted)
-			ui.Text(ctx, app.earlierStatus(earlier)).FontSize(12).TextColor(theme.TextMuted)
+			caption(ctx, overviewBy(ov))
+			caption(ctx, app.earlierStatus(earlier))
 			seen := map[string]bool{}
 			switch {
 			case ov.Walk != nil:
@@ -72,7 +71,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 	}
 	for i, s := range walkthrough.Steps {
 		ui.Column(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i))).Gap(10).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border).Children(func() {
-			ui.Text(ctx, fmt.Sprintf("%d. %s", i+1, s.Title)).FontSize(16).Bold()
+			cardTitle(ctx, fmt.Sprintf("%d. %s", i+1, s.Title))
 			if s.Text != "" {
 				markdown.View(ctx, s.Text, &app.md)
 			}
@@ -89,7 +88,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 	}
 	for si, sec := range walkthrough.Sections {
 		if sec.Title != "" {
-			ui.Text(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title).FontSize(18).Bold().Margin(8, 0, 0, 0)
+			sectionHeading(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title)
 		}
 		for i, it := range sec.Items {
 			ui.Column(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, theme.Border).Children(func() {
@@ -149,7 +148,7 @@ func (app *app) savedGroups(ctx *ui.Context, groups []review.Group) {
 	if len(groups) == 0 {
 		return
 	}
-	ui.Text(ctx, "Review order").FontSize(18).Bold().Margin(8, 0, 0, 0)
+	sectionHeading(ctx, "Review order")
 	for gi, g := range groups {
 		ui.Column(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Padding(14, 18).Radius(10).Border(1, theme.Border).Children(func() {
 			ui.Text(ctx, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold()
@@ -174,13 +173,12 @@ func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
 	if len(shown) == 0 {
 		return
 	}
-	ui.Text(ctx, "Comments").FontSize(18).Bold().Margin(8, 0, 0, 0)
+	sectionHeading(ctx, "Comments")
 	for _, th := range shown {
 		ui.Column(ctx.Key("thread-"+th.ID)).Gap(8).Padding(12, 16).Radius(10).Border(1, theme.Border).Children(func() {
-			ui.Text(ctx, th.Anchor.Label()).Font("monospace").FontSize(12).TextColor(theme.Accent).SingleLine()
+			anchorLabel(ctx, th.Anchor.Label())
 			if th.Anchor.Quote != "" && th.Anchor.Kind != review.AnchorSection {
-				ui.Text(ctx, strings.ReplaceAll(strings.TrimRight(th.Anchor.Quote, "\n"), "\t", "    ")).Font("monospace").FontSize(12).
-					Padding(6, 10).Radius(6).Background(theme.Surface).Selectable()
+				codeQuote(ctx, strings.ReplaceAll(strings.TrimRight(th.Anchor.Quote, "\n"), "\t", "    ")).FontSize(12)
 			}
 			for i, m := range th.Messages {
 				ui.Column(ctx.Key(i)).Gap(2).Children(func() {
@@ -188,7 +186,7 @@ func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
 					if m.Role == review.RoleAgent {
 						who = "Agent"
 					}
-					ui.Text(ctx, who).FontSize(11).Bold().TextColor(theme.TextMuted)
+					smallLabel(ctx, who)
 					if m.Role == review.RoleAgent {
 						markdown.View(ctx, m.Text, &app.md)
 					} else {

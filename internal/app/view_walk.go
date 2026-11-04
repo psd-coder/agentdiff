@@ -41,7 +41,7 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 	theme := ctx.Theme()
 	for si, sec := range walkthrough.Sections {
 		if sec.Title != "" {
-			ui.Text(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title).FontSize(18).Bold().Margin(8, 0, 0, 0)
+			sectionHeading(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title)
 		}
 		for i, it := range sec.Items {
 			label := app.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1)))
@@ -72,7 +72,7 @@ func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.
 	discuss := func(menu *ui.Menu) { app.discussItem(menu, label, step.Text) }
 	card.Children(func() {
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, fmt.Sprintf("%d. %s", index+1, step.Title)).FontSize(16).Bold().Grow(1)
+			cardTitle(ctx, fmt.Sprintf("%d. %s", index+1, step.Title)).Grow(1)
 			app.sectionThreads(ctx, label, step.Text)
 		})
 		if step.Text != "" {
@@ -277,14 +277,14 @@ func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet, di
 				ui.Text(ctx, ref.Label()).Font("monospace").FontSize(12).SingleLine().Shrink(0)
 			}
 			if ref.Why != "" {
-				ui.Text(ctx, ref.Why).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1)
+				caption(ctx, ref.Why).SingleLine().Shrink(1)
 			}
 		})
 		switch {
 		case snippet.loading:
 			ui.Spinner(ctx).Size(12, 12).Margin(8, 10)
 		case snippet.missing != "":
-			ui.Text(ctx, snippet.missing).FontSize(12).TextColor(theme.TextMuted).Padding(6, 10)
+			caption(ctx, snippet.missing).Padding(6, 10)
 		}
 		if len(snippet.lines) > 0 {
 			app.snippetLines(ctx, ref, snippet, discuss)
@@ -430,33 +430,33 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 					if link.Clicked() {
 						app.nav.goTo(p)
 					}
-					ui.Text(ctx, "›").FontSize(12).TextColor(theme.TextMuted)
+					caption(ctx, "›")
 				}
 				crumb(app.pageLabel(app.versionPage(version)), app.versionPage(version))
 				for _, p := range path[:len(path)-1] {
 					crumb(app.rev.WalkTitle(p), page{kindWalk, p.ID})
 				}
-				ui.Text(ctx, excerpt(app.rev.WalkTitle(walk), 40)).FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, excerpt(app.rev.WalkTitle(walk), 40))
 			})
 			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Text(ctx, app.rev.WalkTitle(walk)).FontSize(22).Bold().Grow(1).Shrink(1)
+				pageTitle(ctx, app.rev.WalkTitle(walk)).Grow(1).Shrink(1)
 				app.cmdButton(ctx, "stop-walk", walk.ID, "Stop")
 				app.moreButton(ctx, walk.ID, "regenerate-walk", "walk-log", "", "delete-walk")
 			})
 			if step, ok := app.rev.StepOf(walk); ok && walk.Question != "" {
-				ui.Text(ctx, "About the step: "+step.Title).FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, "About the step: "+step.Title)
 			}
 			app.staleBanner(ctx, version)
 			switch {
 			case run != nil && len(walk.More) == 0:
 				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(ctx).Size(14, 14)
-					ui.Text(ctx, run.activity).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1)
+					caption(ctx, run.activity).SingleLine().Shrink(1)
 				})
 			case st.status == targetQueued:
 				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(ctx).Size(14, 14)
-					ui.Text(ctx, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead)).FontSize(12).TextColor(theme.TextMuted)
+					caption(ctx, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead))
 					ui.Button(ctx, "Start now").OnClick(func() { app.runner.startNow(app.rev, walk.ID) })
 				})
 			case walk.Content != nil:
@@ -466,7 +466,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 			}
 			for i, turn := range walk.More {
 				ui.Column(ctx.Key(fmt.Sprintf("more-%d", i))).Gap(10).Padding(16, 20).Radius(10).Border(1, theme.Border).Children(func() {
-					ui.Text(ctx, "Follow-up: "+turn.Question).FontSize(16).Bold()
+					cardTitle(ctx, "Follow-up: "+turn.Question)
 					if i == len(walk.More)-1 && run != nil {
 						ui.Spinner(ctx).Size(14, 14)
 						return
@@ -481,7 +481,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 				failureBox(ctx, walk.Err)
 			}
 			if run == nil && walk.Agent != "" {
-				ui.Text(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04"))).FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04")))
 			}
 			app.askWalk(ctx, walk.ID)
 		})
@@ -508,7 +508,6 @@ func overviewBy(ov *review.Overview) string {
 // askWalk asks a question about a walkthrough as a whole, and lists the
 // questions asked before.
 func (app *app) askWalk(ctx *ui.Context, parent string) {
-	theme := ctx.Theme()
 	key := app.questionDraftKey(nil, askTarget{parent, ""})
 	draft := app.drafts[key]
 	submit := func() {
@@ -519,7 +518,7 @@ func (app *app) askWalk(ctx *ui.Context, parent string) {
 	}
 	ui.Column(ctx).Gap(8).Margin(8, 0, 0, 0).Children(func() {
 		ui.Text(ctx, "Ask about the changes").FontSize(18).Bold()
-		ui.Text(ctx, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.").FontSize(12).TextColor(theme.TextMuted)
+		caption(ctx, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.")
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 			in := ui.TextInput(ctx.Key("ask-"+key), &draft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
 			if in.Changed() {

@@ -6,15 +6,61 @@ import (
 	"github.com/psd-coder/agentdiff/internal/review"
 )
 
+// pageTitle is the title at the top of a page.
+func pageTitle(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).FontSize(22).Bold()
+}
+
+// sectionHeading names a part of a page, above its cards.
+func sectionHeading(ctx *ui.Context, text string) {
+	ui.Text(ctx, text).FontSize(18).Bold().Margin(8, 0, 0, 0)
+}
+
+// cardTitle is the title of a card or of a note in the middle of a page.
+func cardTitle(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).FontSize(16).Bold()
+}
+
+// caption is a line of secondary text: a note under a title, a meta line,
+// what a run does now.
+func caption(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).FontSize(12).TextColor(ctx.Theme().TextMuted)
+}
+
+// smallCaption is the secondary text of a dense row: a time, a count, a
+// key hint.
+func smallCaption(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).FontSize(11).TextColor(ctx.Theme().TextMuted)
+}
+
+// smallLabel names a group of rows, or who wrote a message.
+func smallLabel(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).FontSize(11).Bold().TextColor(ctx.Theme().TextMuted)
+}
+
+// anchorLabel names the place a thread is about.
+func anchorLabel(ctx *ui.Context, label string) {
+	ui.Text(ctx, label).Font("monospace").FontSize(12).TextColor(ctx.Theme().Accent).SingleLine()
+}
+
+// bubble is a message the user wrote in a conversation.
+func bubble(ctx *ui.Context, text string) {
+	ui.Text(ctx, text).Selectable().Padding(8, 10).Radius(8).Background(ctx.Theme().Surface)
+}
+
+// codeQuote shows lines of code or of a prompt in a gray box. Callers set
+// the font size.
+func codeQuote(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).Font("monospace").Padding(6, 10).Radius(6).Background(ctx.Theme().Surface).Selectable()
+}
+
 // errorText shows why an answer did not come: the agent's error, or
 // Stopped in gray for a run the user stopped.
-func errorText(ctx *ui.Context, err string) {
-	theme := ctx.Theme()
+func errorText(ctx *ui.Context, err string) ui.Element {
 	if err == review.Stopped {
-		ui.Text(ctx, err).FontSize(12).TextColor(theme.TextMuted)
-		return
+		return caption(ctx, err)
 	}
-	ui.Text(ctx, err).FontSize(12).TextColor(theme.Danger).Selectable()
+	return ui.Text(ctx, err).FontSize(12).TextColor(ctx.Theme().Danger).Selectable()
 }
 
 // failureBox shows the error of a page's answer in a red box, or Stopped
@@ -38,18 +84,23 @@ func warningBox(ctx *ui.Context) ui.Element {
 	return ui.Column(ctx).Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
 }
 
-func errorState(ctx *ui.Context, title, detail string) {
-	theme := ctx.Theme()
+// centerNote fills the page with a title and the detail builds, in its
+// middle.
+func centerNote(ctx *ui.Context, title string, detail func()) {
 	ui.Column(ctx).Grow(1).Center().Gap(8).Padding(24).Children(func() {
-		ui.Text(ctx, title).FontSize(16).Bold()
-		ui.Text(ctx, detail).TextColor(theme.TextMuted).Selectable().MaxWidth(600)
+		cardTitle(ctx, title)
+		detail()
+	})
+}
+
+func errorState(ctx *ui.Context, title, detail string) {
+	centerNote(ctx, title, func() {
+		ui.Text(ctx, detail).TextColor(ctx.Theme().TextMuted).Selectable().MaxWidth(600)
 	})
 }
 
 func emptyState(ctx *ui.Context, title, detail string) {
-	theme := ctx.Theme()
-	ui.Column(ctx).Grow(1).Center().Gap(8).Padding(24).Children(func() {
-		ui.Text(ctx, title).FontSize(16).Bold()
-		ui.Text(ctx, detail).TextColor(theme.TextMuted).MaxWidth(520).TextAlign(ui.Center)
+	centerNote(ctx, title, func() {
+		ui.Text(ctx, detail).TextColor(ctx.Theme().TextMuted).MaxWidth(520).TextAlign(ui.Center)
 	})
 }

@@ -101,7 +101,7 @@ func (app *app) earlierList(ctx *ui.Context) {
 		return
 	}
 	theme := ctx.Theme()
-	ui.Text(ctx, "Earlier reviews").FontSize(18).Bold().Margin(8, 0, 0, 0)
+	sectionHeading(ctx, "Earlier reviews")
 	ui.Text(ctx, "Reviews of uncommitted changes that are no longer in the working tree. A review comes back here by itself when its changes do.").
 		FontSize(12).TextColor(theme.TextMuted)
 	for _, e := range app.reviews.Earlier() {
@@ -115,7 +115,7 @@ func (app *app) earlierList(ctx *ui.Context) {
 			}
 			open.Children(func() {
 				ui.Text(ctx, earlierTitle(e.Rev)).Bold().MaxLines(2)
-				ui.Text(ctx, strings.Join(app.earlierMeta(e), " · ")).FontSize(12).TextColor(theme.TextMuted).SingleLine()
+				caption(ctx, strings.Join(app.earlierMeta(e), " · ")).SingleLine()
 			})
 			if open.Clicked() {
 				app.nav.goTo(page{kindArchived, e.ID()})
@@ -187,7 +187,7 @@ func (app *app) overviewPage(ctx *ui.Context, key string) {
 	app.pageScroll(ctx, page{kindOverview, key}).Grow(1).FillWidth().Children(func() {
 		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
 			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Text(ctx, "Overview").FontSize(22).Bold()
+				pageTitle(ctx, "Overview")
 				ui.Spacer(ctx)
 				app.versionSwitcher(ctx, ov)
 				if latest {
@@ -204,7 +204,7 @@ func (app *app) overviewPage(ctx *ui.Context, key string) {
 				if from.Kind == gitx.ScopeUncommitted || from.Kind == gitx.ScopeArchived {
 					verb = "Moved"
 				}
-				ui.Text(ctx, verb+" here from "+strings.ToLower(from.Label())+", which had the same changes.").FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, verb+" here from "+strings.ToLower(from.Label())+", which had the same changes.")
 			}
 			app.repoPromptsNote(ctx)
 			app.aheadBanner(ctx)
@@ -223,7 +223,7 @@ func (app *app) overviewPage(ctx *ui.Context, key string) {
 			case !ov.Done():
 				app.overviewIntro(ctx, cfg.Provider.Name())
 			case ov.Walk != nil:
-				ui.Text(ctx, overviewBy(ov)).FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, overviewBy(ov))
 				app.walkthrough(ctx, ov.ID, ov.Walk)
 			default:
 				app.overviewSections(ctx, ov)
@@ -283,13 +283,12 @@ func (app *app) commitMessage(ctx *ui.Context) {
 	if cm == nil {
 		return
 	}
-	theme := ctx.Theme()
 	ui.Column(ctx).Gap(6).Children(func() {
 		ui.Text(ctx, cm.Subject).FontSize(15).Bold().Selectable()
 		if cm.Body != "" {
 			ui.Text(ctx, cm.Body).Selectable()
 		}
-		ui.Text(ctx, cm.Short+" by "+cm.Author+", "+cm.Time.Format("Jan 2 2006 15:04")).FontSize(12).TextColor(theme.TextMuted).Selectable()
+		caption(ctx, cm.Short+" by "+cm.Author+", "+cm.Time.Format("Jan 2 2006 15:04")).Selectable()
 	})
 }
 
@@ -320,9 +319,9 @@ func (app *app) summaryLine(ctx *ui.Context) {
 func (app *app) overviewIntro(ctx *ui.Context, agentName string) {
 	theme := ctx.Theme()
 	ui.Column(ctx).Gap(12).Padding(20).Radius(10).Background(theme.Surface).Border(1, theme.Border).Children(func() {
-		ui.Text(ctx, "Get a walkthrough of these changes").FontSize(16).Bold()
+		cardTitle(ctx, "Get a walkthrough of these changes")
 		ui.Text(ctx, agentName+" reads the changes in read-only mode and walks you through them in a few short steps, each with the code that shows it. Go deeper into any step, or ask about it, and you get a walkthrough one level closer to the code. It also answers your checklist and groups the files in the order to review them.").TextColor(theme.TextMuted)
-		ui.Text(ctx, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the prompts in Settings.").FontSize(12).TextColor(theme.TextMuted)
+		caption(ctx, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the prompts in Settings.")
 		ui.Row(ctx).Children(func() {
 			app.cmdPrimaryButton(ctx, "explain", "", "Explain changes with "+agentName)
 		})
@@ -330,14 +329,13 @@ func (app *app) overviewIntro(ctx *ui.Context, agentName string) {
 }
 
 func (app *app) streamingOverview(ctx *ui.Context, run *agentRun) {
-	theme := ctx.Theme()
 	ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 		ui.Spinner(ctx).Size(14, 14)
 		activity := run.activity
 		if activity == "" {
 			activity = "Writing…"
 		}
-		ui.Text(ctx, activity).FontSize(12).TextColor(theme.TextMuted).SingleLine()
+		caption(ctx, activity).SingleLine()
 	})
 	if run.text != "" && !strings.HasPrefix(strings.TrimSpace(run.text), "{") && !strings.HasPrefix(strings.TrimSpace(run.text), "```") {
 		ui.Column(ctx).Children(func() { markdown.Stream(ctx, run.text, &app.md) })
@@ -351,7 +349,7 @@ func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
 		meta += " (" + ov.Model + ")"
 	}
 	meta += ", " + ov.Generated.Format("Jan 2 15:04")
-	ui.Text(ctx, meta).FontSize(12).TextColor(theme.TextMuted)
+	caption(ctx, meta)
 	for i, s := range review.Sections(ov.Markdown) {
 		title := s.Title
 		if title == "" {
@@ -361,7 +359,7 @@ func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
 		app.discussMenu(card, title, s.Body)
 		card.Children(func() {
 			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(ctx, title).FontSize(16).Bold().Grow(1)
+				cardTitle(ctx, title).Grow(1)
 				app.sectionThreads(ctx, title, s.Body)
 			})
 			markdown.View(ctx, s.Body, &app.md)
@@ -408,7 +406,7 @@ func (app *app) groupCards(ctx *ui.Context) {
 	if app.rev.Overview != nil && len(app.rev.Overview.Groups) > 0 {
 		title = "Review order"
 	}
-	ui.Text(ctx, title).FontSize(18).Bold().Margin(8, 0, 0, 0)
+	sectionHeading(ctx, title)
 	for gi, g := range groups {
 		card := ui.Column(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Padding(14, 18).Radius(10).Border(1, theme.Border)
 		card.Children(func() {
@@ -437,7 +435,7 @@ func (app *app) groupCards(ctx *ui.Context) {
 						app.nav.goTo(page{kindFile, f})
 					}
 					if diff != nil {
-						ui.Text(ctx, fmt.Sprintf("+%d −%d", diff.change.Additions, diff.change.Deletions)).FontSize(11).TextColor(theme.TextMuted)
+						smallCaption(ctx, fmt.Sprintf("+%d −%d", diff.change.Additions, diff.change.Deletions))
 					}
 				})
 			}
