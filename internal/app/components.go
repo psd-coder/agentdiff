@@ -118,6 +118,16 @@ func ghostButton(ctx *ui.Context) ui.Element {
 	return button
 }
 
+// disclosureArrow is the chevron of something that folds: it points down
+// while open, and right while folded.
+func disclosureArrow(ctx *ui.Context, open bool) ui.Element {
+	arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(ctx.Theme().TextMuted)
+	if !open {
+		arrow.Rotate(-90)
+	}
+	return arrow
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {

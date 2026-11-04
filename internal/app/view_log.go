@@ -192,12 +192,9 @@ func (app *app) logItemView(ctx *ui.Context, it *logItem) {
 			head.Background(theme.SurfaceHover)
 		}
 		head.Children(func() {
-			arrow := ui.Icon(ctx, chevronIcon).Size(10, 10).TextColor(theme.TextMuted)
-			switch {
-			case it.Detail == "":
+			arrow := disclosureArrow(ctx, it.expanded).Size(10, 10)
+			if it.Detail == "" {
 				arrow.Invisible()
-			case !it.expanded:
-				arrow.Rotate(-90)
 			}
 			ui.Text(ctx, it.time.Format("15:04:05")).Font("monospace").FontSize(11).TextColor(theme.TextMuted)
 			title := ui.Text(ctx, it.Title).FontSize(12).Bold().SingleLine().Shrink(1).Grow(1)

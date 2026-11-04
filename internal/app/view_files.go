@@ -287,19 +287,13 @@ func (app *app) fileHeader(ctx *ui.Context, diff *fileDiff, onPage bool) ui.Elem
 
 // foldButton folds the card of the file to its header, or unfolds it.
 func (app *app) foldButton(ctx *ui.Context, file string) {
-	theme := ctx.Theme()
 	folded := app.isFolded(file)
 	tip, label := "Fold the diff", "Fold"
 	if folded {
 		tip, label = "Unfold the diff", "Unfold"
 	}
 	btn := ghostButton(ctx.Key("fold")).Expanded(!folded).Label(label).Tooltip(tip)
-	btn.Children(func() {
-		arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(theme.TextMuted)
-		if folded {
-			arrow.Rotate(-90)
-		}
-	})
+	btn.Children(func() { disclosureArrow(ctx, !folded) })
 	if btn.Clicked() {
 		app.folded[file] = !folded
 	}
