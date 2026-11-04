@@ -98,13 +98,12 @@ func (pickList *pickList) list(ctx *ui.Context, label string, fn func(addRow pic
 	return list, rows
 }
 
-// active is the row of rows the highlight is on, which assistive
-// technology follows as the focused one.
-func (pickList *pickList) active(rows []ui.Element) (ui.Element, bool) {
+// activate tells assistive technology that the row of rows the highlight
+// is on is the focused one, while the focus stays in target.
+func (pickList *pickList) activate(target ui.Element, rows []ui.Element) {
 	if pickList.hi < len(rows) {
-		return rows[pickList.hi], true
+		target.ActiveDescendant(rows[pickList.hi])
 	}
-	return ui.Element{}, false
 }
 
 // searchField is the field filtering a pickList, which takes the keys
