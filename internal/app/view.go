@@ -786,7 +786,7 @@ func (app *app) saveNotice(ctx *ui.Context) {
 		return
 	}
 	theme := ctx.Theme()
-	ui.Column(ctx).Gap(theme.Space(0.5)).Padding(theme.Space(2), theme.Space(3.5)).Background(theme.Danger.Alpha(0.15)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Danger).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(0.5)).Padding(theme.Space(2), theme.Space(3.5)).Background(theme.Danger.Alpha(tintFill)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Danger).Children(func() {
 		ui.Text(ctx, "Could not save your changes. AgentDiff tries again on the next change.").Bold()
 		caption(ctx, app.saveErr).Selectable()
 	})
