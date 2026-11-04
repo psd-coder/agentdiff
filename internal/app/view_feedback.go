@@ -32,7 +32,7 @@ func (app *app) feedbackPage(ctx *ui.Context) {
 	threadCount := len(review.ExportedThreads(app.rev, app.exportOptions()))
 	ui.Column(ctx).Fill().Children(func() {
 		ui.Column(ctx).Gap(10).Padding(20, 24).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-			ui.Text(ctx, "Feedback for the coding agent").FontSize(22).Bold()
+			pageTitle(ctx, "Feedback for the coding agent")
 			ui.Text(ctx, fmt.Sprintf("%d threads go into the feedback. Exclude a thread in its panel. Give the text to your coding agent: paste it, or save it to a file and paste the prompt that points to it.", threadCount)).TextColor(theme.TextMuted)
 			ui.Row(ctx).Gap(16).AlignItems(ui.Center).Children(func() {
 				ui.Checkbox(ctx, &app.exportAgent, "Include agent replies")
@@ -44,7 +44,7 @@ func (app *app) feedbackPage(ctx *ui.Context) {
 				app.cmdButton(ctx, "copy-agent-prompt", "", "Copy prompt for agent")
 			})
 			if app.savedPath != "" {
-				ui.Text(ctx, "Saved to "+app.savedPath).FontSize(12).TextColor(theme.TextMuted).Selectable()
+				caption(ctx, "Saved to "+app.savedPath).Selectable()
 			}
 		})
 		app.pageScroll(ctx, page{kind: kindFeedback}).Grow(1).FillWidth().Children(func() {

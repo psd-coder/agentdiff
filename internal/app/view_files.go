@@ -51,7 +51,7 @@ func (app *app) groupPage(ctx *ui.Context, gi string) {
 	group := app.groups()[index]
 	rows := app.cardRows([]pageRow{{kind: titleRow}}, group.Files)
 	app.cardList(ctx, page{kindGroup, gi}, rows, func(pageRow) {
-		pageTitle(ctx).AlignItems(ui.Start).Children(func() {
+		diffPageHeader(ctx).AlignItems(ui.Start).Children(func() {
 			ui.Column(ctx).Gap(6).Grow(1).Shrink(1).Children(func() {
 				ui.Text(ctx, fmt.Sprintf("%d. %s", index+1, group.Title)).FontSize(18).Bold()
 				if group.Summary != "" {
@@ -86,10 +86,10 @@ func (app *app) allPage(ctx *ui.Context) {
 	app.cardList(ctx, page{kind: kindAll}, rows, func(r pageRow) {
 		if r.kind == groupRow {
 			group := groups[r.group]
-			ui.Text(ctx, fmt.Sprintf("%d. %s", r.group+1, group.Title)).FontSize(16).Bold().Padding(4, 20, cardGap/2, 20)
+			cardTitle(ctx, fmt.Sprintf("%d. %s", r.group+1, group.Title)).Padding(4, 20, cardGap/2, 20)
 			return
 		}
-		pageTitle(ctx).AlignItems(ui.Center).Children(func() {
+		diffPageHeader(ctx).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, "All files diff").FontSize(18).Bold()
 			ui.Text(ctx, fmt.Sprintf("%d files", len(app.files))).TextColor(theme.TextMuted)
 			ui.Text(ctx, fmt.Sprintf("+%d", add)).TextColor(theme.Success)
@@ -102,7 +102,7 @@ func (app *app) allPage(ctx *ui.Context) {
 	})
 }
 
-func pageTitle(ctx *ui.Context) ui.Element {
+func diffPageHeader(ctx *ui.Context) ui.Element {
 	return ui.Row(ctx).Gap(12).Padding(16, 20).Margin(0, 0, cardGap/2, 0).BorderWidth(0, 0, 1, 0).BorderColor(ctx.Theme().Border)
 }
 
@@ -263,7 +263,7 @@ func (app *app) fileHeader(ctx *ui.Context, diff *fileDiff, onPage bool) ui.Elem
 		ui.Text(ctx, fmt.Sprintf("−%d", change.Deletions)).FontSize(12).TextColor(theme.Danger)
 		if diff.state != nil {
 			if _, ok := diff.state.SelectedLines(); !ok {
-				ui.Text(ctx, "Click a line number, then Shift+click another to select a range").FontSize(11).TextColor(theme.TextMuted).SingleLine().Shrink(1)
+				smallCaption(ctx, "Click a line number, then Shift+click another to select a range").SingleLine().Shrink(1)
 			}
 		}
 		ui.Spacer(ctx)
@@ -412,7 +412,7 @@ func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
 				first = th.Messages[0].Text
 			}
 			ui.Text(ctx, excerpt(first, 160)).MaxLines(1)
-			ui.Text(ctx, app.threadMeta(th)).FontSize(11).TextColor(theme.TextMuted).SingleLine()
+			smallCaption(ctx, app.threadMeta(th)).SingleLine()
 		})
 		targetMark(ctx, app.state(th.ID))
 	})

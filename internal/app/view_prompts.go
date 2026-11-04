@@ -125,7 +125,7 @@ func (app *app) blockView(ctx *ui.Context, form *promptForm, name review.PromptN
 	ui.Column(ctx).Gap(4).Padding(8, 12).Radius(8).Border(1, theme.Border).Children(func() {
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, "{{"+block.Name+"}}").Font("monospace").FontSize(12).Bold().Selectable()
-			ui.Text(ctx, need).FontSize(11).TextColor(theme.TextMuted)
+			smallCaption(ctx, need)
 		})
 		ui.Text(ctx, block.About).FontSize(12)
 		text, ok := app.blockText(name, block.Name)
@@ -137,7 +137,7 @@ func (app *app) blockView(ctx *ui.Context, form *promptForm, name review.PromptN
 			form.blocks[key] = new(bool)
 		}
 		ui.Collapsible(ctx, "Show the text", form.blocks[key], func() {
-			ui.Text(ctx, text).Font("monospace").FontSize(11).Selectable().Padding(6, 8).Radius(6).Background(theme.Surface)
+			codeQuote(ctx, text).FontSize(11)
 		})
 	})
 }

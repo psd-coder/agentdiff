@@ -37,7 +37,7 @@ func (app *app) toolbar(ctx *ui.Context) {
 		label, tip := agentLabel(app.cfg.Agent())
 		ui.Toolbar(ctx, func() {
 			ui.Button(ctx.Key("agent-settings"), "").Label(label).Tooltip(tip).OnClick(func() { app.openSettingsTab(agentTab) }).Children(func() {
-				ui.Text(ctx, label).FontSize(12).TextColor(theme.TextMuted).SingleLine()
+				caption(ctx, label).SingleLine()
 			})
 			app.toolButton(ctx, "agent-log", logIcon, "Agent log", "Agent log", 0)
 			app.toolButton(ctx, "refresh", refreshIcon, "Refresh", "Refresh", 0)
@@ -75,7 +75,6 @@ func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label, tip s
 }
 
 func (app *app) projectPicker(ctx *ui.Context) {
-	theme := ctx.Theme()
 	anchor := pickerButton(ctx, folderIcon, app.repo.Name(), "", app.projectsOpen).Tooltip(app.repo.Root + "\n" + app.tooltip(app.cmd("switch-project"))).Label("Project")
 	if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !app.projectsOpen {
 		app.runOn(ctx, "switch-project", "")
@@ -93,7 +92,7 @@ func (app *app) projectPicker(ctx *ui.Context) {
 			}
 		}
 		ui.Column(ctx).MinWidth(360).MaxWidth(480).FillWidth().Gap(2).Children(func() {
-			ui.Text(ctx, "Projects").FontSize(11).Bold().TextColor(theme.TextMuted).Padding(4, 8)
+			smallLabel(ctx, "Projects").Padding(4, 8)
 			app.projectList(ctx, &app.projectNav, app.repo.Root, true, choose)
 		})
 	})
@@ -116,7 +115,7 @@ func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add boo
 				ui.Icon(ctx, folderIcon).Size(menuIcon, menuIcon).TextColor(theme.TextMuted)
 				ui.Column(ctx).Grow(1).Shrink(1).Children(func() {
 					ui.Text(ctx, filepath.Base(p)).Bold().SingleLine()
-					ui.Text(ctx, p).FontSize(11).TextColor(theme.TextMuted).SingleLine()
+					smallCaption(ctx, p).SingleLine()
 				})
 				if p == open {
 					ui.Icon(ctx, checkIcon).TextColor(theme.Accent).Label("Open")
@@ -269,7 +268,7 @@ func (app *app) branchItem(ctx *ui.Context, addRow pickRow, row branchRow, openT
 		}
 		ui.Text(ctx, row.name).SingleLine().Shrink(1).Grow(1)
 		if tag := row.tag(); tag != "" {
-			text := ui.Text(ctx, tag).FontSize(11).TextColor(theme.TextMuted)
+			text := smallCaption(ctx, tag)
 			if !row.checkedOut {
 				text.Tooltip(row.tree)
 			}
@@ -280,12 +279,11 @@ func (app *app) branchItem(ctx *ui.Context, addRow pickRow, row branchRow, openT
 // branchListNote tells why the branch list shows no branches, or that git
 // could not list them.
 func (app *app) branchListNote(ctx *ui.Context, shown int) {
-	theme := ctx.Theme()
 	switch {
 	case app.cmpr.err != "":
-		ui.Text(ctx, "Could not list the branches: "+app.cmpr.err).FontSize(12).TextColor(theme.Danger).Padding(6, 8).Selectable()
+		errorText(ctx, "Could not list the branches: "+app.cmpr.err).Padding(6, 8)
 	case shown == 0:
-		ui.Text(ctx, "No branches match").FontSize(12).TextColor(theme.TextMuted).Padding(6, 8)
+		caption(ctx, "No branches match").Padding(6, 8)
 	}
 }
 
@@ -316,7 +314,6 @@ func (app *app) compareModal(ctx *ui.Context) {
 	if form == nil {
 		return
 	}
-	theme := ctx.Theme()
 	branchesOK := form.branch != "" && form.base != "" && form.branch != form.base
 	from, to := strings.TrimSpace(form.from), strings.TrimSpace(form.to)
 	rangeOK := from != "" && to != ""
@@ -335,16 +332,16 @@ func (app *app) compareModal(ctx *ui.Context) {
 			ui.Text(ctx, "Compare").FontSize(18).Bold()
 			ui.Segmented(ctx, &form.mode, "Branches", "Range").Label("Compare")
 			if form.mode == compareBranches {
-				ui.Text(ctx, "Review the commits of a branch since it left its base. The branch does not have to be checked out.").FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, "Review the commits of a branch since it left its base. The branch does not have to be checked out.")
 				ui.Text(ctx, "Branch").FontSize(12).Bold()
 				app.takeFocus(ui.Combobox(ctx.Key("branch"), &form.branch, app.cmpr.branches).Label("Branch").AutoFocus(), "compare")
 				ui.Text(ctx, "Base").FontSize(12).Bold()
 				ui.Combobox(ctx.Key("base"), &form.base, app.cmpr.branches).Label("Base")
 				if form.branch != "" && form.branch == form.base {
-					ui.Text(ctx, "Pick two different branches.").FontSize(12).TextColor(theme.Danger)
+					errorText(ctx, "Pick two different branches.")
 				}
 			} else {
-				ui.Text(ctx, "Review the changes between two commits, branches or tags, as git diff from..to shows them.").FontSize(12).TextColor(theme.TextMuted)
+				caption(ctx, "Review the changes between two commits, branches or tags, as git diff from..to shows them.")
 				app.takeFocus(ui.TextInput(ctx.Key("from"), &form.from).Placeholder("From, e.g. main or abc1234").Label("From").AutoFocus().OnSubmit(apply), "compare")
 				ui.TextInput(ctx.Key("to"), &form.to).Placeholder("To, e.g. HEAD").Label("To").OnSubmit(apply)
 			}

@@ -111,7 +111,7 @@ func (app *app) questionPanel(ctx *ui.Context) {
 			}
 			app.cmdButton(ctx, "close-question", "", "Close")
 		})
-		ui.Text(ctx, "About: "+app.targetLabel(target.parent, target.stepID)).FontSize(12).TextColor(theme.TextMuted).
+		caption(ctx, "About: "+app.targetLabel(target.parent, target.stepID)).
 			SingleLine().Padding(6, 12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 		ui.Scroll(ctx.Key("q-" + id)).TrackScroll(app.scrollOf("question:" + id)).Grow(1).FillWidth().Children(func() {
 			ui.Column(ctx).Gap(14).Padding(12).Children(func() {
@@ -131,7 +131,7 @@ func (app *app) questionPanel(ctx *ui.Context) {
 		app.questionComposer(ctx, walk, target)
 		if walk != nil {
 			ui.Row(ctx).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
-				ui.Text(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04"))).FontSize(11).TextColor(theme.TextMuted).Grow(1)
+				smallCaption(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04"))).Grow(1)
 				app.cmdButton(ctx, "delete-question", walk.ID, "Delete")
 			})
 		}
@@ -159,13 +159,12 @@ func (app *app) earlierQuestions(ctx *ui.Context, target *askTarget) {
 }
 
 func (app *app) turnView(ctx *ui.Context, walk *review.Walk, turn review.Turn, last bool) {
-	theme := ctx.Theme()
 	ui.Column(ctx).Gap(8).Children(func() {
-		ui.Text(ctx, turn.Question).Selectable().Padding(8, 10).Radius(8).Background(theme.Surface)
+		bubble(ctx, turn.Question)
 		if run := app.runner.run(app.rev, walk.ID); run != nil && last {
 			ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(ctx).Size(12, 12)
-				ui.Text(ctx, run.activity).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1)
+				caption(ctx, run.activity).SingleLine().Shrink(1)
 			})
 			return
 		}
@@ -252,7 +251,7 @@ func (app *app) questionComposer(ctx *ui.Context, walk *review.Walk, target *ask
 			app.drafts[key] = draft
 		}
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, app.platform.cmdEnter()+" asks").FontSize(11).TextColor(theme.TextMuted).Grow(1)
+			smallCaption(ctx, app.platform.cmdEnter()+" asks").Grow(1)
 			if busy {
 				ui.Button(ctx, "Stop").OnClick(func() { app.runner.stop(app.rev, walk.ID) })
 			}
@@ -282,7 +281,7 @@ func (app *app) questionsList(ctx *ui.Context) {
 			if len(w.More) > 0 {
 				meta += fmt.Sprintf(", %d follow-ups", len(w.More))
 			}
-			ui.Text(ctx, meta).FontSize(11).TextColor(theme.TextMuted)
+			smallCaption(ctx, meta)
 		})
 		if row.Clicked() {
 			app.openQuestion(w.ID)

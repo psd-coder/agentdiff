@@ -73,23 +73,21 @@ func (app *app) closeThread() {
 }
 
 func messageHeader(ctx *ui.Context, who string, at time.Time) {
-	theme := ctx.Theme()
 	ui.Row(ctx).Gap(6).Children(func() {
-		ui.Text(ctx, who).FontSize(11).Bold().TextColor(theme.TextMuted)
+		smallLabel(ctx, who)
 		if !at.IsZero() {
-			ui.Text(ctx, at.Format("15:04")).FontSize(11).TextColor(theme.TextMuted)
+			smallCaption(ctx, at.Format("15:04"))
 		}
 	})
 }
 
 // pendingReply is the answer the agent writes in the thread now.
 func (app *app) pendingReply(ctx *ui.Context, th *review.Thread, run *agentRun) {
-	theme := ctx.Theme()
 	ui.Column(ctx.Key("pending")).Gap(4).Children(func() {
 		messageHeader(ctx, th.Agent.Name(), run.started)
 		ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(ctx).Size(12, 12)
-			ui.Text(ctx, run.activity).FontSize(12).TextColor(theme.TextMuted).SingleLine().Shrink(1)
+			caption(ctx, run.activity).SingleLine().Shrink(1)
 		})
 		if run.text != "" {
 			markdown.Stream(ctx, run.text, &app.md)
@@ -98,7 +96,6 @@ func (app *app) pendingReply(ctx *ui.Context, th *review.Thread, run *agentRun) 
 }
 
 func (app *app) message(ctx *ui.Context, th *review.Thread, index int) {
-	theme := ctx.Theme()
 	message := th.Messages[index]
 	ui.Column(ctx.Key(index)).Gap(4).Children(func() {
 		who := "You"
@@ -107,7 +104,7 @@ func (app *app) message(ctx *ui.Context, th *review.Thread, index int) {
 		}
 		messageHeader(ctx, who, message.Time)
 		if message.Role == review.RoleUser {
-			ui.Text(ctx, message.Text).Selectable().Padding(8, 10).Radius(8).Background(theme.Surface)
+			bubble(ctx, message.Text)
 			return
 		}
 		if message.Text != "" {
@@ -143,7 +140,7 @@ func (app *app) composer(ctx *ui.Context, th *review.Thread) {
 		}
 		empty := strings.TrimSpace(draft) == ""
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, app.platform.cmdEnter()+" asks the agent").FontSize(11).TextColor(theme.TextMuted).Grow(1)
+			smallCaption(ctx, app.platform.cmdEnter()+" asks the agent").Grow(1)
 			app.cmdButton(ctx, "stop-thread", th.ID, "Stop")
 			ui.Button(ctx, "Comment").Disabled(empty).Tooltip("Add to the feedback without asking the agent").OnClick(func() {
 				app.comment(th, draft)
@@ -161,9 +158,9 @@ func (app *app) threadsPage(ctx *ui.Context) {
 	theme := ctx.Theme()
 	app.pageScroll(ctx, page{kind: kindThreads}).Grow(1).FillWidth().Children(func() {
 		ui.Column(ctx).Padding(24, 32).Gap(10).MaxWidth(980).Children(func() {
-			ui.Text(ctx, "Questions").FontSize(22).Bold()
+			pageTitle(ctx, "Questions")
 			app.questionsList(ctx)
-			ui.Text(ctx, "Comments").FontSize(22).Bold().Margin(16, 0, 0, 0)
+			pageTitle(ctx, "Comments").Margin(16, 0, 0, 0)
 			threadCount := 0
 			for _, th := range app.rev.Threads {
 				if len(th.Messages) > 0 {
@@ -189,14 +186,14 @@ func (app *app) threadRow(ctx *ui.Context, th *review.Thread) {
 		row.Background(theme.SurfaceHover)
 	}
 	row.Children(func() {
-		ui.Text(ctx, th.Anchor.Label()).Font("monospace").FontSize(12).TextColor(theme.Accent).SingleLine()
+		anchorLabel(ctx, th.Anchor.Label())
 		first := ""
 		if len(th.Messages) > 0 {
 			first = th.Messages[0].Text
 		}
 		ui.Text(ctx, excerpt(first, 300)).MaxLines(2)
 		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, app.threadMeta(th)).FontSize(11).TextColor(theme.TextMuted)
+			smallCaption(ctx, app.threadMeta(th))
 			targetMark(ctx, app.state(th.ID))
 		})
 	})
