@@ -335,12 +335,7 @@ func (app *app) streamingOverview(ctx *ui.Context, run *agentRun) {
 }
 
 func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
-	meta := fmt.Sprintf("By %s", ov.Agent.Name())
-	if ov.Model != "" {
-		meta += " (" + ov.Model + ")"
-	}
-	meta += ", " + ov.Generated.Format("Jan 2 15:04")
-	caption(ctx, meta)
+	caption(ctx, overviewBy(ov))
 	for i, s := range review.Sections(ov.Markdown) {
 		title := s.Title
 		if title == "" {
