@@ -72,7 +72,7 @@ func (app *app) shortcutsTab(ctx *ui.Context) {
 				app.shortcutRow(ctx.Key(cm.id), cm)
 			}
 			if len(cmds) == 0 {
-				caption(ctx, "No commands match").Padding(6, 0)
+				noMatch(ctx, "commands").Padding(6, 0)
 			}
 		})
 	})
