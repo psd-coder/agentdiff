@@ -162,10 +162,7 @@ func (app *app) turnView(ctx *ui.Context, walk *review.Walk, turn review.Turn, l
 	ui.Column(ctx).Gap(8).Children(func() {
 		bubble(ctx, turn.Question)
 		if run := app.runner.run(app.rev, walk.ID); run != nil && last {
-			ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(ctx).Size(12, 12)
-				caption(ctx, run.activity).SingleLine().Shrink(1)
-			})
+			activityLine(ctx, run.activity)
 			return
 		}
 		app.answerView(ctx, turn)

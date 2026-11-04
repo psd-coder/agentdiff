@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -172,7 +173,6 @@ func (app *app) commitName(sha string) string {
 // overviewPage shows a version of the overview: the latest for an empty
 // key.
 func (app *app) overviewPage(ctx *ui.Context, key string) {
-	theme := ctx.Theme()
 	cfg := app.cfg.Agent()
 	ov := app.versionOn(page{kindOverview, key})
 	latest := ov == app.rev.Overview
@@ -212,10 +212,7 @@ func (app *app) overviewPage(ctx *ui.Context, key string) {
 			app.promptBanner(ctx)
 			switch {
 			case app.loader.firstLoad():
-				ui.Row(ctx).Gap(8).Children(func() {
-					ui.Spinner(ctx).Size(14, 14)
-					ui.Text(ctx, "Reading changes…").TextColor(theme.TextMuted)
-				})
+				activityLine(ctx, "Reading changes…")
 			case len(app.files) == 0:
 				emptyState(ctx, "No changes", "There is nothing to review in "+strings.ToLower(app.scope.Label())+". Pick another scope on the left.")
 			case run != nil:
@@ -329,14 +326,7 @@ func (app *app) overviewIntro(ctx *ui.Context, agentName string) {
 }
 
 func (app *app) streamingOverview(ctx *ui.Context, run *agentRun) {
-	ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Spinner(ctx).Size(14, 14)
-		activity := run.activity
-		if activity == "" {
-			activity = "Writing…"
-		}
-		caption(ctx, activity).SingleLine()
-	})
+	activityLine(ctx, cmp.Or(run.activity, "Writing…"))
 	if run.text != "" && !strings.HasPrefix(strings.TrimSpace(run.text), "{") && !strings.HasPrefix(strings.TrimSpace(run.text), "```") {
 		ui.Column(ctx).Children(func() { markdown.Stream(ctx, run.text, &app.md) })
 	}

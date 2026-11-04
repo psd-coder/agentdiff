@@ -443,13 +443,10 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 			app.staleBanner(ctx, version)
 			switch {
 			case run != nil && len(walk.More) == 0:
-				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(ctx).Size(14, 14)
-					caption(ctx, run.activity).SingleLine().Shrink(1)
-				})
+				activityLine(ctx, run.activity)
 			case st.status == targetQueued:
-				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(ctx).Size(14, 14)
+				ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(ctx).Size(12, 12)
 					caption(ctx, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead))
 					ui.Button(ctx, "Start now").OnClick(func() { app.runner.startNow(app.rev, walk.ID) })
 				})

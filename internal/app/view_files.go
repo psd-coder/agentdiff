@@ -343,10 +343,7 @@ func (app *app) diffBody(ctx *ui.Context, diff *fileDiff, fit bool) {
 	theme := ctx.Theme()
 	switch {
 	case diff.loading:
-		ui.Row(ctx).Gap(8).Padding(16).Children(func() {
-			ui.Spinner(ctx).Size(14, 14)
-			ui.Text(ctx, "Loading…").TextColor(theme.TextMuted)
-		})
+		activityLine(ctx, "Loading…").Padding(16)
 		return
 	case diff.err != "":
 		ui.Text(ctx, diff.err).Padding(16).TextColor(theme.TextMuted)

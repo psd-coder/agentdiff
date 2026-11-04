@@ -85,10 +85,7 @@ func messageHeader(ctx *ui.Context, who string, at time.Time) {
 func (app *app) pendingReply(ctx *ui.Context, th *review.Thread, run *agentRun) {
 	ui.Column(ctx.Key("pending")).Gap(4).Children(func() {
 		messageHeader(ctx, th.Agent.Name(), run.started)
-		ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Spinner(ctx).Size(12, 12)
-			caption(ctx, run.activity).SingleLine().Shrink(1)
-		})
+		activityLine(ctx, run.activity)
 		if run.text != "" {
 			markdown.Stream(ctx, run.text, &app.md)
 		}
