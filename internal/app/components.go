@@ -3,11 +3,17 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"github.com/psd-coder/agentdiff/internal/review"
 )
+
+// stamp is the date and time of an answer or a review, as "Nov 3 14:05".
+func stamp(at time.Time) string {
+	return at.Format("Jan 2 15:04")
+}
 
 // pageTitle is the title at the top of a page.
 func pageTitle(ctx *ui.Context, text string) ui.Element {

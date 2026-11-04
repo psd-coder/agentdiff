@@ -472,24 +472,24 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 				failureBox(ctx, walk.Err)
 			}
 			if run == nil && walk.Agent != "" {
-				caption(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04")))
+				caption(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated))
 			}
 			app.askWalk(ctx, walk.ID)
 		})
 	})
 }
 
-func writtenBy(provider agent.Provider, model, when string) string {
+func writtenBy(provider agent.Provider, model string, at time.Time) string {
 	byline := "By " + provider.Name()
 	if model != "" {
 		byline += " (" + model + ")"
 	}
-	return byline + ", " + when
+	return byline + ", " + stamp(at)
 }
 
 // overviewBy says who wrote the overview, when, and with which prompt.
 func overviewBy(ov *review.Overview) string {
-	byline := writtenBy(ov.Agent, ov.Model, ov.Generated.Format("Jan 2 15:04"))
+	byline := writtenBy(ov.Agent, ov.Model, ov.Generated)
 	if from := promptFrom(ov.Prompt); from != "" {
 		byline += ", " + from
 	}

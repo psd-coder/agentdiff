@@ -131,7 +131,7 @@ func (app *app) questionPanel(ctx *ui.Context) {
 		app.questionComposer(ctx, walk, target)
 		if walk != nil {
 			panelFooter(ctx).Children(func() {
-				smallCaption(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated.Format("Jan 2 15:04"))).Grow(1)
+				smallCaption(ctx, writtenBy(walk.Agent, walk.Model, walk.Generated)).Grow(1)
 				app.cmdButton(ctx, "delete-question", walk.ID, "Delete")
 			})
 		}
@@ -253,7 +253,7 @@ func (app *app) questionsList(ctx *ui.Context) {
 		row.Children(func() {
 			ui.Text(ctx, "About: "+app.targetLabel(w.Parent, w.StepID)).FontSize(12).TextColor(theme.Accent).SingleLine()
 			ui.Text(ctx, w.Question).MaxLines(2)
-			meta := w.Generated.Format("Jan 2 15:04")
+			meta := stamp(w.Generated)
 			if len(w.More) > 0 {
 				meta += fmt.Sprintf(", %d follow-ups", len(w.More))
 			}

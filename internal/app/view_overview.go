@@ -141,7 +141,7 @@ func earlierTitle(rev *review.Review) string {
 
 func (app *app) earlierMeta(earlier *continuity.Earlier) []string {
 	ov := earlier.Rev.Overview
-	meta := []string{ov.Generated.Format("Jan 2 15:04")}
+	meta := []string{stamp(ov.Generated)}
 	if ov.Walk != nil {
 		meta = append(meta, plural(len(ov.Walk.Steps), "step"))
 	}
