@@ -164,11 +164,40 @@ func diffStat(ctx *ui.Context, additions, deletions int) ui.Element {
 	})
 }
 
+// badge is a short text in a pill, as a count. Its pill is a shade
+// darker than MyGo's, so it still shows on a gray chosen row.
+func badge(ctx *ui.Context, text string) {
+	ui.Badge(ctx, text).Background(ctx.Theme().Text.Alpha(0.15))
+}
+
 // countBadge shows a count in a badge, and nothing for zero.
 func countBadge(ctx *ui.Context, count int) {
 	if count > 0 {
-		ui.Badge(ctx, fmt.Sprint(count))
+		badge(ctx, fmt.Sprint(count))
 	}
+}
+
+// onAccent builds fn in the theme of a row painted in the accent color,
+// as the chosen row of a focused list: its texts, marks and badges take
+// the accent's text color.
+func onAccent(ctx *ui.Context, fn func()) {
+	base := ctx.Theme()
+	over := *base
+	over.Text, over.TextMuted = base.AccentText, base.AccentText.Alpha(0.75)
+	over.Accent, over.Success, over.Danger = base.AccentText, base.AccentText, base.AccentText
+	ctx.SetTheme(&over)
+	defer ctx.SetTheme(base)
+	fn()
+}
+
+// rowEnd builds what follows the label of a row, with onAccent while the
+// row is painted in the accent color.
+func rowEnd(ctx *ui.Context, accent bool, fn func()) {
+	if accent {
+		onAccent(ctx, fn)
+		return
+	}
+	fn()
 }
 
 // noMatch tells that a filter left nothing in a list, as "No commands

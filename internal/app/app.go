@@ -47,6 +47,10 @@ type app struct {
 	// size it.
 	settingsWin                  *mygo.Window
 	settingsHeader, settingsBody ui.Handle
+	// reviewSidebar and fileSidebar are the sidebars of the review pages
+	// and of the files, whose chosen item shows in the accent color while
+	// they have the focus.
+	reviewSidebar, fileSidebar ui.Handle
 	// settingsSettled is set on the extra frame that measures the
 	// settings window after a change, and settingsShown once the window
 	// has the height of its tab and shows.
