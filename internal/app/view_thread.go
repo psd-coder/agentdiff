@@ -16,8 +16,8 @@ func (app *app) threadPanel(ctx *ui.Context) {
 	if th == nil {
 		return
 	}
-	ui.Column(ctx).Fill().Background(theme.Background).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).Children(func() {
-		ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+	panelFrame(ctx).Children(func() {
+		panelBar(ctx).Children(func() {
 			target, linked := overview, true
 			switch {
 			case th.Anchor.File != "":
@@ -58,7 +58,7 @@ func (app *app) threadPanel(ctx *ui.Context) {
 			})
 		})
 		app.composer(ctx, th)
-		ui.Row(ctx).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
+		panelFooter(ctx).Children(func() {
 			app.cmdCheckbox(ctx, "include-thread", "exclude-thread", th.ID, "In feedback")
 			app.cmdCheckbox(ctx, "resolve-thread", "reopen-thread", th.ID, "Resolved")
 			ui.Spacer(ctx)

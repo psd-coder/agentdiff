@@ -145,3 +145,22 @@ func emptyState(ctx *ui.Context, title, detail string) {
 		ui.Text(ctx, detail).TextColor(ctx.Theme().TextMuted).MaxWidth(520).TextAlign(ui.Center)
 	})
 }
+
+// panelFrame is the column of a side panel, on the right of the page.
+// Callers set its children: a panelBar, the content, a panelFooter.
+func panelFrame(ctx *ui.Context) ui.Element {
+	theme := ctx.Theme()
+	return ui.Column(ctx).Fill().Background(theme.Background).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border)
+}
+
+// panelBar is the bar at the top of a side panel, with its title and its
+// controls.
+func panelBar(ctx *ui.Context) ui.Element {
+	return ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(ctx.Theme().Border)
+}
+
+// panelFooter is the bar at the foot of a side panel, with the actions on
+// what the panel shows.
+func panelFooter(ctx *ui.Context) ui.Element {
+	return ui.Row(ctx).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(ctx.Theme().Border)
+}

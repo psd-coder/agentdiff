@@ -42,8 +42,8 @@ func (app *app) logTargetLabel() string {
 func (app *app) logPanel(ctx *ui.Context) {
 	theme := ctx.Theme()
 	rev := app.rev
-	ui.Column(ctx).Fill().Background(theme.Background).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).Children(func() {
-		ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+	panelFrame(ctx).Children(func() {
+		panelBar(ctx).Children(func() {
 			ui.Text(ctx, "Agent log").Bold()
 			caption(ctx, app.logTargetLabel()).SingleLine().Shrink(1).Grow(1)
 			if total, ok := app.logUsage(); ok {
