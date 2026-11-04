@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 
 	"github.com/psd-coder/agentdiff/internal/review"
@@ -163,4 +165,39 @@ func panelBar(ctx *ui.Context) ui.Element {
 // what the panel shows.
 func panelFooter(ctx *ui.Context) ui.Element {
 	return ui.Row(ctx).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(ctx.Theme().Border)
+}
+
+// composer is the text box at the foot of a side panel. Its draft lives in
+// app.drafts under key. Cmd+Enter calls send with the text, and send
+// returns false when the panel cannot take it now, which keeps the text.
+// buttons builds the controls after the key hint, with the draft and a
+// submit that sends it.
+func (app *app) composer(ctx *ui.Context, key, placeholder string, send func(text string) bool, buttons func(draft string, submit func())) {
+	draft := app.drafts[key]
+	submit := func(text string) bool {
+		if strings.TrimSpace(text) == "" || !send(text) {
+			return false
+		}
+		app.drafts[key] = ""
+		return true
+	}
+	ui.Column(ctx).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(ctx.Theme().Border).Children(func() {
+		in := ui.TextArea(ctx.Key("draft-"+key), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
+			OnTextKey(func(k ui.TextKey) bool {
+				if k.Key != ui.KeyEnter || k.Mods != ui.Cmd {
+					return false
+				}
+				if submit(k.Text()) {
+					k.SetText("")
+				}
+				return true
+			})
+		if in.Changed() {
+			app.drafts[key] = draft
+		}
+		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			smallCaption(ctx, app.platform.cmdEnter()+" asks the agent").Grow(1)
+			buttons(draft, func() { submit(draft) })
+		})
+	})
 }
