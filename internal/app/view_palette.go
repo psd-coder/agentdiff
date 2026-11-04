@@ -63,7 +63,7 @@ func (app *app) paletteModal(ctx *ui.Context) {
 		// At the top of the window, so the field stays in place as the
 		// filter shortens the list.
 		back.Background(ui.RGBA(0, 0, 0, 0.2)).Justify(ui.Start).Padding(theme.Space(16), theme.Space(4), theme.Space(4), theme.Space(4))
-		panel.Width(600).Shrink(1).Padding(theme.Space(2)).Gap(theme.Space(1.5)).Radius(10).Background(theme.Background).Border(1, theme.Border).
+		panel.Width(600).Shrink(1).Padding(theme.Space(2)).Gap(theme.Space(1.5)).Radius(radiusCard).Background(theme.Background).Border(1, theme.Border).
 			Shadow(0, 10, 30, 0, ui.RGBA(0, 0, 0, 0.3)).Label("Command palette")
 		in := searchField(ctx, &app.paletteQuery, "Type a command", func(k ui.TextKey) bool {
 			switch {

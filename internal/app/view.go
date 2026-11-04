@@ -308,7 +308,8 @@ func (app *app) scopeMark(ctx *ui.Context, scope gitx.Scope) {
 }
 
 func unseenDot(ctx *ui.Context, color ui.Color, tip string) {
-	ui.Box(ctx).Size(8, 8).Radius(4).Background(color).Tooltip(tip)
+	const size = 8
+	ui.Box(ctx).Size(size, size).Radius(size / 2).Background(color).Tooltip(tip)
 }
 
 // targetMark shows the state of a run target in a row that links to it:

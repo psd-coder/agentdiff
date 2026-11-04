@@ -108,7 +108,7 @@ func (app *app) earlierList(ctx *ui.Context) {
 	ui.Text(ctx, "Reviews of uncommitted changes that are no longer in the working tree. A review comes back here by itself when its changes do.").
 		FontSize(12).TextColor(theme.TextMuted)
 	for _, e := range app.reviews.Earlier() {
-		row := ui.Row(ctx.Key("earlier-"+e.ID())).Gap(theme.Space(2)).Padding(0, theme.Space(2.5), 0, 0).Radius(8).Border(1, theme.Border).AlignItems(ui.Center)
+		row := ui.Row(ctx.Key("earlier-"+e.ID())).Gap(theme.Space(2)).Padding(0, theme.Space(2.5), 0, 0).Radius(radiusBox).Border(1, theme.Border).AlignItems(ui.Center)
 		row.Children(func() {
 			open := ui.ButtonBase(ctx).Grow(1).Shrink(1).Padding(theme.Space(2.5), theme.Space(3.5)).Gap(theme.Space(1)).Column().AlignItems(ui.Stretch)
 			// The whole row shows the hover of its open area, so Delete

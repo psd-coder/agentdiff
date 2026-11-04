@@ -121,7 +121,7 @@ func (app *app) blockView(ctx *ui.Context, form *promptForm, name review.PromptN
 	if block.Required {
 		need = "required"
 	}
-	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(2), theme.Space(3)).Radius(8).Border(1, theme.Border).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(2), theme.Space(3)).Radius(radiusBox).Border(1, theme.Border).Children(func() {
 		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, "{{"+block.Name+"}}").Font("monospace").FontSize(12).Bold().Selectable()
 			smallCaption(ctx, need)

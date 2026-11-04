@@ -383,7 +383,7 @@ func (app *app) diffBody(ctx *ui.Context, diff *fileDiff, fit bool) {
 // in the panel.
 func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
 	theme := ctx.Theme()
-	card := ui.ButtonBase(ctx.Key("card-"+th.ID)).Height(threadCardHeight).Padding(theme.Space(1.5), theme.Space(2.5)).Gap(theme.Space(2.5)).Radius(8).AlignItems(ui.Center).
+	card := ui.ButtonBase(ctx.Key("card-"+th.ID)).Height(threadCardHeight).Padding(theme.Space(1.5), theme.Space(2.5)).Gap(theme.Space(2.5)).Radius(radiusBox).AlignItems(ui.Center).
 		Background(theme.Background).Border(1, theme.Border)
 	if th.ID == app.threadID() {
 		card.Border(2, theme.Accent)

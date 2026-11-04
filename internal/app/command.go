@@ -358,7 +358,7 @@ func (app *app) moreButton(ctx *ui.Context, target string, ids ...string) {
 	if !slices.ContainsFunc(ids, func(id string) bool { return id != "" && app.applies(app.cmd(id), target) }) {
 		return
 	}
-	button := ghostButton(ctx.Key("more-" + target)).Radius(6).TextColor(ctx.Theme().TextMuted).Label("More").Tooltip("More")
+	button := ghostButton(ctx.Key("more-" + target)).Radius(ctx.Theme().Radius).TextColor(ctx.Theme().TextMuted).Label("More").Tooltip("More")
 	button.Children(func() { ui.Icon(ctx, moreIcon).FontSize(iconMore) }).Menu(func(menu *ui.Menu) { app.cmdMenu(ctx, menu, target, ids...) })
 }
 

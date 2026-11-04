@@ -185,7 +185,7 @@ func (app *app) runView(ctx *ui.Context, run *logRun) {
 func (app *app) logItemView(ctx *ui.Context, it *logItem) {
 	theme := ctx.Theme()
 	ui.Column(ctx).Gap(theme.Space(0.5)).Children(func() {
-		head := ui.ButtonBase(ctx).Gap(theme.Space(2)).Padding(theme.Space(0.5), theme.Space(1)).Radius(4).Justify(ui.Start).Expanded(it.expanded).Label(it.Title)
+		head := ui.ButtonBase(ctx).Gap(theme.Space(2)).Padding(theme.Space(0.5), theme.Space(1)).Radius(radiusSmall).Justify(ui.Start).Expanded(it.expanded).Label(it.Title)
 		if it.Detail == "" {
 			head = ui.Row(ctx).Gap(theme.Space(2)).Padding(theme.Space(0.5), theme.Space(1)).AlignItems(ui.Center)
 		} else if head.Hovered() {

@@ -264,7 +264,7 @@ func (app *app) refView(ctx *ui.Context, ref review.Ref, discuss func(*ui.Menu))
 // opens the diff when the lines are in it.
 func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet, discuss func(*ui.Menu)) {
 	theme := ctx.Theme()
-	ui.Column(ctx).Radius(8).Border(1, theme.Border).Clip().Children(func() {
+	ui.Column(ctx).Radius(radiusBox).Border(1, theme.Border).Clip().Children(func() {
 		ui.Row(ctx).Gap(theme.Space(2.5)).Padding(theme.Space(1.5), theme.Space(2.5)).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
 			if snippet.inDiff {
 				if textLink(ctx, ref.Label(), func(e ui.Element) { e.Font("monospace").FontSize(12) }).Shrink(0).Tooltip("Open in the diff").Clicked() {
