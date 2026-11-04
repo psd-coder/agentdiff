@@ -373,7 +373,7 @@ func (app *app) settingsToolbar(ctx *ui.Context, form *settingsForm) {
 	app.takeFocus(tabs.List.Gap(theme.Space(0.5)).Label("Settings"), "settings")
 	tabs.List.Children(func() {
 		for i, tab := range settingsTabs {
-			button := tabs.Tab(i).Padding(theme.Space(1.25), theme.Space(2.5), theme.Space(1), theme.Space(2.5)).Radius(6).TextColor(theme.TextMuted)
+			button := tabs.Tab(i).Padding(theme.Space(1.25), theme.Space(2.5), theme.Space(1), theme.Space(2.5)).Radius(theme.Radius).TextColor(theme.TextMuted)
 			switch {
 			case i == form.tab:
 				button.TextColor(theme.Accent).Background(theme.Text.Alpha(0.08))

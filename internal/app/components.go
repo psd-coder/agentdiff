@@ -72,14 +72,14 @@ func messageHeader(ctx *ui.Context, who string, at time.Time) {
 // bubble is a message the user wrote in a conversation.
 func bubble(ctx *ui.Context, text string) {
 	theme := ctx.Theme()
-	ui.Text(ctx, text).Selectable().Padding(theme.Space(2), theme.Space(2.5)).Radius(8).Background(theme.Surface)
+	ui.Text(ctx, text).Selectable().Padding(theme.Space(2), theme.Space(2.5)).Radius(radiusBox).Background(theme.Surface)
 }
 
 // codeQuote shows lines of code or of a prompt in a gray box. Callers set
 // the font size.
 func codeQuote(ctx *ui.Context, text string) ui.Element {
 	theme := ctx.Theme()
-	return ui.Text(ctx, text).Font("monospace").Padding(theme.Space(1.5), theme.Space(2.5)).Radius(6).Background(theme.Surface).Selectable()
+	return ui.Text(ctx, text).Font("monospace").Padding(theme.Space(1.5), theme.Space(2.5)).Radius(theme.Radius).Background(theme.Surface).Selectable()
 }
 
 // errorText shows why an answer did not come: the agent's error, or
@@ -108,7 +108,7 @@ func pageColumn(ctx *ui.Context) ui.Element {
 }
 
 func cardBase(ctx *ui.Context) ui.Element {
-	return ui.Column(ctx).Radius(10).Border(1, ctx.Theme().Border)
+	return ui.Column(ctx).Radius(radiusCard).Border(1, ctx.Theme().Border)
 }
 
 // card holds a main part of a page: a step, a section of the overview.
@@ -129,7 +129,7 @@ func outlineCard(ctx *ui.Context) ui.Element {
 // padding, direction and children, and act on Clicked.
 func linkRow(ctx *ui.Context) ui.Element {
 	theme := ctx.Theme()
-	row := ui.ButtonBase(ctx).Radius(8).Border(1, theme.Border)
+	row := ui.ButtonBase(ctx).Radius(radiusBox).Border(1, theme.Border)
 	if row.Hovered() {
 		row.Background(theme.SurfaceHover)
 	}
@@ -142,7 +142,7 @@ func linkRow(ctx *ui.Context) ui.Element {
 // children, and act on Clicked.
 func ghostButton(ctx *ui.Context) ui.Element {
 	theme := ctx.Theme()
-	button := ui.ButtonBase(ctx).Padding(theme.Space(1)).Radius(4)
+	button := ui.ButtonBase(ctx).Padding(theme.Space(1)).Radius(radiusSmall)
 	if button.Hovered() {
 		button.Background(theme.Text.Alpha(0.08))
 	}
@@ -259,7 +259,7 @@ func failureBox(ctx *ui.Context, err string) {
 		errorText(ctx, err)
 		return
 	}
-	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(3)).Radius(8).Border(1, theme.Danger).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(3)).Radius(radiusBox).Border(1, theme.Danger).Children(func() {
 		ui.Text(ctx, "The agent failed").Bold().TextColor(theme.Danger)
 		ui.Text(ctx, err).FontSize(12).Font("monospace").Selectable()
 	})
@@ -269,7 +269,7 @@ func failureBox(ctx *ui.Context, err string) {
 // not miss. Callers set its gap and children.
 func warningBox(ctx *ui.Context) ui.Element {
 	theme := ctx.Theme()
-	return ui.Column(ctx).Padding(theme.Space(2.5), theme.Space(3.5)).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
+	return ui.Column(ctx).Padding(theme.Space(2.5), theme.Space(3.5)).Radius(radiusBox).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
 }
 
 // centerNote fills the page with a title and the detail builds, in its
