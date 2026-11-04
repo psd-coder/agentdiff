@@ -106,6 +106,18 @@ func linkRow(ctx *ui.Context) ui.Element {
 	return row
 }
 
+// ghostButton is a small borderless button inside another control, as a
+// chevron or the ⋯ button. Its hover tints what is under it, so it shows
+// on a row that is itself hovered or chosen. Callers set its label and
+// children, and act on Clicked.
+func ghostButton(ctx *ui.Context) ui.Element {
+	button := ui.ButtonBase(ctx).Padding(4).Radius(4)
+	if button.Hovered() {
+		button.Background(ctx.Theme().Text.Alpha(0.08))
+	}
+	return button
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {

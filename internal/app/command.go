@@ -360,11 +360,7 @@ func (app *app) moreButton(ctx *ui.Context, target string, ids ...string) {
 	if !slices.ContainsFunc(ids, func(id string) bool { return id != "" && app.applies(app.cmd(id), target) }) {
 		return
 	}
-	theme := ctx.Theme()
-	button := ui.ButtonBase(ctx.Key("more-" + target)).Padding(4).Radius(6).TextColor(theme.TextMuted).Label("More").Tooltip("More")
-	if button.Hovered() {
-		button.Background(theme.Text.Alpha(0.08))
-	}
+	button := ghostButton(ctx.Key("more-" + target)).Radius(6).TextColor(ctx.Theme().TextMuted).Label("More").Tooltip("More")
 	button.Children(func() { ui.Icon(ctx, moreIcon).FontSize(18) }).Menu(func(menu *ui.Menu) { app.cmdMenu(ctx, menu, target, ids...) })
 }
 
