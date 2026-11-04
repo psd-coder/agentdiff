@@ -80,7 +80,7 @@ func (app *app) shortcutsModal(ctx *ui.Context) {
 	}
 	ui.Modal(ctx, &app.shortcutsOpen, func() {
 		ui.Column(ctx).Width(560).Shrink(1).MinHeight(0).Children(func() {
-			ui.Text(ctx, "Keyboard shortcuts").FontSize(18).Bold().Padding(0, 0, 14, 0)
+			heading(ctx, "Keyboard shortcuts").Padding(0, 0, 14, 0)
 			ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
 				ui.Column(ctx).Gap(18).PaddingEnd(4).Children(func() {
 					menus, keys := app.menuShortcuts(app.menu())

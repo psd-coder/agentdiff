@@ -53,7 +53,7 @@ func (app *app) groupPage(ctx *ui.Context, gi string) {
 	app.cardList(ctx, page{kindGroup, gi}, rows, func(pageRow) {
 		diffPageHeader(ctx).AlignItems(ui.Start).Children(func() {
 			ui.Column(ctx).Gap(6).Grow(1).Shrink(1).Children(func() {
-				ui.Text(ctx, fmt.Sprintf("%d. %s", index+1, group.Title)).FontSize(18).Bold()
+				heading(ctx, fmt.Sprintf("%d. %s", index+1, group.Title))
 				if group.Summary != "" {
 					ui.Text(ctx, group.Summary).TextColor(theme.TextMuted)
 				}
@@ -86,7 +86,7 @@ func (app *app) allPage(ctx *ui.Context) {
 			return
 		}
 		diffPageHeader(ctx).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, "All files diff").FontSize(18).Bold()
+			heading(ctx, "All files diff")
 			ui.Text(ctx, fmt.Sprintf("%d files", len(app.files))).TextColor(theme.TextMuted)
 			diffStat(ctx, add, del)
 			ui.Spacer(ctx)

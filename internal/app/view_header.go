@@ -323,7 +323,7 @@ func (app *app) compareModal(ctx *ui.Context) {
 	}
 	ui.Modal(ctx, &form.open, func() {
 		ui.Column(ctx).Width(460).Gap(12).Children(func() {
-			ui.Text(ctx, "Compare").FontSize(18).Bold()
+			heading(ctx, "Compare")
 			ui.Segmented(ctx, &form.mode, "Branches", "Range").Label("Compare")
 			if form.mode == compareBranches {
 				caption(ctx, "Review the commits of a branch since it left its base. The branch does not have to be checked out.")

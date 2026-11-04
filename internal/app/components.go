@@ -14,9 +14,14 @@ func pageTitle(ctx *ui.Context, text string) ui.Element {
 	return ui.Text(ctx, text).FontSize(22).Bold()
 }
 
+// heading is the title of a dialog, or of a part of a page.
+func heading(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).FontSize(18).Bold()
+}
+
 // sectionHeading names a part of a page, above its cards.
 func sectionHeading(ctx *ui.Context, text string) {
-	ui.Text(ctx, text).FontSize(18).Bold().Margin(8, 0, 0, 0)
+	heading(ctx, text).Margin(8, 0, 0, 0)
 }
 
 // cardTitle is the title of a card or of a note in the middle of a page.
