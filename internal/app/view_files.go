@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -389,11 +390,7 @@ func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
 	}
 	card.Children(func() {
 		ui.Column(ctx).Grow(1).Shrink(1).Gap(2).Children(func() {
-			first := "New comment"
-			if len(th.Messages) > 0 {
-				first = th.Messages[0].Text
-			}
-			ui.Text(ctx, excerpt(first, 160)).MaxLines(1)
+			ui.Text(ctx, excerpt(cmp.Or(firstMessage(th), "New comment"), 160)).MaxLines(1)
 			smallCaption(ctx, app.threadMeta(th)).SingleLine()
 		})
 		targetMark(ctx, app.state(th.ID))
@@ -401,6 +398,15 @@ func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
 	if card.Clicked() {
 		app.openThread(th.ID)
 	}
+}
+
+// firstMessage is the text that starts the thread, or "" before it has
+// one.
+func firstMessage(th *review.Thread) string {
+	if len(th.Messages) == 0 {
+		return ""
+	}
+	return th.Messages[0].Text
 }
 
 func (app *app) threadMeta(th *review.Thread) string {
