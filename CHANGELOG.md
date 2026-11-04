@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.0 - 2026-11-04
+
+### Added
+
+- Regenerate on the Overview keeps the earlier version with its deeper walkthroughs and questions. A switcher on the right of the Overview title opens any version, and its entries show the time, the prompt and the agent of each version. Go deeper and questions on an earlier version go on from the agent session of that version. When the app still writes deeper walkthroughs ahead for an earlier version, a box on the Overview names that version, and Stop there ends those runs. Delete Overview Version removes an earlier version with its walkthroughs. Show Log of the Overview lists the runs of the version on screen.
+- The Overview names the prompt files of the repository in `.agentdiff/prompts/` in a yellow box. The app reads these files again when one of them is added, changed or deleted.
+- The line under the Overview names the prompt that wrote it: a file of the repository, the prompt from Settings or the default prompt. An Overview written by 0.5.0 or earlier shows no prompt there.
+
+### Changed
+
+- The toolbar has no Refresh button, because the app watches the working tree and the git directory and shows new changes by itself. Refresh stays in the menu bar and the command palette with Cmd+R.
+- Regenerate on a deeper walkthrough stops the runs of all the walkthroughs it deletes, also the ones further down.
+- The added and deleted line counts are green and red everywhere, also on the file groups of the Overview. A count of zero is hidden.
+- In the light theme, the green and red counts and the gray text on the sidebar are darker, so they are easier to read.
+- The text at the end of a chosen row, such as a commit time, a badge or line counts, is white on the blue of the row.
+- The Compare button has the size of the other title bar buttons. Its tooltip shows its shortcut, and it turns off when Compare does not apply.
+- The question and thread boxes are 3 to 10 lines high.
+- Cards, panels, spinners, buttons and headings look the same on every page. For example, all outlined cards have one padding, and the small buttons inside controls have one hover color.
+
+### Fixed
+
+- In the list of changes, Down from "Uncommitted changes" now reaches the commits. Before, the keys stopped on the headings "Changes" and "Commits on ...".
+- In the question panel, Cmd+Enter while the agent was answering cleared the text and sent nothing. Now the text stays until the panel can send it.
+- On the page of an earlier review, messages show the name of the agent, the time, and your text in a bubble, as in a thread.
+
 ## 0.5.0 - 2026-11-03
 
 ### Added

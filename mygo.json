@@ -1,7 +1,7 @@
 {
   "name": "AgentDiff",
   "identifier": "dev.psdcoder.agentdiff",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "copyright": "Copyright © 2026 Pavel Grinchenko",
   "out": "build",
   "linux": {
