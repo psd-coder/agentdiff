@@ -106,7 +106,7 @@ func (app *app) welcomeView(ctx *ui.Context) {
 		ctx.Root().Background(ui.Transparent)
 	}
 	ui.Row(ctx).Fill().AlignItems(ui.Stretch).Children(func() {
-		ui.Column(ctx).Grow(1).Center().Gap(8).Padding(32).Background(theme.Background).DragWindow().Children(func() {
+		ui.Column(ctx).Grow(1).Center().Gap(theme.Space(2)).Padding(theme.Space(8)).Background(theme.Background).DragWindow().Children(func() {
 			if appIcon != nil {
 				ui.Image(ctx, appIcon).Size(128, 128).Fit(ui.Contain)
 			}
@@ -115,8 +115,8 @@ func (app *app) welcomeView(ctx *ui.Context) {
 				ui.Text(ctx, "Version "+version).TextColor(theme.TextMuted)
 			}
 			ui.Text(ctx, "Review what your coding agent changed: an explanation first, then the diff, grouped, with comments you send back.").
-				TextColor(theme.TextMuted).MaxWidth(340).TextAlign(ui.Center).Margin(8, 0, 0, 0)
-			ui.PrimaryButton(ctx, "Open repository…").Margin(16, 0, 0, 0).Tooltip(app.keyTip("Open a repository", "open-repo")).OnClick(app.chooseRepo)
+				TextColor(theme.TextMuted).MaxWidth(340).TextAlign(ui.Center).Margin(theme.Space(2), 0, 0, 0)
+			ui.PrimaryButton(ctx, "Open repository…").Margin(theme.Space(4), 0, 0, 0).Tooltip(app.keyTip("Open a repository", "open-repo")).OnClick(app.chooseRepo)
 			if app.repoErr != "" {
 				ui.Text(ctx, app.repoErr).TextColor(theme.Danger).MaxWidth(340).Selectable()
 			}
@@ -128,13 +128,13 @@ func (app *app) welcomeView(ctx *ui.Context) {
 		if app.platform.mac {
 			top = titleBarHeight
 		}
-		ui.Column(ctx).Width(320).Shrink(0).Padding(top, 10, 10, 10).Gap(4).
+		ui.Column(ctx).Width(320).Shrink(0).Padding(top, theme.Space(2.5), theme.Space(2.5), theme.Space(2.5)).Gap(theme.Space(1)).
 			Background(sidebarBackground(ctx)).BorderWidth(0, 0, 0, 1).BorderColor(theme.Border).DragWindow().Children(func() {
 			if len(app.cfg.Recent) == 0 {
-				ui.Text(ctx, "No recent repositories").TextColor(theme.TextMuted).AlignSelf(ui.Center).Margin(24, 0, 0, 0)
+				ui.Text(ctx, "No recent repositories").TextColor(theme.TextMuted).AlignSelf(ui.Center).Margin(theme.Space(6), 0, 0, 0)
 				return
 			}
-			smallLabel(ctx, "Recent").Padding(0, 8, 4, 8)
+			smallLabel(ctx, "Recent").Padding(0, theme.Space(2), theme.Space(1), theme.Space(2))
 			ui.Scroll(ctx).Grow(1).MinHeight(0).FillWidth().Children(func() {
 				app.projectList(ctx, &app.projectNav, "", false, func(i int) { app.openRepo(app.cfg.Recent[i]) })
 			})

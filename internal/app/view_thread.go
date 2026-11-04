@@ -37,10 +37,10 @@ func (app *app) threadPanel(ctx *ui.Context) {
 		})
 		if th.Anchor.Quote != "" && th.Anchor.Kind == review.AnchorLines {
 			ui.Text(ctx, strings.TrimRight(th.Anchor.Quote, "\n")).Font("monospace").FontSize(12).MaxLines(8).
-				Padding(8, 12).Background(theme.Surface).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Selectable()
+				Padding(theme.Space(2), theme.Space(3)).Background(theme.Surface).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Selectable()
 		}
 		ui.Scroll(ctx).Grow(1).FillWidth().Children(func() {
-			ui.Column(ctx).Gap(12).Padding(12).Children(func() {
+			ui.Column(ctx).Gap(theme.Space(3)).Padding(theme.Space(3)).Children(func() {
 				if len(th.Messages) == 0 {
 					ui.Text(ctx, "Write a comment for the coding agent, or ask the review agent a question. Each thread is a separate conversation.").TextColor(theme.TextMuted)
 				}
@@ -73,7 +73,8 @@ func (app *app) closeThread() {
 
 // pendingReply is the answer the agent writes in the thread now.
 func (app *app) pendingReply(ctx *ui.Context, th *review.Thread, run *agentRun) {
-	ui.Column(ctx.Key("pending")).Gap(4).Children(func() {
+	theme := ctx.Theme()
+	ui.Column(ctx.Key("pending")).Gap(theme.Space(1)).Children(func() {
 		messageHeader(ctx, th.Agent.Name(), run.started)
 		activityLine(ctx, run.activity)
 		if run.text != "" {
@@ -83,8 +84,9 @@ func (app *app) pendingReply(ctx *ui.Context, th *review.Thread, run *agentRun) 
 }
 
 func (app *app) message(ctx *ui.Context, th *review.Thread, index int) {
+	theme := ctx.Theme()
 	message := th.Messages[index]
-	ui.Column(ctx.Key(index)).Gap(4).Children(func() {
+	ui.Column(ctx.Key(index)).Gap(theme.Space(1)).Children(func() {
 		who := "You"
 		if message.Role == review.RoleAgent {
 			who = th.Agent.Name()
@@ -130,10 +132,10 @@ func (app *app) threadComposer(ctx *ui.Context, th *review.Thread) {
 func (app *app) threadsPage(ctx *ui.Context) {
 	theme := ctx.Theme()
 	app.pageScroll(ctx, page{kind: kindThreads}).Grow(1).FillWidth().Children(func() {
-		pageColumn(ctx).Gap(10).Children(func() {
+		pageColumn(ctx).Gap(theme.Space(2.5)).Children(func() {
 			pageTitle(ctx, "Questions")
 			app.questionsList(ctx)
-			pageTitle(ctx, "Comments").Margin(16, 0, 0, 0)
+			pageTitle(ctx, "Comments").Margin(theme.Space(4), 0, 0, 0)
 			threadCount := 0
 			for _, th := range app.rev.Threads {
 				if len(th.Messages) > 0 {
@@ -149,6 +151,7 @@ func (app *app) threadsPage(ctx *ui.Context) {
 }
 
 func (app *app) threadRow(ctx *ui.Context, th *review.Thread) {
+	theme := ctx.Theme()
 	row := linkCard(ctx.Key("row-" + th.ID))
 	row.ContextMenu(func(m *ui.Menu) {
 		app.cmdMenu(ctx, m, th.ID, "resolve-thread", "reopen-thread", "include-thread", "exclude-thread",
@@ -157,7 +160,7 @@ func (app *app) threadRow(ctx *ui.Context, th *review.Thread) {
 	row.Children(func() {
 		anchorLabel(ctx, th.Anchor.Label())
 		ui.Text(ctx, excerpt(firstMessage(th), 300)).MaxLines(2)
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 			smallCaption(ctx, app.threadMeta(th))
 			targetMark(ctx, app.state(th.ID))
 		})

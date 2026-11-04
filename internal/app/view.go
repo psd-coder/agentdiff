@@ -117,7 +117,8 @@ func (app *app) sidebar(ctx *ui.Context) {
 // sidebarHeading names a part of a sidebar, above its sections, with the
 // controls end builds after the title, if any.
 func sidebarHeading(ctx *ui.Context, title string, end func()) {
-	ui.Row(ctx).Gap(6).Padding(10, 8, 4, 8).AlignItems(ui.Center).Children(func() {
+	theme := ctx.Theme()
+	ui.Row(ctx).Gap(theme.Space(1.5)).Padding(theme.Space(2.5), theme.Space(2), theme.Space(1), theme.Space(2)).AlignItems(ui.Center).Children(func() {
 		smallLabel(ctx, title).Grow(1).SingleLine()
 		if end != nil {
 			end()
@@ -239,15 +240,15 @@ func (app *app) commitList(ctx *ui.Context, focus bool) *changeRows {
 		}
 		switch kind := rows.kind(index); {
 		case kind == noteRow && app.commits.err != "" && len(rows.commits) > 0:
-			ui.Column(ctx).Gap(4).Padding(4, 8).Children(func() {
+			ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(1), theme.Space(2)).Children(func() {
 				errorText(ctx, rows.label(index))
 				textLink(ctx, "Try again", func(e ui.Element) { e.FontSize(12) }).AlignSelf(ui.Start).
 					OnClick(func() { app.readCommitPage(app.commits.failedAt) })
 			})
 		case kind == noteRow && app.commits.err != "":
-			errorText(ctx, rows.label(index)).Padding(4, 8)
+			errorText(ctx, rows.label(index)).Padding(theme.Space(1), theme.Space(2))
 		case kind == noteRow:
-			caption(ctx, rows.label(index)).Padding(4, 8)
+			caption(ctx, rows.label(index)).Padding(theme.Space(1), theme.Space(2))
 		case kind == commitRow:
 			cm := rows.commit(index)
 			changeItem(ctx, commitIcon, cm.Subject, look, func() {
@@ -515,8 +516,8 @@ func (app *app) commitsTitle() string {
 func (app *app) scopeHeader(ctx *ui.Context) {
 	theme := ctx.Theme()
 	add, del, viewed := app.changeTotals()
-	ui.Column(ctx).Gap(2).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
-		ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(0.5)).Padding(theme.Space(2.5), theme.Space(4)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(1.5)).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, app.scopeLabel()).Bold().SingleLine().Shrink(1).Tooltip(app.scopeLabel())
 			if app.loader.switching() {
 				ui.Spinner(ctx).Size(12, 12).Label("Reading changes")
@@ -525,7 +526,7 @@ func (app *app) scopeHeader(ctx *ui.Context) {
 		if len(app.files) == 0 {
 			return
 		}
-		ui.Row(ctx).Gap(8).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2)).Children(func() {
 			smallCaption(ctx, plural(len(app.files), "file"))
 			diffStat(ctx, add, del).FontSize(11)
 			smallCaption(ctx, fmt.Sprintf("%d of %d viewed", viewed, len(app.files)))
@@ -568,14 +569,15 @@ func (app *app) reviewNav(ctx *ui.Context) {
 // fileNav lists the files, by path or in their groups, under the switches
 // that choose how.
 func (app *app) fileNav(ctx *ui.Context) {
+	theme := ctx.Theme()
 	chosen := app.nav.page.String()
 	groups := app.groups()
 	threads := app.rev.ThreadCounts()
-	ui.Column(ctx).Padding(0, 10).Children(func() {
+	ui.Column(ctx).Padding(0, theme.Space(2.5)).Children(func() {
 		sidebarHeading(ctx, "Files", func() {
 			app.cmdSegmented(ctx, []string{"flat-files", "grouped-files"}, "Flat", "Grouped").Label("List files").FontSize(11)
 		})
-		ui.Row(ctx).Padding(0, 8, 4, 8).Children(func() {
+		ui.Row(ctx).Padding(0, theme.Space(2), theme.Space(1), theme.Space(2)).Children(func() {
 			app.cmdCheckbox(ctx, "hide-viewed", "show-viewed", "", "Hide viewed files").FontSize(12)
 		})
 	})
@@ -597,9 +599,9 @@ func (app *app) fileNav(ctx *ui.Context) {
 			}
 			id := app.groupID(gi)
 			open := app.groupOpen(id)
-			column := ui.Column(ctx.Key(id)).Gap(2)
+			column := ui.Column(ctx.Key(id)).Gap(theme.Space(0.5))
 			if gi > 0 {
-				column.Margin(8, 0, 0, 0)
+				column.Margin(theme.Space(2), 0, 0, 0)
 			}
 			column.Children(func() {
 				app.groupItem(ctx, id, g.Title, len(files), open)
@@ -611,10 +613,10 @@ func (app *app) fileNav(ctx *ui.Context) {
 			})
 		}
 		if len(app.files) > 0 && !slices.ContainsFunc(app.files, func(f gitx.FileChange) bool { return app.listed(f.Path) }) {
-			caption(ctx, "All files are viewed.").Padding(4, 12)
+			caption(ctx, "All files are viewed.").Padding(theme.Space(1), theme.Space(3))
 		}
 		if app.loader.firstLoad() {
-			activityLine(ctx, "Reading changes…").Padding(8, 12)
+			activityLine(ctx, "Reading changes…").Padding(theme.Space(2), theme.Space(3))
 		}
 	}).Grow(1).Shrink(1).MinHeight(0).Background(sidebarBackground(ctx)).Label("Files").Bind(&app.fileSidebar)
 	app.takeFocus(nav, "files")
@@ -675,6 +677,7 @@ func (app *app) groupOpen(id string) *bool {
 // groupItem is the title of a group in the sidebar. Choosing it opens
 // the group page, and its chevron shows and hides the group's files.
 func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bool) {
+	theme := ctx.Theme()
 	item := ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open)
 	item.ContextMenu(func(m *ui.Menu) { app.cmdMenu(ctx, m, id, "mark-group-viewed", "mark-group-not-viewed") })
 	item.Children(func() {
@@ -684,7 +687,7 @@ func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bo
 			if !*open {
 				label = "Show files"
 			}
-			btn := ghostButton(ctx).Padding(2).Label(label).Tooltip(label).Children(func() { disclosureArrow(ctx, *open) })
+			btn := ghostButton(ctx).Padding(theme.Space(0.5)).Label(label).Tooltip(label).Children(func() { disclosureArrow(ctx, *open) })
 			if btn.Clicked() {
 				*open = !*open
 			}
@@ -719,7 +722,7 @@ func (app *app) fileItem(ctx *ui.Context, file string, threads int) ui.Element {
 		// SidebarItem builds the name first, so the name takes the first
 		// cell and the marks after it the second. The marks keep their
 		// width, and the name is cut only when the row is too narrow.
-		item.Grid().ColumnTracks(ui.Fr(1), ui.FitContent()).AlignItems(ui.Center).GapY(1)
+		item.Grid().ColumnTracks(ui.Fr(1), ui.FitContent()).AlignItems(ui.Center).GapY(theme.Space(0.25))
 	}
 	if viewed && app.nav.page != (page{kindFile, file}) {
 		item.TextColor(theme.TextMuted)
@@ -782,7 +785,7 @@ func (app *app) saveNotice(ctx *ui.Context) {
 		return
 	}
 	theme := ctx.Theme()
-	ui.Column(ctx).Gap(2).Padding(8, 14).Background(theme.Danger.Alpha(0.15)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Danger).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(0.5)).Padding(theme.Space(2), theme.Space(3.5)).Background(theme.Danger.Alpha(0.15)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Danger).Children(func() {
 		ui.Text(ctx, "Could not save your changes. AgentDiff tries again on the next change.").Bold()
 		caption(ctx, app.saveErr).Selectable()
 	})

@@ -93,7 +93,7 @@ func (app *app) promptsTab(ctx *ui.Context, form *promptForm) {
 		}
 		ui.Field(ctx.Key("prompt-"+string(tpl.Name)), "Text:", func() {
 			ui.TextArea(ctx, text).Lines(8, 16).Font("monospace").FontSize(12).Label(tpl.Title + " prompt")
-			ui.Row(ctx).Gap(8).Justify(ui.End).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2)).Justify(ui.End).Children(func() {
 				ui.Button(ctx, "Copy default").Tooltip("Copy the default text of this prompt, as a start for " + repoPromptFile(tpl.Name)).OnClick(func() {
 					copyText(ctx, tpl.Default, "Default prompt copied")
 				})
@@ -121,8 +121,8 @@ func (app *app) blockView(ctx *ui.Context, form *promptForm, name review.PromptN
 	if block.Required {
 		need = "required"
 	}
-	ui.Column(ctx).Gap(4).Padding(8, 12).Radius(8).Border(1, theme.Border).Children(func() {
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(2), theme.Space(3)).Radius(8).Border(1, theme.Border).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 			ui.Text(ctx, "{{"+block.Name+"}}").Font("monospace").FontSize(12).Bold().Selectable()
 			smallCaption(ctx, need)
 		})

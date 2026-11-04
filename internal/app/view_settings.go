@@ -299,7 +299,7 @@ func (app *app) settingsView(ctx *ui.Context) {
 	if app.platform.mac {
 		top = 0
 	}
-	ui.Column(ctx).AlignItems(ui.Center).Gap(4).Padding(top, 16, 8, 16).Background(theme.Surface).DragWindow().Bind(&app.settingsHeader).Children(func() {
+	ui.Column(ctx).AlignItems(ui.Center).Gap(theme.Space(1)).Padding(top, theme.Space(4), theme.Space(2), theme.Space(4)).Background(theme.Surface).DragWindow().Bind(&app.settingsHeader).Children(func() {
 		// On Windows and Linux the title bar of the system shows the title.
 		if app.platform.mac {
 			ui.Row(ctx).Height(max(ctx.TitleBar().Height, 28)).AlignItems(ui.Center).Children(func() {
@@ -311,12 +311,12 @@ func (app *app) settingsView(ctx *ui.Context) {
 	ui.Divider(ctx)
 	if form.tab == shortcutsTab {
 		// The list scrolls under the filter, which stays in place.
-		ui.Column(ctx).Gap(14).Padding(20, 0).Grow(1).MinHeight(0).Children(func() { app.shortcutsTab(ctx) })
+		ui.Column(ctx).Gap(theme.Space(3.5)).Padding(theme.Space(5), 0).Grow(1).MinHeight(0).Children(func() { app.shortcutsTab(ctx) })
 	} else {
 		// The scroll spans the window, so its bar shows at the window's
 		// edge, outside the padding of the tab.
 		ui.Scroll(ctx).Grow(1).MinHeight(0).FillWidth().Children(func() {
-			ui.Column(ctx).Gap(14).Padding(20, 24).Bind(&app.settingsBody).Children(func() {
+			ui.Column(ctx).Gap(theme.Space(3.5)).Padding(theme.Space(5), theme.Space(6)).Bind(&app.settingsBody).Children(func() {
 				switch form.tab {
 				case agentTab:
 					app.agentFields(ctx, form)
@@ -370,10 +370,10 @@ func (app *app) fitSettings(ctx *ui.Context, tab int) {
 func (app *app) settingsToolbar(ctx *ui.Context, form *settingsForm) {
 	theme := ctx.Theme()
 	tabs := ui.TabsBase(ctx, &form.tab, len(settingsTabs))
-	app.takeFocus(tabs.List.Gap(2).Label("Settings"), "settings")
+	app.takeFocus(tabs.List.Gap(theme.Space(0.5)).Label("Settings"), "settings")
 	tabs.List.Children(func() {
 		for i, tab := range settingsTabs {
-			button := tabs.Tab(i).Padding(5, 10, 4, 10).Radius(6).TextColor(theme.TextMuted)
+			button := tabs.Tab(i).Padding(theme.Space(1.25), theme.Space(2.5), theme.Space(1), theme.Space(2.5)).Radius(6).TextColor(theme.TextMuted)
 			switch {
 			case i == form.tab:
 				button.TextColor(theme.Accent).Background(theme.Text.Alpha(0.08))
@@ -381,7 +381,7 @@ func (app *app) settingsToolbar(ctx *ui.Context, form *settingsForm) {
 				button.TextColor(theme.Text)
 			}
 			button.Children(func() {
-				ui.Column(ctx).AlignItems(ui.Center).Gap(3).Children(func() {
+				ui.Column(ctx).AlignItems(ui.Center).Gap(theme.Space(0.75)).Children(func() {
 					ui.Icon(ctx, tab.icon).FontSize(iconTab)
 					ui.Text(ctx, tab.name).SingleLine()
 				})

@@ -32,6 +32,7 @@ type reveal struct {
 // walkthrough shows a summary, its steps and its sections. parent is the
 // walk they belong to, empty for the overview.
 func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.Walkthrough) {
+	theme := ctx.Theme()
 	if walkthrough.Summary != "" {
 		ui.Text(ctx, walkthrough.Summary).FontSize(15).Selectable()
 	}
@@ -45,10 +46,10 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 		for i, it := range sec.Items {
 			label := app.pathLabel(parent, sec.Title, cmp.Or(it.Title, fmt.Sprintf("Item %d", i+1)))
 			discuss := func(menu *ui.Menu) { app.discussItem(menu, label, it.Text) }
-			card := outlineCard(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6)
+			card := outlineCard(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(theme.Space(1.5))
 			app.discussMenu(card, label, it.Text)
 			card.Children(func() {
-				ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 					ui.Text(ctx, it.Title).Bold().Grow(1)
 					app.sectionThreads(ctx, label, it.Text)
 				})
@@ -64,12 +65,13 @@ func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.
 }
 
 func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.Step) {
-	card := card(ctx).Gap(10)
+	theme := ctx.Theme()
+	card := card(ctx).Gap(theme.Space(2.5))
 	label := app.pathLabel(parent, step.Title)
 	app.discussMenu(card, label, step.Text)
 	discuss := func(menu *ui.Menu) { app.discussItem(menu, label, step.Text) }
 	card.Children(func() {
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 			cardTitle(ctx, fmt.Sprintf("%d. %s", index+1, step.Title)).Grow(1)
 			app.sectionThreads(ctx, label, step.Text)
 		})
@@ -88,7 +90,7 @@ func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.
 				asked = append(asked, w)
 			}
 		}
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 			if deeper != nil {
 				ui.Button(ctx, "Deeper ›").Tooltip("Open the deeper walkthrough of this step").OnClick(func() { app.nav.goTo(page{kindWalk, deeper.ID}) })
 				if app.busy(deeper.ID) {
@@ -108,7 +110,7 @@ func (app *app) stepCard(ctx *ui.Context, parent string, index int, step review.
 // walkRow links to a walk from the page above it.
 func (app *app) walkRow(ctx *ui.Context, walk *review.Walk) {
 	theme := ctx.Theme()
-	row := linkRow(ctx.Key("walk-"+walk.ID)).Padding(8, 12).Gap(8).AlignItems(ui.Center)
+	row := linkRow(ctx.Key("walk-"+walk.ID)).Padding(theme.Space(2), theme.Space(3)).Gap(theme.Space(2)).AlignItems(ui.Center)
 	row.Children(func() {
 		ui.Text(ctx, "›").TextColor(theme.Accent)
 		ui.Text(ctx, app.rev.WalkTitle(walk)).SingleLine().Shrink(1).Grow(1)
@@ -263,7 +265,7 @@ func (app *app) refView(ctx *ui.Context, ref review.Ref, discuss func(*ui.Menu))
 func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet, discuss func(*ui.Menu)) {
 	theme := ctx.Theme()
 	ui.Column(ctx).Radius(8).Border(1, theme.Border).Clip().Children(func() {
-		ui.Row(ctx).Gap(10).Padding(6, 10).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2.5)).Padding(theme.Space(1.5), theme.Space(2.5)).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
 			if snippet.inDiff {
 				if textLink(ctx, ref.Label(), func(e ui.Element) { e.Font("monospace").FontSize(12) }).Shrink(0).Tooltip("Open in the diff").Clicked() {
 					app.openRef(ref)
@@ -277,9 +279,9 @@ func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet, di
 		})
 		switch {
 		case snippet.loading:
-			ui.Spinner(ctx).Size(12, 12).Margin(8, 10)
+			ui.Spinner(ctx).Size(12, 12).Margin(theme.Space(2), theme.Space(2.5))
 		case snippet.missing != "":
-			caption(ctx, snippet.missing).Padding(6, 10)
+			caption(ctx, snippet.missing).Padding(theme.Space(1.5), theme.Space(2.5))
 		}
 		if len(snippet.lines) > 0 {
 			app.snippetLines(ctx, ref, snippet, discuss)
@@ -333,7 +335,7 @@ func (app *app) snippetLines(ctx *ui.Context, ref review.Ref, snippet snippet, d
 	}
 	lines.Children(func() {
 		for i, line := range snippet.lines {
-			row := ui.Row(ctx.Key(i)).Gap(10).Padding(1, 10)
+			row := ui.Row(ctx.Key(i)).Gap(theme.Space(2.5)).Padding(theme.Space(0.25), theme.Space(2.5))
 			if snippet.changed[i] {
 				row.Background(mark)
 			}
@@ -407,6 +409,7 @@ func nearestHunk(hunks []editor.DiffHunk, ref review.Ref) int {
 }
 
 func (app *app) walkPage(ctx *ui.Context, id string) {
+	theme := ctx.Theme()
 	walk := app.rev.Walk(id)
 	if walk == nil {
 		app.overviewPage(ctx, "")
@@ -417,8 +420,8 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 	path := app.rev.WalkPath(walk.ID)
 	version := app.versionOn(page{kindWalk, walk.ID})
 	app.pageScroll(ctx, page{kindWalk, walk.ID}).Grow(1).FillWidth().Children(func() {
-		pageColumn(ctx).Gap(16).Children(func() {
-			ui.Row(ctx).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
+		pageColumn(ctx).Gap(theme.Space(4)).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(1.5)).AlignItems(ui.Center).Wrap().Children(func() {
 				crumb := func(label string, p page) {
 					link := textLink(ctx, excerpt(label, 40), func(e ui.Element) { e.FontSize(12) }).Tooltip(label)
 					if link.Clicked() {
@@ -432,7 +435,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 				}
 				caption(ctx, excerpt(app.rev.WalkTitle(walk), 40))
 			})
-			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(3)).AlignItems(ui.Center).Children(func() {
 				pageTitle(ctx, app.rev.WalkTitle(walk)).Grow(1).Shrink(1)
 				app.cmdButton(ctx, "stop-walk", walk.ID, "Stop")
 				app.moreButton(ctx, walk.ID, "regenerate-walk", "walk-log", "", "delete-walk")
@@ -445,7 +448,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 			case run != nil && len(walk.More) == 0:
 				activityLine(ctx, run.activity)
 			case st.status == targetQueued:
-				ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Row(ctx).Gap(theme.Space(1.5)).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(ctx).Size(12, 12)
 					caption(ctx, fmt.Sprintf("Waiting: the app writes %d walkthroughs at a time.", maxAhead))
 					ui.Button(ctx, "Start now").OnClick(func() { app.runner.startNow(app.rev, walk.ID) })
@@ -456,7 +459,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 				markdown.View(ctx, walk.Markdown, &app.md)
 			}
 			for i, turn := range walk.More {
-				outlineCard(ctx.Key(fmt.Sprintf("more-%d", i))).Gap(10).Children(func() {
+				outlineCard(ctx.Key(fmt.Sprintf("more-%d", i))).Gap(theme.Space(2.5)).Children(func() {
 					cardTitle(ctx, "Follow-up: "+turn.Question)
 					if i == len(walk.More)-1 && run != nil {
 						ui.Spinner(ctx).Size(14, 14)
@@ -499,6 +502,7 @@ func overviewBy(ov *review.Overview) string {
 // askWalk asks a question about a walkthrough as a whole, and lists the
 // questions asked before.
 func (app *app) askWalk(ctx *ui.Context, parent string) {
+	theme := ctx.Theme()
 	key := app.questionDraftKey(nil, askTarget{parent, ""})
 	draft := app.drafts[key]
 	submit := func() {
@@ -507,10 +511,10 @@ func (app *app) askWalk(ctx *ui.Context, parent string) {
 			app.askQuestion(parent, "", question)
 		}
 	}
-	ui.Column(ctx).Gap(8).Margin(8, 0, 0, 0).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(2)).Margin(theme.Space(2), 0, 0, 0).Children(func() {
 		heading(ctx, "Ask about the changes")
 		caption(ctx, "The answer opens in the side panel, as a short walkthrough. The agent starts from what it learned for this page, and you can ask follow-up questions there.")
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 			in := ui.TextInput(ctx.Key("ask-"+key), &draft).Placeholder("Why did the agent change the cache key?").Grow(1).OnSubmit(submit)
 			if in.Changed() {
 				app.drafts[key] = draft

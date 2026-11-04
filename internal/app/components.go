@@ -27,7 +27,8 @@ func heading(ctx *ui.Context, text string) ui.Element {
 
 // sectionHeading names a part of a page, above its cards.
 func sectionHeading(ctx *ui.Context, text string) {
-	heading(ctx, text).Margin(8, 0, 0, 0)
+	theme := ctx.Theme()
+	heading(ctx, text).Margin(theme.Space(2), 0, 0, 0)
 }
 
 // cardTitle is the title of a card or of a note in the middle of a page.
@@ -59,7 +60,8 @@ func anchorLabel(ctx *ui.Context, label string) {
 
 // messageHeader names who wrote a message of a thread, and when.
 func messageHeader(ctx *ui.Context, who string, at time.Time) {
-	ui.Row(ctx).Gap(6).Children(func() {
+	theme := ctx.Theme()
+	ui.Row(ctx).Gap(theme.Space(1.5)).Children(func() {
 		smallLabel(ctx, who)
 		if !at.IsZero() {
 			smallCaption(ctx, at.Format("15:04"))
@@ -69,13 +71,15 @@ func messageHeader(ctx *ui.Context, who string, at time.Time) {
 
 // bubble is a message the user wrote in a conversation.
 func bubble(ctx *ui.Context, text string) {
-	ui.Text(ctx, text).Selectable().Padding(8, 10).Radius(8).Background(ctx.Theme().Surface)
+	theme := ctx.Theme()
+	ui.Text(ctx, text).Selectable().Padding(theme.Space(2), theme.Space(2.5)).Radius(8).Background(theme.Surface)
 }
 
 // codeQuote shows lines of code or of a prompt in a gray box. Callers set
 // the font size.
 func codeQuote(ctx *ui.Context, text string) ui.Element {
-	return ui.Text(ctx, text).Font("monospace").Padding(6, 10).Radius(6).Background(ctx.Theme().Surface).Selectable()
+	theme := ctx.Theme()
+	return ui.Text(ctx, text).Font("monospace").Padding(theme.Space(1.5), theme.Space(2.5)).Radius(6).Background(theme.Surface).Selectable()
 }
 
 // errorText shows why an answer did not come: the agent's error, or
@@ -89,7 +93,8 @@ func errorText(ctx *ui.Context, err string) ui.Element {
 
 // activityLine is a spinner with what the agent or the app does now.
 func activityLine(ctx *ui.Context, text string) ui.Element {
-	return ui.Row(ctx).Gap(6).AlignItems(ui.Center).Children(func() {
+	theme := ctx.Theme()
+	return ui.Row(ctx).Gap(theme.Space(1.5)).AlignItems(ui.Center).Children(func() {
 		ui.Spinner(ctx).Size(12, 12)
 		caption(ctx, text).SingleLine().Shrink(1)
 	})
@@ -98,7 +103,8 @@ func activityLine(ctx *ui.Context, text string) ui.Element {
 // pageColumn holds the content of a page that scrolls. Callers set its
 // gap and children.
 func pageColumn(ctx *ui.Context) ui.Element {
-	return ui.Column(ctx).Padding(24, 32).MaxWidth(980)
+	theme := ctx.Theme()
+	return ui.Column(ctx).Padding(theme.Space(6), theme.Space(8)).MaxWidth(980)
 }
 
 func cardBase(ctx *ui.Context) ui.Element {
@@ -108,13 +114,15 @@ func cardBase(ctx *ui.Context) ui.Element {
 // card holds a main part of a page: a step, a section of the overview.
 // Callers set its gap and children.
 func card(ctx *ui.Context) ui.Element {
-	return cardBase(ctx).Padding(16, 20).Background(ctx.Theme().Surface)
+	theme := ctx.Theme()
+	return cardBase(ctx).Padding(theme.Space(4), theme.Space(5)).Background(theme.Surface)
 }
 
 // outlineCard holds a smaller part of a page: an item of a section, a
 // group of files, a follow-up. Callers set its gap and children.
 func outlineCard(ctx *ui.Context) ui.Element {
-	return cardBase(ctx).Padding(12, 16)
+	theme := ctx.Theme()
+	return cardBase(ctx).Padding(theme.Space(3), theme.Space(4))
 }
 
 // linkRow is a bordered row that opens what it shows. Callers set its
@@ -133,9 +141,10 @@ func linkRow(ctx *ui.Context) ui.Element {
 // on a row that is itself hovered or chosen. Callers set its label and
 // children, and act on Clicked.
 func ghostButton(ctx *ui.Context) ui.Element {
-	button := ui.ButtonBase(ctx).Padding(4).Radius(4)
+	theme := ctx.Theme()
+	button := ui.ButtonBase(ctx).Padding(theme.Space(1)).Radius(4)
 	if button.Hovered() {
-		button.Background(ctx.Theme().Text.Alpha(0.08))
+		button.Background(theme.Text.Alpha(0.08))
 	}
 	return button
 }
@@ -153,8 +162,9 @@ func disclosureArrow(ctx *ui.Context, open bool) ui.Element {
 // diffStat counts the added and the deleted lines, in green and red. A
 // count of zero does not show. Callers set the font size.
 func diffStat(ctx *ui.Context, additions, deletions int) ui.Element {
-	added, deleted := statColors(ctx.Theme())
-	return ui.Row(ctx).Gap(4).Children(func() {
+	theme := ctx.Theme()
+	added, deleted := statColors(theme)
+	return ui.Row(ctx).Gap(theme.Space(1)).Children(func() {
 		if additions > 0 {
 			ui.Text(ctx, fmt.Sprintf("+%d", additions)).TextColor(added)
 		}
@@ -215,13 +225,15 @@ func rowEnd(ctx *ui.Context, accent bool, fn func()) {
 // noMatch tells that a filter left nothing in a list, as "No commands
 // match".
 func noMatch(ctx *ui.Context, things string) ui.Element {
-	return caption(ctx, "No "+things+" match").Padding(6, 8)
+	theme := ctx.Theme()
+	return caption(ctx, "No "+things+" match").Padding(theme.Space(1.5), theme.Space(2))
 }
 
 // linkCard is a linkRow that stacks lines: what it is about, an excerpt,
 // a meta line.
 func linkCard(ctx *ui.Context) ui.Element {
-	return linkRow(ctx).Padding(10, 12).Gap(4).Column().AlignItems(ui.Stretch)
+	theme := ctx.Theme()
+	return linkRow(ctx).Padding(theme.Space(2.5), theme.Space(3)).Gap(theme.Space(1)).Column().AlignItems(ui.Stretch)
 }
 
 // copyText puts text on the clipboard and tells it in a toast.
@@ -247,7 +259,7 @@ func failureBox(ctx *ui.Context, err string) {
 		errorText(ctx, err)
 		return
 	}
-	ui.Column(ctx).Gap(4).Padding(12).Radius(8).Border(1, theme.Danger).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(3)).Radius(8).Border(1, theme.Danger).Children(func() {
 		ui.Text(ctx, "The agent failed").Bold().TextColor(theme.Danger)
 		ui.Text(ctx, err).FontSize(12).Font("monospace").Selectable()
 	})
@@ -257,13 +269,14 @@ func failureBox(ctx *ui.Context, err string) {
 // not miss. Callers set its gap and children.
 func warningBox(ctx *ui.Context) ui.Element {
 	theme := ctx.Theme()
-	return ui.Column(ctx).Padding(10, 14).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
+	return ui.Column(ctx).Padding(theme.Space(2.5), theme.Space(3.5)).Radius(8).Background(theme.Warning.Alpha(0.15)).Border(1, theme.Warning)
 }
 
 // centerNote fills the page with a title and the detail builds, in its
 // middle.
 func centerNote(ctx *ui.Context, title string, detail func()) {
-	ui.Column(ctx).Grow(1).Center().Gap(8).Padding(24).Children(func() {
+	theme := ctx.Theme()
+	ui.Column(ctx).Grow(1).Center().Gap(theme.Space(2)).Padding(theme.Space(6)).Children(func() {
 		cardTitle(ctx, title)
 		detail()
 	})
@@ -291,13 +304,15 @@ func panelFrame(ctx *ui.Context) ui.Element {
 // panelBar is the bar at the top of a side panel, with its title and its
 // controls.
 func panelBar(ctx *ui.Context) ui.Element {
-	return ui.Row(ctx).Gap(8).Padding(8, 12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(ctx.Theme().Border)
+	theme := ctx.Theme()
+	return ui.Row(ctx).Gap(theme.Space(2)).Padding(theme.Space(2), theme.Space(3)).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 }
 
 // panelFooter is the bar at the foot of a side panel, with the actions on
 // what the panel shows.
 func panelFooter(ctx *ui.Context) ui.Element {
-	return ui.Row(ctx).Gap(12).Padding(6, 12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(ctx.Theme().Border)
+	theme := ctx.Theme()
+	return ui.Row(ctx).Gap(theme.Space(3)).Padding(theme.Space(1.5), theme.Space(3)).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border)
 }
 
 // composer is the text box at the foot of a side panel. Its draft lives in
@@ -306,6 +321,7 @@ func panelFooter(ctx *ui.Context) ui.Element {
 // buttons builds the controls after the key hint, with the draft and a
 // submit that sends it.
 func (app *app) composer(ctx *ui.Context, key, placeholder string, send func(text string) bool, buttons func(draft string, submit func())) {
+	theme := ctx.Theme()
 	draft := app.drafts[key]
 	submit := func(text string) bool {
 		if strings.TrimSpace(text) == "" || !send(text) {
@@ -314,7 +330,7 @@ func (app *app) composer(ctx *ui.Context, key, placeholder string, send func(tex
 		app.drafts[key] = ""
 		return true
 	}
-	ui.Column(ctx).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(ctx.Theme().Border).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(2)).Padding(theme.Space(2.5), theme.Space(3)).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
 		in := ui.TextArea(ctx.Key("draft-"+key), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
 			OnTextKey(func(k ui.TextKey) bool {
 				if k.Key != ui.KeyEnter || k.Mods != ui.Cmd {
@@ -328,7 +344,7 @@ func (app *app) composer(ctx *ui.Context, key, placeholder string, send func(tex
 		if in.Changed() {
 			app.drafts[key] = draft
 		}
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 			smallCaption(ctx, app.platform.cmdEnter()+" asks the agent").Grow(1)
 			buttons(draft, func() { submit(draft) })
 		})

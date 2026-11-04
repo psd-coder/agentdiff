@@ -58,7 +58,7 @@ func (app *app) logPanel(ctx *ui.Context) {
 			app.cmdButton(ctx, "close-log", "", "Close")
 		})
 		ui.Scroll(ctx).Grow(1).FillWidth().Children(func() {
-			ui.Column(ctx).Gap(6).Padding(10, 12).Children(func() {
+			ui.Column(ctx).Gap(theme.Space(1.5)).Padding(theme.Space(2.5), theme.Space(3)).Children(func() {
 				shownRuns := 0
 				for _, r := range app.logsOf(rev) {
 					if !app.inLog(r) {
@@ -142,19 +142,20 @@ func resumedRun(runs []*logRun, run *logRun) *logRun {
 }
 
 func (app *app) runView(ctx *ui.Context, run *logRun) {
+	theme := ctx.Theme()
 	rev := app.rev
 	ui.Collapsible(ctx.Key("run-"+run.info.ID), run.label(), &run.open, func() {
 		if !run.loaded {
 			app.loadRun(rev, run)
 		}
-		ui.Column(ctx).Gap(8).Padding(4, 0, 8, 0).Children(func() {
+		ui.Column(ctx).Gap(theme.Space(2)).Padding(theme.Space(1), 0, theme.Space(2), 0).Children(func() {
 			if run.info.Note != "" {
 				caption(ctx, run.info.Note).MaxLines(2)
 			}
 			if usage := run.info.Usage; usage != nil {
 				caption(ctx, usage.String())
 			}
-			ui.Row(ctx).Gap(8).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2)).Children(func() {
 				ui.Button(ctx, "Copy").Disabled(!run.loaded).OnClick(func() {
 					copyText(ctx, run.text(), "Run log copied")
 				})
@@ -183,10 +184,10 @@ func (app *app) runView(ctx *ui.Context, run *logRun) {
 // detail.
 func (app *app) logItemView(ctx *ui.Context, it *logItem) {
 	theme := ctx.Theme()
-	ui.Column(ctx).Gap(2).Children(func() {
-		head := ui.ButtonBase(ctx).Gap(8).Padding(2, 4).Radius(4).Justify(ui.Start).Expanded(it.expanded).Label(it.Title)
+	ui.Column(ctx).Gap(theme.Space(0.5)).Children(func() {
+		head := ui.ButtonBase(ctx).Gap(theme.Space(2)).Padding(theme.Space(0.5), theme.Space(1)).Radius(4).Justify(ui.Start).Expanded(it.expanded).Label(it.Title)
 		if it.Detail == "" {
-			head = ui.Row(ctx).Gap(8).Padding(2, 4).AlignItems(ui.Center)
+			head = ui.Row(ctx).Gap(theme.Space(2)).Padding(theme.Space(0.5), theme.Space(1)).AlignItems(ui.Center)
 		} else if head.Hovered() {
 			head.Background(theme.SurfaceHover)
 		}

@@ -19,13 +19,14 @@ import (
 // changes. For the latest, it names the commit that holds those changes
 // now.
 func (app *app) staleBanner(ctx *ui.Context, ov *review.Overview) {
+	theme := ctx.Theme()
 	if app.freshnessOf(ov) != overviewStale {
 		return
 	}
-	warningBox(ctx).Gap(10).Children(func() {
+	warningBox(ctx).Gap(theme.Space(2.5)).Children(func() {
 		ui.Text(ctx, staleText(ov.Drift(app.fp.Files)))
 		if sha := app.movedTo; sha != "" && ov == app.rev.Overview {
-			ui.Row(ctx).Gap(10).AlignItems(ui.Center).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2.5)).AlignItems(ui.Center).Children(func() {
 				ui.Text(ctx, "Those changes are now commit "+shortSHA(sha)+". The review moves there when you open it.").Grow(1).Shrink(1)
 				app.cmdPrimaryButton(ctx, "open-moved-commit", "", "Open commit")
 			})
@@ -53,10 +54,11 @@ func (app *app) repoPromptsNote(ctx *ui.Context) {
 // promptBanner warns about the prompt files of the repository that the
 // runs leave out.
 func (app *app) promptBanner(ctx *ui.Context) {
+	theme := ctx.Theme()
 	if len(app.promptProblems) == 0 {
 		return
 	}
-	warningBox(ctx).Gap(6).Children(func() {
+	warningBox(ctx).Gap(theme.Space(1.5)).Children(func() {
 		ui.Text(ctx, "The agent runs use the prompts from the settings in place of these files of the repository:")
 		for _, p := range app.promptProblems {
 			ui.Text(ctx, p).FontSize(12).Selectable()
@@ -106,9 +108,9 @@ func (app *app) earlierList(ctx *ui.Context) {
 	ui.Text(ctx, "Reviews of uncommitted changes that are no longer in the working tree. A review comes back here by itself when its changes do.").
 		FontSize(12).TextColor(theme.TextMuted)
 	for _, e := range app.reviews.Earlier() {
-		row := ui.Row(ctx.Key("earlier-"+e.ID())).Gap(8).Padding(0, 10, 0, 0).Radius(8).Border(1, theme.Border).AlignItems(ui.Center)
+		row := ui.Row(ctx.Key("earlier-"+e.ID())).Gap(theme.Space(2)).Padding(0, theme.Space(2.5), 0, 0).Radius(8).Border(1, theme.Border).AlignItems(ui.Center)
 		row.Children(func() {
-			open := ui.ButtonBase(ctx).Grow(1).Shrink(1).Padding(10, 14).Gap(4).Column().AlignItems(ui.Stretch)
+			open := ui.ButtonBase(ctx).Grow(1).Shrink(1).Padding(theme.Space(2.5), theme.Space(3.5)).Gap(theme.Space(1)).Column().AlignItems(ui.Stretch)
 			// The whole row shows the hover of its open area, so Delete
 			// keeps its own.
 			if open.Hovered() {
@@ -173,6 +175,7 @@ func (app *app) commitName(sha string) string {
 // overviewPage shows a version of the overview: the latest for an empty
 // key.
 func (app *app) overviewPage(ctx *ui.Context, key string) {
+	theme := ctx.Theme()
 	cfg := app.cfg.Agent()
 	ov := app.versionOn(page{kindOverview, key})
 	latest := ov == app.rev.Overview
@@ -185,8 +188,8 @@ func (app *app) overviewPage(ctx *ui.Context, key string) {
 		parent = ov.ID
 	}
 	app.pageScroll(ctx, page{kindOverview, key}).Grow(1).FillWidth().Children(func() {
-		pageColumn(ctx).Gap(16).Children(func() {
-			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
+		pageColumn(ctx).Gap(theme.Space(4)).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(3)).AlignItems(ui.Center).Children(func() {
 				pageTitle(ctx, "Overview")
 				ui.Spacer(ctx)
 				app.versionSwitcher(ctx, ov)
@@ -260,13 +263,14 @@ func (app *app) versionSwitcher(ctx *ui.Context, shown *review.Overview) {
 // aheadBanner lists the earlier versions of the overview whose deeper
 // walkthroughs the app still writes ahead, each with a Stop button.
 func (app *app) aheadBanner(ctx *ui.Context) {
+	theme := ctx.Theme()
 	versions := app.versionsAhead()
 	if len(versions) == 0 {
 		return
 	}
-	warningBox(ctx).Gap(8).Children(func() {
+	warningBox(ctx).Gap(theme.Space(2)).Children(func() {
 		for _, ov := range versions {
-			ui.Row(ctx.Key("ahead-" + ov.ID)).Gap(10).AlignItems(ui.Center).Children(func() {
+			ui.Row(ctx.Key("ahead-" + ov.ID)).Gap(theme.Space(2.5)).AlignItems(ui.Center).Children(func() {
 				ui.Text(ctx, fmt.Sprintf("Overview v%d still writes %s ahead.", ov.Version, plural(len(app.aheadOf(ov.ID)), "deeper walkthrough"))).Grow(1).Shrink(1)
 				app.cmdButton(ctx, "stop-ahead", ov.ID, "Stop")
 			})
@@ -276,11 +280,12 @@ func (app *app) aheadBanner(ctx *ui.Context) {
 
 // commitMessage shows the subject and the body of the commit under review.
 func (app *app) commitMessage(ctx *ui.Context) {
+	theme := ctx.Theme()
 	cm := app.commit
 	if cm == nil {
 		return
 	}
-	ui.Column(ctx).Gap(6).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(1.5)).Children(func() {
 		ui.Text(ctx, cm.Subject).FontSize(15).Bold().Selectable()
 		if cm.Body != "" {
 			ui.Text(ctx, cm.Body).Selectable()
@@ -308,7 +313,7 @@ func (app *app) summaryLine(ctx *ui.Context) {
 		return
 	}
 	add, del, viewed := app.changeTotals()
-	ui.Row(ctx).Gap(12).Children(func() {
+	ui.Row(ctx).Gap(theme.Space(3)).Children(func() {
 		ui.Text(ctx, plural(len(app.files), "file")).TextColor(theme.TextMuted)
 		diffStat(ctx, add, del)
 		ui.Text(ctx, fmt.Sprintf("%d of %d viewed", viewed, len(app.files))).TextColor(theme.TextMuted)
@@ -317,7 +322,7 @@ func (app *app) summaryLine(ctx *ui.Context) {
 
 func (app *app) overviewIntro(ctx *ui.Context, agentName string) {
 	theme := ctx.Theme()
-	card(ctx).Gap(12).Children(func() {
+	card(ctx).Gap(theme.Space(3)).Children(func() {
 		cardTitle(ctx, "Get a walkthrough of these changes")
 		ui.Text(ctx, agentName+" reads the changes in read-only mode and walks you through them in a few short steps, each with the code that shows it. Go deeper into any step, or ask about it, and you get a walkthrough one level closer to the code. It also answers your checklist and groups the files in the order to review them.").TextColor(theme.TextMuted)
 		caption(ctx, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the prompts in Settings.")
@@ -335,16 +340,17 @@ func (app *app) streamingOverview(ctx *ui.Context, run *agentRun) {
 }
 
 func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
+	theme := ctx.Theme()
 	caption(ctx, overviewBy(ov))
 	for i, s := range review.Sections(ov.Markdown) {
 		title := s.Title
 		if title == "" {
 			title = "Summary"
 		}
-		card := card(ctx.Key(fmt.Sprintf("section-%d-%s", i, s.Title))).Gap(8)
+		card := card(ctx.Key(fmt.Sprintf("section-%d-%s", i, s.Title))).Gap(theme.Space(2))
 		app.discussMenu(card, title, s.Body)
 		card.Children(func() {
-			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 				cardTitle(ctx, title).Grow(1)
 				app.sectionThreads(ctx, title, s.Body)
 			})
@@ -398,9 +404,9 @@ func (app *app) groupCards(ctx *ui.Context) {
 	}
 	sectionHeading(ctx, title)
 	for gi, g := range groups {
-		card := outlineCard(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6)
+		card := outlineCard(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(theme.Space(1.5))
 		card.Children(func() {
-			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 				ui.Text(ctx, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold().Grow(1)
 				open := ui.Button(ctx, "Review group").OnClick(func() { app.nav.goTo(page{kindGroup, app.groupID(gi)}) })
 				// Shown while the pointer is over the card, or the focus in
@@ -414,7 +420,7 @@ func (app *app) groupCards(ctx *ui.Context) {
 			}
 			for _, f := range g.Files {
 				diff := app.diffs[f]
-				ui.Row(ctx.Key(f)).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Row(ctx.Key(f)).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
 					mark := " "
 					if app.rev.Viewed[f] {
 						mark = "✓"
@@ -436,7 +442,8 @@ func (app *app) groupCards(ctx *ui.Context) {
 // generalThreads lists the questions about the whole change set from
 // before the walkthrough answered them.
 func (app *app) generalThreads(ctx *ui.Context) {
-	ui.Column(ctx).Gap(6).Children(func() {
+	theme := ctx.Theme()
+	ui.Column(ctx).Gap(theme.Space(1.5)).Children(func() {
 		for _, th := range app.rev.Threads {
 			if th.Anchor.Kind == review.AnchorGeneral && len(th.Messages) > 0 {
 				app.threadRow(ctx, th)

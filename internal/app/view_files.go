@@ -53,7 +53,7 @@ func (app *app) groupPage(ctx *ui.Context, gi string) {
 	rows := app.cardRows([]pageRow{{kind: titleRow}}, group.Files)
 	app.cardList(ctx, page{kindGroup, gi}, rows, func(pageRow) {
 		diffPageHeader(ctx).AlignItems(ui.Start).Children(func() {
-			ui.Column(ctx).Gap(6).Grow(1).Shrink(1).Children(func() {
+			ui.Column(ctx).Gap(theme.Space(1.5)).Grow(1).Shrink(1).Children(func() {
 				heading(ctx, fmt.Sprintf("%d. %s", index+1, group.Title))
 				if group.Summary != "" {
 					ui.Text(ctx, group.Summary).TextColor(theme.TextMuted)
@@ -83,7 +83,7 @@ func (app *app) allPage(ctx *ui.Context) {
 	app.cardList(ctx, page{kind: kindAll}, rows, func(r pageRow) {
 		if r.kind == groupRow {
 			group := groups[r.group]
-			cardTitle(ctx, fmt.Sprintf("%d. %s", r.group+1, group.Title)).Padding(4, 20, cardGap/2, 20)
+			cardTitle(ctx, fmt.Sprintf("%d. %s", r.group+1, group.Title)).Padding(theme.Space(1), theme.Space(5), cardGap/2, theme.Space(5))
 			return
 		}
 		diffPageHeader(ctx).AlignItems(ui.Center).Children(func() {
@@ -99,7 +99,8 @@ func (app *app) allPage(ctx *ui.Context) {
 }
 
 func diffPageHeader(ctx *ui.Context) ui.Element {
-	return ui.Row(ctx).Gap(12).Padding(16, 20).Margin(0, 0, cardGap/2, 0).BorderWidth(0, 0, 1, 0).BorderColor(ctx.Theme().Border)
+	theme := ctx.Theme()
+	return ui.Row(ctx).Gap(theme.Space(3)).Padding(theme.Space(4), theme.Space(5)).Margin(0, 0, cardGap/2, 0).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 }
 
 type rowKind uint8
@@ -185,7 +186,7 @@ func (app *app) cardList(ctx *ui.Context, pg page, rows []pageRow, other func(pa
 				switch {
 				case pinned:
 					// The line under the page's top bar is its top border.
-					head.BorderWidth(0, cardBorder, cardBorder, cardBorder).Padding(8+cardBorder, 12, 8, 12)
+					head.BorderWidth(0, cardBorder, cardBorder, cardBorder).Padding(theme.Space(2)+cardBorder, theme.Space(3), theme.Space(2), theme.Space(3))
 					if pushed {
 						head.Radius(0, 0, cardRadius, cardRadius)
 					}
@@ -241,7 +242,7 @@ func statusLabel(fileChange gitx.FileChange) string {
 func (app *app) fileHeader(ctx *ui.Context, diff *fileDiff, onPage bool) ui.Element {
 	theme := ctx.Theme()
 	change := diff.change
-	head := ui.Row(ctx).Gap(10).Padding(8, 12).AlignItems(ui.Center).Background(theme.Surface)
+	head := ui.Row(ctx).Gap(theme.Space(2.5)).Padding(theme.Space(2), theme.Space(3)).AlignItems(ui.Center).Background(theme.Surface)
 	if onPage {
 		head.BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 	}
@@ -300,6 +301,7 @@ func (app *app) layoutSwitch(ctx *ui.Context) {
 }
 
 func (app *app) fileThreads(ctx *ui.Context, file string) {
+	theme := ctx.Theme()
 	var threads []*review.Thread
 	for _, th := range app.rev.ThreadsOn(file) {
 		if th.Anchor.Kind == review.AnchorFile && (len(th.Messages) > 0 || th.ID == app.threadID()) {
@@ -309,7 +311,7 @@ func (app *app) fileThreads(ctx *ui.Context, file string) {
 	if len(threads) == 0 {
 		return
 	}
-	ui.Column(ctx).Gap(6).Padding(8, 12).Children(func() {
+	ui.Column(ctx).Gap(theme.Space(1.5)).Padding(theme.Space(2), theme.Space(3)).Children(func() {
 		for _, th := range threads {
 			app.threadCard(ctx, th)
 		}
@@ -329,10 +331,10 @@ func (app *app) diffBody(ctx *ui.Context, diff *fileDiff, fit bool) {
 	theme := ctx.Theme()
 	switch {
 	case diff.loading:
-		activityLine(ctx, "Loading…").Padding(16)
+		activityLine(ctx, "Loading…").Padding(theme.Space(4))
 		return
 	case diff.err != "":
-		ui.Text(ctx, diff.err).Padding(16).TextColor(theme.TextMuted)
+		ui.Text(ctx, diff.err).Padding(theme.Space(4)).TextColor(theme.TextMuted)
 		return
 	case diff.state == nil:
 		return
@@ -365,7 +367,7 @@ func (app *app) diffBody(ctx *ui.Context, diff *fileDiff, fit bool) {
 		if th == nil {
 			return
 		}
-		ui.Column(c).Padding(4, 12).Children(func() { app.threadCard(c, th) })
+		ui.Column(c).Padding(theme.Space(1), theme.Space(3)).Children(func() { app.threadCard(c, th) })
 	}
 	diffState.Theme = app.codeColors
 	view := editor.DiffView(ctx, diffState).FillWidth()
@@ -381,7 +383,7 @@ func (app *app) diffBody(ctx *ui.Context, diff *fileDiff, fit bool) {
 // in the panel.
 func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
 	theme := ctx.Theme()
-	card := ui.ButtonBase(ctx.Key("card-"+th.ID)).Height(threadCardHeight).Padding(6, 10).Gap(10).Radius(8).AlignItems(ui.Center).
+	card := ui.ButtonBase(ctx.Key("card-"+th.ID)).Height(threadCardHeight).Padding(theme.Space(1.5), theme.Space(2.5)).Gap(theme.Space(2.5)).Radius(8).AlignItems(ui.Center).
 		Background(theme.Background).Border(1, theme.Border)
 	if th.ID == app.threadID() {
 		card.Border(2, theme.Accent)
@@ -389,7 +391,7 @@ func (app *app) threadCard(ctx *ui.Context, th *review.Thread) {
 		card.Background(theme.SurfaceHover)
 	}
 	card.Children(func() {
-		ui.Column(ctx).Grow(1).Shrink(1).Gap(2).Children(func() {
+		ui.Column(ctx).Grow(1).Shrink(1).Gap(theme.Space(0.5)).Children(func() {
 			ui.Text(ctx, excerpt(cmp.Or(firstMessage(th), "New comment"), 160)).MaxLines(1)
 			smallCaption(ctx, app.threadMeta(th)).SingleLine()
 		})
