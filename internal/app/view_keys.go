@@ -127,7 +127,7 @@ func (app *app) shortcutRow(ctx *ui.Context, cm *command) {
 				app.startRecording(cm.id)
 			}
 		}
-		remove := iconButton(ctx, trashIcon, "Remove the shortcut of "+cm.title, "Remove the shortcut")
+		remove := iconButton(ctx, trashIcon, "Remove the shortcut of "+cm.title, "Remove the shortcut").Padding(8)
 		if keys == "" {
 			remove.Invisible()
 		} else if remove.Clicked() {

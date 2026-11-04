@@ -137,14 +137,6 @@ func pickerButton(ctx *ui.Context, svg *ui.SVG, label, detail string, open bool)
 	})
 }
 
-// iconButton is a button showing an icon, named label for assistive
-// technology, with the tooltip tip.
-func iconButton(ctx *ui.Context, svg *ui.SVG, label, tip string) ui.Element {
-	return ui.Button(ctx, "").Padding(4, 6).Label(label).Tooltip(tip).Children(func() {
-		ui.Icon(ctx, svg).FontSize(iconRow)
-	})
-}
-
 // textLink is a text that leads to another place in the app. It takes
 // the focus with Tab, and Enter or Space follows it, as a click does.
 // style styles the text.

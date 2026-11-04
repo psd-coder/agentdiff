@@ -218,6 +218,15 @@ func copyText(ctx *ui.Context, text, toast string) {
 	ctx.Toast(toast)
 }
 
+// iconButton is a square ghostButton showing an icon, named label for
+// assistive technology, with the tooltip tip. Padding on all sides keeps it
+// square: Padding(8) makes it as high as a button with text.
+func iconButton(ctx *ui.Context, svg *ui.SVG, label, tip string) ui.Element {
+	return ghostButton(ctx).Label(label).Tooltip(tip).Children(func() {
+		ui.Icon(ctx, svg).FontSize(iconRow)
+	})
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {
