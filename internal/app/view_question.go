@@ -232,8 +232,8 @@ func (app *app) questionComposer(ctx *ui.Context, walk *review.Walk, target *ask
 		return true
 	}
 	app.composer(ctx, app.questionDraftKey(walk, *target), placeholder, send, func(draft string, submit func()) {
-		if busy {
-			ui.Button(ctx, "Stop").OnClick(func() { app.runner.stop(app.rev, walk.ID) })
+		if walk != nil {
+			app.cmdButton(ctx, "stop-walk", walk.ID, "Stop")
 		}
 		ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).Tooltip("Ask (" + app.platform.keyLabel("CmdOrCtrl+Enter") + ")").OnClick(submit)
 	})
