@@ -14,6 +14,7 @@ import (
 // archivedPage shows an archived review as it was written, read-only:
 // its walkthroughs with the code they saved, its questions and comments.
 func (app *app) archivedPage(ctx *ui.Context, id string) {
+	theme := ctx.Theme()
 	earlier := app.reviews.Find(id)
 	if earlier == nil {
 		emptyState(ctx, "Earlier review not found", "It was restored, moved or deleted.")
@@ -21,8 +22,8 @@ func (app *app) archivedPage(ctx *ui.Context, id string) {
 	}
 	rev, ov := earlier.Rev, earlier.Rev.Overview
 	app.pageScroll(ctx, page{kindArchived, id}).Grow(1).FillWidth().Children(func() {
-		pageColumn(ctx).Gap(16).Children(func() {
-			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
+		pageColumn(ctx).Gap(theme.Space(4)).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(3)).AlignItems(ui.Center).Children(func() {
 				pageTitle(ctx, "Earlier review")
 				ui.Spacer(ctx)
 				app.cmdPrimaryButton(ctx, "open-archived-commit", id, "Open commit")
@@ -65,11 +66,12 @@ func (app *app) earlierStatus(earlier *continuity.Earlier) string {
 // or the overview version it belongs to. seen keeps a walk from showing
 // twice.
 func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent string, nested bool, walkthrough *review.Walkthrough, seen map[string]bool) {
+	theme := ctx.Theme()
 	if walkthrough.Summary != "" {
 		ui.Text(ctx, walkthrough.Summary).FontSize(15).Selectable()
 	}
 	for i, s := range walkthrough.Steps {
-		card(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i))).Gap(10).Children(func() {
+		card(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i))).Gap(theme.Space(2.5)).Children(func() {
 			cardTitle(ctx, fmt.Sprintf("%d. %s", i+1, s.Title))
 			if s.Text != "" {
 				markdown.View(ctx, s.Text, &app.md)
@@ -90,7 +92,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 			sectionHeading(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title)
 		}
 		for i, it := range sec.Items {
-			outlineCard(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Children(func() {
+			outlineCard(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(theme.Space(1.5)).Children(func() {
 				if it.Title != "" {
 					ui.Text(ctx, it.Title).Bold()
 				}
@@ -119,12 +121,12 @@ func (app *app) savedWalk(ctx *ui.Context, rev *review.Review, walk *review.Walk
 	}
 	seen[walk.ID] = true
 	theme := ctx.Theme()
-	ui.Column(ctx.Key("walk-"+walk.ID)).Gap(10).Padding(0, 0, 0, 16).BorderWidth(0, 0, 0, 2).BorderColor(theme.Border).Children(func() {
+	ui.Column(ctx.Key("walk-"+walk.ID)).Gap(theme.Space(2.5)).Padding(0, 0, 0, theme.Space(4)).BorderWidth(0, 0, 0, 2).BorderColor(theme.Border).Children(func() {
 		if walk.Question == "" {
 			ui.Text(ctx, "Deeper: "+rev.WalkTitle(walk)).Bold().TextColor(theme.TextMuted)
 		}
 		for i, turn := range walk.Turns() {
-			ui.Column(ctx.Key(fmt.Sprintf("turn-%d", i))).Gap(10).Children(func() {
+			ui.Column(ctx.Key(fmt.Sprintf("turn-%d", i))).Gap(theme.Space(2.5)).Children(func() {
 				if turn.Question != "" {
 					ui.Text(ctx, "Question: "+turn.Question).Bold().Selectable()
 				}
@@ -149,7 +151,7 @@ func (app *app) savedGroups(ctx *ui.Context, groups []review.Group) {
 	}
 	sectionHeading(ctx, "Review order")
 	for gi, g := range groups {
-		outlineCard(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Children(func() {
+		outlineCard(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(theme.Space(1.5)).Children(func() {
 			ui.Text(ctx, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold()
 			if g.Summary != "" {
 				ui.Text(ctx, g.Summary).TextColor(theme.TextMuted)
@@ -162,6 +164,7 @@ func (app *app) savedGroups(ctx *ui.Context, groups []review.Group) {
 }
 
 func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
+	theme := ctx.Theme()
 	var shown []*review.Thread
 	for _, th := range threads {
 		if len(th.Messages) > 0 {
@@ -173,13 +176,13 @@ func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
 	}
 	sectionHeading(ctx, "Comments")
 	for _, th := range shown {
-		outlineCard(ctx.Key("thread-" + th.ID)).Gap(8).Children(func() {
+		outlineCard(ctx.Key("thread-" + th.ID)).Gap(theme.Space(2)).Children(func() {
 			anchorLabel(ctx, th.Anchor.Label())
 			if th.Anchor.Quote != "" && th.Anchor.Kind != review.AnchorSection {
 				codeQuote(ctx, strings.ReplaceAll(strings.TrimRight(th.Anchor.Quote, "\n"), "\t", "    ")).FontSize(12)
 			}
 			for i, m := range th.Messages {
-				ui.Column(ctx.Key(i)).Gap(4).Children(func() {
+				ui.Column(ctx.Key(i)).Gap(theme.Space(1)).Children(func() {
 					if m.Role == review.RoleUser {
 						messageHeader(ctx, "You", m.Time)
 						bubble(ctx, m.Text)

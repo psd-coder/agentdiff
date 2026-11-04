@@ -23,7 +23,7 @@ const titleBarHeight = 52
 func (app *app) toolbar(ctx *ui.Context) {
 	theme := ctx.Theme()
 	bar := ctx.TitleBar()
-	ui.Row(ctx).Height(titleBarHeight).Shrink(0).Gap(8).Padding(0, bar.Right+8, 0, 8).AlignItems(ui.Center).
+	ui.Row(ctx).Height(titleBarHeight).Shrink(0).Gap(theme.Space(2)).Padding(0, bar.Right+theme.Space(2), 0, theme.Space(2)).AlignItems(ui.Center).
 		BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).DragWindow().Children(func() {
 		ui.Toolbar(ctx, func() {
 			prev, hasPrev := app.nav.prev(app.pageGone)
@@ -73,6 +73,7 @@ func (app *app) toolButton(ctx *ui.Context, id string, svg *ui.SVG, label, tip s
 }
 
 func (app *app) projectPicker(ctx *ui.Context) {
+	theme := ctx.Theme()
 	anchor := pickerButton(ctx, folderIcon, app.repo.Name(), "", app.projectsOpen).Tooltip(app.repo.Root + "\n" + app.tooltip(app.cmd("switch-project"))).Label("Project")
 	if anchor.Clicked() || anchor.Shortcut(0, ui.KeyDown) && !app.projectsOpen {
 		app.runOn(ctx, "switch-project", "")
@@ -89,8 +90,8 @@ func (app *app) projectPicker(ctx *ui.Context) {
 				app.openRepo(recent[i])
 			}
 		}
-		ui.Column(ctx).MinWidth(360).MaxWidth(480).FillWidth().Gap(2).Children(func() {
-			smallLabel(ctx, "Projects").Padding(4, 8)
+		ui.Column(ctx).MinWidth(360).MaxWidth(480).FillWidth().Gap(theme.Space(0.5)).Children(func() {
+			smallLabel(ctx, "Projects").Padding(theme.Space(1), theme.Space(2))
 			app.projectList(ctx, &app.projectNav, app.repo.Root, true, choose)
 		})
 	})
@@ -130,7 +131,7 @@ func (app *app) projectList(ctx *ui.Context, nav *pickList, open string, add boo
 			}
 		}
 		if add {
-			ui.Divider(ctx).Margin(4, 0)
+			ui.Divider(ctx).Margin(theme.Space(1), 0)
 			row := addRow(ctx, func() {
 				ui.Icon(ctx, plusIcon).FontSize(iconMenu).TextColor(theme.TextMuted)
 				ui.Text(ctx, "Add project…")
@@ -201,6 +202,7 @@ func (app *app) toggleBranches() {
 }
 
 func (app *app) branchList(ctx *ui.Context) {
+	theme := ctx.Theme()
 	rows := app.cmpr.branchRows(app.branchQuery, app.repo.Root)
 	nav := &app.branchNav
 	choose := func(b string) {
@@ -211,7 +213,7 @@ func (app *app) branchList(ctx *ui.Context) {
 		app.branchesOpen = false
 		app.openRepo(tree)
 	}
-	ui.Column(ctx).MinWidth(340).MaxWidth(560).FillWidth().Gap(4).Children(func() {
+	ui.Column(ctx).MinWidth(340).MaxWidth(560).FillWidth().Gap(theme.Space(1)).Children(func() {
 		in := searchField(ctx, &app.branchQuery, "Filter branches", func(k ui.TextKey) bool {
 			switch {
 			case k.Mods == 0 && nav.key(k.Key, len(rows)):
@@ -272,9 +274,10 @@ func (app *app) branchItem(ctx *ui.Context, addRow pickRow, row branchRow, openT
 // branchListNote tells why the branch list shows no branches, or that git
 // could not list them.
 func (app *app) branchListNote(ctx *ui.Context, shown int) {
+	theme := ctx.Theme()
 	switch {
 	case app.cmpr.err != "":
-		errorText(ctx, "Could not list the branches: "+app.cmpr.err).Padding(6, 8)
+		errorText(ctx, "Could not list the branches: "+app.cmpr.err).Padding(theme.Space(1.5), theme.Space(2))
 	case shown == 0:
 		noMatch(ctx, "branches")
 	}
@@ -303,6 +306,7 @@ func (app *app) openCompare() {
 }
 
 func (app *app) compareModal(ctx *ui.Context) {
+	theme := ctx.Theme()
 	form := app.compareForm
 	if form == nil {
 		return
@@ -321,7 +325,7 @@ func (app *app) compareModal(ctx *ui.Context) {
 		}
 	}
 	ui.Modal(ctx, &form.open, func() {
-		ui.Column(ctx).Width(460).Gap(12).Children(func() {
+		ui.Column(ctx).Width(460).Gap(theme.Space(3)).Children(func() {
 			heading(ctx, "Compare")
 			ui.Segmented(ctx, &form.mode, "Branches", "Range").Label("Compare")
 			if form.mode == compareBranches {
@@ -340,7 +344,7 @@ func (app *app) compareModal(ctx *ui.Context) {
 				app.takeFocus(ui.TextInput(ctx.Key("from"), &form.from).Placeholder("From, e.g. main or abc1234").Label("From").AutoFocus().OnSubmit(apply), "compare")
 				ui.TextInput(ctx.Key("to"), &form.to).Placeholder("To, e.g. HEAD").Label("To").OnSubmit(apply)
 			}
-			ui.Row(ctx).Gap(8).Justify(ui.End).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2)).Justify(ui.End).Children(func() {
 				ui.Button(ctx, "Cancel").OnClick(func() { form.open = false })
 				ok := branchesOK
 				if form.mode == compareRange {

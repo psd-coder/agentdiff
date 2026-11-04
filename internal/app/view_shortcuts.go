@@ -63,14 +63,15 @@ func (app *app) moreShortcuts() []shortcut {
 }
 
 func (app *app) shortcutsModal(ctx *ui.Context) {
+	theme := ctx.Theme()
 	if !app.shortcutsOpen {
 		return
 	}
 	section := func(title string, list []shortcut) {
-		ui.Column(ctx.Key(title)).Gap(6).Children(func() {
+		ui.Column(ctx.Key(title)).Gap(theme.Space(1.5)).Children(func() {
 			smallLabel(ctx, title)
 			for _, s := range list {
-				ui.Row(ctx.Key(s.keys + s.does)).Gap(16).AlignItems(ui.Start).Children(func() {
+				ui.Row(ctx.Key(s.keys + s.does)).Gap(theme.Space(4)).AlignItems(ui.Start).Children(func() {
 					ui.Text(ctx, s.does).Grow(1).Shrink(1)
 					ui.Text(ctx, s.keys).Font("monospace").FontSize(12).Shrink(0)
 				})
@@ -79,9 +80,9 @@ func (app *app) shortcutsModal(ctx *ui.Context) {
 	}
 	ui.Modal(ctx, &app.shortcutsOpen, func() {
 		ui.Column(ctx).Width(560).Shrink(1).MinHeight(0).Children(func() {
-			heading(ctx, "Keyboard shortcuts").Padding(0, 0, 14, 0)
+			heading(ctx, "Keyboard shortcuts").Padding(0, 0, theme.Space(3.5), 0)
 			ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-				ui.Column(ctx).Gap(18).PaddingEnd(4).Children(func() {
+				ui.Column(ctx).Gap(theme.Space(4.5)).PaddingEnd(theme.Space(1)).Children(func() {
 					menus, keys := app.menuShortcuts(app.menu())
 					for i, m := range menus {
 						section(m+" menu", keys[i])
@@ -92,7 +93,7 @@ func (app *app) shortcutsModal(ctx *ui.Context) {
 					section("In the window", app.otherKeys())
 				})
 			})
-			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Padding(14, 0, 0, 0).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Padding(theme.Space(3.5), 0, 0, 0).Children(func() {
 				if ui.Button(ctx, "Change shortcuts…").Clicked() {
 					app.shortcutsOpen = false
 					app.openSettingsTab(shortcutsTab)

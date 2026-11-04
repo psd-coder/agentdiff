@@ -55,6 +55,7 @@ func (app *app) keyInput(ev ui.InputEvent) bool {
 // shortcutsTab lists the commands with their shortcuts, which a click
 // on the keys records anew.
 func (app *app) shortcutsTab(ctx *ui.Context) {
+	theme := ctx.Theme()
 	filter := strings.ToLower(strings.TrimSpace(app.keysFilter))
 	var cmds []*command
 	for _, cm := range app.cachedCommands() {
@@ -63,20 +64,20 @@ func (app *app) shortcutsTab(ctx *ui.Context) {
 		}
 	}
 	slices.SortFunc(cmds, func(x, y *command) int { return strings.Compare(x.title, y.title) })
-	caption(ctx, "Click a shortcut and press the new keys, with "+app.platform.shortcutMods()+". Escape cancels. A shortcut another command has moves to this one.").PaddingX(24)
-	ui.TextInput(ctx, &app.keysFilter).Placeholder("Filter commands").Label("Filter commands").MarginX(24)
+	caption(ctx, "Click a shortcut and press the new keys, with "+app.platform.shortcutMods()+". Escape cancels. A shortcut another command has moves to this one.").PaddingX(theme.Space(6))
+	ui.TextInput(ctx, &app.keysFilter).Placeholder("Filter commands").Label("Filter commands").MarginX(theme.Space(6))
 	// The scroll spans the window, so its bar shows at the window's edge.
 	ui.Scroll(ctx).Shrink(1).MinHeight(0).FillWidth().Children(func() {
-		ui.Column(ctx).Gap(2).PaddingX(24).Children(func() {
+		ui.Column(ctx).Gap(theme.Space(0.5)).PaddingX(theme.Space(6)).Children(func() {
 			for _, cm := range cmds {
 				app.shortcutRow(ctx.Key(cm.id), cm)
 			}
 			if len(cmds) == 0 {
-				noMatch(ctx, "commands").Padding(6, 0)
+				noMatch(ctx, "commands").Padding(theme.Space(1.5), 0)
 			}
 		})
 	})
-	ui.Row(ctx).Gap(8).AlignItems(ui.Center).PaddingX(24).Children(func() {
+	ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).PaddingX(theme.Space(6)).Children(func() {
 		caption(ctx, app.keysNote).Grow(1).Shrink(1)
 		ui.Button(ctx, "Reset all shortcuts").Disabled(len(app.cfg.Keys) == 0).OnClick(func() {
 			app.keymap().reset()
@@ -90,10 +91,10 @@ func (app *app) shortcutRow(ctx *ui.Context, cm *command) {
 	theme := ctx.Theme()
 	keys := app.keymap().of(cm.id)
 	changed := app.keymap().changed(cm.id)
-	ui.Row(ctx).Gap(8).Padding(2, 0).AlignItems(ui.Center).Children(func() {
+	ui.Row(ctx).Gap(theme.Space(2)).Padding(theme.Space(0.5), 0).AlignItems(ui.Center).Children(func() {
 		ui.Text(ctx, strings.TrimSuffix(cm.title, "…")).Grow(1).Shrink(1).SingleLine()
 		if app.recording == cm.id {
-			rec := ui.Row(ctx).Padding(4, 10).MinWidth(120).Radius(theme.Radius).Border(1, theme.Accent).Background(theme.Surface).
+			rec := ui.Row(ctx).Padding(theme.Space(1), theme.Space(2.5)).MinWidth(120).Radius(theme.Radius).Border(1, theme.Accent).Background(theme.Surface).
 				Focusable().Label("Press the new shortcut for " + cm.title + ", or Escape to cancel").HandleInput(app.keyInput).
 				Children(func() {
 					// The modifiers show as they are held, before the key
@@ -127,7 +128,7 @@ func (app *app) shortcutRow(ctx *ui.Context, cm *command) {
 				app.startRecording(cm.id)
 			}
 		}
-		remove := iconButton(ctx, trashIcon, "Remove the shortcut of "+cm.title, "Remove the shortcut").Padding(8)
+		remove := iconButton(ctx, trashIcon, "Remove the shortcut of "+cm.title, "Remove the shortcut").Padding(theme.Space(2))
 		if keys == "" {
 			remove.Invisible()
 		} else if remove.Clicked() {

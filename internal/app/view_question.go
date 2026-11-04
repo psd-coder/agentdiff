@@ -112,9 +112,9 @@ func (app *app) questionPanel(ctx *ui.Context) {
 			app.cmdButton(ctx, "close-question", "", "Close")
 		})
 		caption(ctx, "About: "+app.targetLabel(target.parent, target.stepID)).
-			SingleLine().Padding(6, 12).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
+			SingleLine().Padding(theme.Space(1.5), theme.Space(3)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border)
 		ui.Scroll(ctx.Key("q-" + id)).TrackScroll(app.scrollOf("question:" + id)).Grow(1).FillWidth().Children(func() {
-			ui.Column(ctx).Gap(14).Padding(12).Children(func() {
+			ui.Column(ctx).Gap(theme.Space(3.5)).Padding(theme.Space(3)).Children(func() {
 				if walk == nil {
 					app.earlierQuestions(ctx, target)
 					return
@@ -159,7 +159,8 @@ func (app *app) earlierQuestions(ctx *ui.Context, target *askTarget) {
 }
 
 func (app *app) turnView(ctx *ui.Context, walk *review.Walk, turn review.Turn, last bool) {
-	ui.Column(ctx).Gap(8).Children(func() {
+	theme := ctx.Theme()
+	ui.Column(ctx).Gap(theme.Space(2)).Children(func() {
 		bubble(ctx, turn.Question)
 		if run := app.runner.run(app.rev, walk.ID); run != nil && last {
 			activityLine(ctx, run.activity)
@@ -201,7 +202,8 @@ func (app *app) compactWalk(ctx *ui.Context, walkthrough *review.Walkthrough) {
 }
 
 func (app *app) compactStep(ctx *ui.Context, title string, step review.Step) {
-	ui.Column(ctx).Gap(6).Children(func() {
+	theme := ctx.Theme()
+	ui.Column(ctx).Gap(theme.Space(1.5)).Children(func() {
 		if title != "" {
 			ui.Text(ctx, title).Bold()
 		}

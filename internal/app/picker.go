@@ -51,8 +51,9 @@ func (pickList *pickList) key(key ui.Key, rowCount int) bool {
 // technology. It returns the list and its rows, which last for this
 // build pass only.
 func (pickList *pickList) list(ctx *ui.Context, label string, fn func(addRow pickRow)) (ui.Element, []ui.Element) {
+	theme := ctx.Theme()
 	var rows, bars []ui.Element
-	list := ui.Column(ctx).Gap(2).Role(ui.RoleList).Label(label).KeepFocus()
+	list := ui.Column(ctx).Gap(theme.Space(0.5)).Role(ui.RoleList).Label(label).KeepFocus()
 	// In window coordinates, so that the list scrolling under a resting
 	// pointer does not count as the pointer moving.
 	pointerX, pointerY, over := list.PointerPosition()
@@ -70,9 +71,9 @@ func (pickList *pickList) list(ctx *ui.Context, label string, fn func(addRow pic
 		}
 		var bar ui.Element
 		row.Children(func() {
-			ui.Row(c).Grow(1).Shrink(1).Gap(menuGap).Padding(6, menuInset).AlignItems(ui.Center).Children(body)
+			ui.Row(c).Grow(1).Shrink(1).Gap(menuGap).Padding(theme.Space(1.5), menuInset).AlignItems(ui.Center).Children(body)
 			if actions != nil {
-				bar = ui.Row(c).Gap(2).PaddingEnd(4).Children(actions)
+				bar = ui.Row(c).Gap(theme.Space(0.5)).PaddingEnd(theme.Space(1)).Children(actions)
 			}
 		})
 		rows, bars = append(rows, row), append(bars, bar)
@@ -84,7 +85,7 @@ func (pickList *pickList) list(ctx *ui.Context, label string, fn func(addRow pic
 		on := i == pickList.hi
 		row.Checked(on)
 		if on {
-			row.Background(ctx.Theme().Surface)
+			row.Background(theme.Surface)
 			if pickList.reveal {
 				row.ScrollIntoView()
 			}
@@ -110,7 +111,7 @@ func (pickList *pickList) activate(target ui.Element, rows []ui.Element) {
 func searchField(ctx *ui.Context, query *string, label string, onKey func(key ui.TextKey) bool) ui.Element {
 	theme := ctx.Theme()
 	var in ui.Element
-	field := ui.Row(ctx).AlignItems(ui.Center).Gap(menuGap).Padding(6, menuInset-1).Radius(theme.Radius).Background(theme.Surface).Border(1, theme.Border).Cursor(ui.CursorText)
+	field := ui.Row(ctx).AlignItems(ui.Center).Gap(menuGap).Padding(theme.Space(1.5), menuInset-1).Radius(theme.Radius).Background(theme.Surface).Border(1, theme.Border).Cursor(ui.CursorText)
 	field.Children(func() {
 		ui.Icon(ctx, searchIcon).FontSize(iconMenu).TextColor(theme.TextMuted)
 		in = ui.TextInputBase(ctx, query).Grow(1).Placeholder(label).Label(label).AutoFocus().OnTextKey(onKey)

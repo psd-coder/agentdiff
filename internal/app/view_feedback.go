@@ -31,14 +31,14 @@ func (app *app) feedbackPage(ctx *ui.Context) {
 	text := app.feedback()
 	threadCount := len(review.ExportedThreads(app.rev, app.exportOptions()))
 	ui.Column(ctx).Fill().Children(func() {
-		ui.Column(ctx).Gap(10).Padding(20, 24).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
+		ui.Column(ctx).Gap(theme.Space(2.5)).Padding(theme.Space(5), theme.Space(6)).BorderWidth(0, 0, 1, 0).BorderColor(theme.Border).Children(func() {
 			pageTitle(ctx, "Feedback for the coding agent")
 			ui.Text(ctx, fmt.Sprintf("%d threads go into the feedback. Exclude a thread in its panel. Give the text to your coding agent: paste it, or save it to a file and paste the prompt that points to it.", threadCount)).TextColor(theme.TextMuted)
-			ui.Row(ctx).Gap(16).AlignItems(ui.Center).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(4)).AlignItems(ui.Center).Children(func() {
 				ui.Checkbox(ctx, &app.exportAgent, "Include agent replies")
 				ui.Checkbox(ctx, &app.exportDone, "Include resolved threads")
 			})
-			ui.Row(ctx).Gap(8).Children(func() {
+			ui.Row(ctx).Gap(theme.Space(2)).Children(func() {
 				app.cmdPrimaryButton(ctx, "copy-feedback", "", "Copy feedback")
 				app.cmdButton(ctx, "save-feedback", "", "Save to file…")
 				app.cmdButton(ctx, "copy-agent-prompt", "", "Copy prompt for agent")
@@ -48,7 +48,7 @@ func (app *app) feedbackPage(ctx *ui.Context) {
 			}
 		})
 		app.pageScroll(ctx, page{kind: kindFeedback}).Grow(1).FillWidth().Children(func() {
-			ui.Text(ctx, text).Font("monospace").FontSize(12).Padding(16, 24).Selectable()
+			ui.Text(ctx, text).Font("monospace").FontSize(12).Padding(theme.Space(4), theme.Space(6)).Selectable()
 		})
 	})
 }
