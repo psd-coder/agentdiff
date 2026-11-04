@@ -87,7 +87,7 @@ func (app *app) paletteModal(ctx *ui.Context) {
 					row := addRow(ctx.Key(cm.id), func() {
 						ui.Text(ctx, cm.title).SingleLine().Shrink(1).Grow(1)
 						if keys != "" {
-							ui.Text(ctx, app.platform.keyLabel(keys)).Font("monospace").FontSize(12).TextColor(theme.TextMuted)
+							codeText(ctx, app.platform.keyLabel(keys)).TextColor(theme.TextMuted)
 						}
 					}, nil)
 					if keys != "" {

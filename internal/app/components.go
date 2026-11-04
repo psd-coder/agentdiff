@@ -17,12 +17,12 @@ func stamp(at time.Time) string {
 
 // pageTitle is the title at the top of a page.
 func pageTitle(ctx *ui.Context, text string) ui.Element {
-	return ui.Text(ctx, text).FontSize(22).Bold()
+	return ui.Text(ctx, text).FontSize(fontTitle).Bold()
 }
 
 // heading is the title of a dialog, or of a part of a page.
 func heading(ctx *ui.Context, text string) ui.Element {
-	return ui.Text(ctx, text).FontSize(18).Bold()
+	return ui.Text(ctx, text).FontSize(fontHeading).Bold()
 }
 
 // sectionHeading names a part of a page, above its cards.
@@ -33,29 +33,40 @@ func sectionHeading(ctx *ui.Context, text string) {
 
 // cardTitle is the title of a card or of a note in the middle of a page.
 func cardTitle(ctx *ui.Context, text string) ui.Element {
-	return ui.Text(ctx, text).FontSize(16).Bold()
+	return ui.Text(ctx, text).FontSize(fontCard).Bold()
+}
+
+// leadText is the first lines of a page under its title: a summary, a
+// commit subject.
+func leadText(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).FontSize(fontLead)
+}
+
+// codeText is code, a path or a key, in a small monospace font.
+func codeText(ctx *ui.Context, text string) ui.Element {
+	return ui.Text(ctx, text).Font(monoFont).FontSize(fontSmall)
 }
 
 // caption is a line of secondary text: a note under a title, a meta line,
 // what a run does now.
 func caption(ctx *ui.Context, text string) ui.Element {
-	return ui.Text(ctx, text).FontSize(12).TextColor(ctx.Theme().TextMuted)
+	return ui.Text(ctx, text).FontSize(fontSmall).TextColor(ctx.Theme().TextMuted)
 }
 
 // smallCaption is the secondary text of a dense row: a time, a count, a
 // key hint.
 func smallCaption(ctx *ui.Context, text string) ui.Element {
-	return ui.Text(ctx, text).FontSize(11).TextColor(ctx.Theme().TextMuted)
+	return ui.Text(ctx, text).FontSize(fontTiny).TextColor(ctx.Theme().TextMuted)
 }
 
 // smallLabel names a group of rows, or who wrote a message.
 func smallLabel(ctx *ui.Context, text string) ui.Element {
-	return ui.Text(ctx, text).FontSize(11).Bold().TextColor(ctx.Theme().TextMuted)
+	return ui.Text(ctx, text).FontSize(fontTiny).Bold().TextColor(ctx.Theme().TextMuted)
 }
 
 // anchorLabel names the place a thread is about.
 func anchorLabel(ctx *ui.Context, label string) {
-	ui.Text(ctx, label).Font("monospace").FontSize(12).TextColor(ctx.Theme().Accent).SingleLine()
+	codeText(ctx, label).TextColor(ctx.Theme().Accent).SingleLine()
 }
 
 // messageHeader names who wrote a message of a thread, and when.
@@ -79,7 +90,7 @@ func bubble(ctx *ui.Context, text string) {
 // the font size.
 func codeQuote(ctx *ui.Context, text string) ui.Element {
 	theme := ctx.Theme()
-	return ui.Text(ctx, text).Font("monospace").Padding(theme.Space(1.5), theme.Space(2.5)).Radius(theme.Radius).Background(theme.Surface).Selectable()
+	return ui.Text(ctx, text).Font(monoFont).Padding(theme.Space(1.5), theme.Space(2.5)).Radius(theme.Radius).Background(theme.Surface).Selectable()
 }
 
 // errorText shows why an answer did not come: the agent's error, or
@@ -88,7 +99,7 @@ func errorText(ctx *ui.Context, err string) ui.Element {
 	if err == review.Stopped {
 		return caption(ctx, err)
 	}
-	return ui.Text(ctx, err).FontSize(12).TextColor(ctx.Theme().Danger).Selectable()
+	return ui.Text(ctx, err).FontSize(fontSmall).TextColor(ctx.Theme().Danger).Selectable()
 }
 
 // activityLine is a spinner with what the agent or the app does now.
@@ -261,7 +272,7 @@ func failureBox(ctx *ui.Context, err string) {
 	}
 	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(3)).Radius(radiusBox).Border(1, theme.Danger).Children(func() {
 		ui.Text(ctx, "The agent failed").Bold().TextColor(theme.Danger)
-		ui.Text(ctx, err).FontSize(12).Font("monospace").Selectable()
+		codeText(ctx, err).Selectable()
 	})
 }
 

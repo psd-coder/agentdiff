@@ -34,7 +34,7 @@ type reveal struct {
 func (app *app) walkthrough(ctx *ui.Context, parent string, walkthrough *review.Walkthrough) {
 	theme := ctx.Theme()
 	if walkthrough.Summary != "" {
-		ui.Text(ctx, walkthrough.Summary).FontSize(15).Selectable()
+		leadText(ctx, walkthrough.Summary).Selectable()
 	}
 	for i, s := range walkthrough.Steps {
 		app.stepCard(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i)), parent, i, s)
@@ -267,11 +267,11 @@ func (app *app) snippetView(ctx *ui.Context, ref review.Ref, snippet snippet, di
 	ui.Column(ctx).Radius(radiusBox).Border(1, theme.Border).Clip().Children(func() {
 		ui.Row(ctx).Gap(theme.Space(2.5)).Padding(theme.Space(1.5), theme.Space(2.5)).AlignItems(ui.Center).Background(theme.Surface).Children(func() {
 			if snippet.inDiff {
-				if textLink(ctx, ref.Label(), func(e ui.Element) { e.Font("monospace").FontSize(12) }).Shrink(0).Tooltip("Open in the diff").Clicked() {
+				if textLink(ctx, ref.Label(), func(e ui.Element) { e.Font(monoFont).FontSize(fontSmall) }).Shrink(0).Tooltip("Open in the diff").Clicked() {
 					app.openRef(ref)
 				}
 			} else {
-				ui.Text(ctx, ref.Label()).Font("monospace").FontSize(12).SingleLine().Shrink(0)
+				codeText(ctx, ref.Label()).SingleLine().Shrink(0)
 			}
 			if ref.Why != "" {
 				caption(ctx, ref.Why).SingleLine().Shrink(1)
@@ -340,8 +340,8 @@ func (app *app) snippetLines(ctx *ui.Context, ref review.Ref, snippet snippet, d
 				row.Background(mark)
 			}
 			row.Children(func() {
-				ui.Text(ctx, fmt.Sprint(ref.Start+i)).Font("monospace").FontSize(12).TextColor(numberColor).Width(32).TextAlign(ui.End).Unselectable()
-				ui.RichText(ctx, codeSpans(line, tokens[i], colors)...).Font("monospace").FontSize(12).SingleLine().Shrink(1)
+				codeText(ctx, fmt.Sprint(ref.Start+i)).TextColor(numberColor).Width(32).TextAlign(ui.End).Unselectable()
+				ui.RichText(ctx, codeSpans(line, tokens[i], colors)...).Font(monoFont).FontSize(fontSmall).SingleLine().Shrink(1)
 			})
 		}
 	})
@@ -423,7 +423,7 @@ func (app *app) walkPage(ctx *ui.Context, id string) {
 		pageColumn(ctx).Gap(theme.Space(4)).Children(func() {
 			ui.Row(ctx).Gap(theme.Space(1.5)).AlignItems(ui.Center).Wrap().Children(func() {
 				crumb := func(label string, p page) {
-					link := textLink(ctx, excerpt(label, 40), func(e ui.Element) { e.FontSize(12) }).Tooltip(label)
+					link := textLink(ctx, excerpt(label, 40), func(e ui.Element) { e.FontSize(fontSmall) }).Tooltip(label)
 					if link.Clicked() {
 						app.nav.goTo(p)
 					}

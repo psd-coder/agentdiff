@@ -61,7 +61,7 @@ func (app *app) promptBanner(ctx *ui.Context) {
 	warningBox(ctx).Gap(theme.Space(1.5)).Children(func() {
 		ui.Text(ctx, "The agent runs use the prompts from the settings in place of these files of the repository:")
 		for _, p := range app.promptProblems {
-			ui.Text(ctx, p).FontSize(12).Selectable()
+			ui.Text(ctx, p).FontSize(fontSmall).Selectable()
 		}
 	})
 }
@@ -106,7 +106,7 @@ func (app *app) earlierList(ctx *ui.Context) {
 	theme := ctx.Theme()
 	sectionHeading(ctx, "Earlier reviews")
 	ui.Text(ctx, "Reviews of uncommitted changes that are no longer in the working tree. A review comes back here by itself when its changes do.").
-		FontSize(12).TextColor(theme.TextMuted)
+		FontSize(fontSmall).TextColor(theme.TextMuted)
 	for _, e := range app.reviews.Earlier() {
 		row := ui.Row(ctx.Key("earlier-"+e.ID())).Gap(theme.Space(2)).Padding(0, theme.Space(2.5), 0, 0).Radius(radiusBox).Border(1, theme.Border).AlignItems(ui.Center)
 		row.Children(func() {
@@ -252,7 +252,7 @@ func (app *app) versionSwitcher(ctx *ui.Context, shown *review.Overview) {
 	labels := versionLabels(versions, app.rev.Overview)
 	picked := labels[slices.Index(versions, shown)]
 	ui.Toolbar(ctx, func() {
-		popUp(ctx, &picked, labels).Label("Overview version").FontSize(12).TextColor(ctx.Theme().TextMuted).OnChange(func() {
+		popUp(ctx, &picked, labels).Label("Overview version").FontSize(fontSmall).TextColor(ctx.Theme().TextMuted).OnChange(func() {
 			if index := slices.Index(labels, picked); index >= 0 {
 				app.nav.goTo(app.versionPage(versions[index]))
 			}
@@ -286,7 +286,7 @@ func (app *app) commitMessage(ctx *ui.Context) {
 		return
 	}
 	ui.Column(ctx).Gap(theme.Space(1.5)).Children(func() {
-		ui.Text(ctx, cm.Subject).FontSize(15).Bold().Selectable()
+		leadText(ctx, cm.Subject).Bold().Selectable()
 		if cm.Body != "" {
 			ui.Text(ctx, cm.Body).Selectable()
 		}
@@ -426,12 +426,12 @@ func (app *app) groupCards(ctx *ui.Context) {
 						mark = "✓"
 					}
 					ui.Text(ctx, mark).Width(14).TextColor(theme.Success)
-					link := textLink(ctx, f, func(e ui.Element) { e.Font("monospace").FontSize(12) })
+					link := textLink(ctx, f, func(e ui.Element) { e.Font(monoFont).FontSize(fontSmall) })
 					if link.Clicked() {
 						app.nav.goTo(page{kindFile, f})
 					}
 					if diff != nil {
-						diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(11)
+						diffStat(ctx, diff.change.Additions, diff.change.Deletions).FontSize(fontTiny)
 					}
 				})
 			}

@@ -100,7 +100,7 @@ func (app *app) shortcutRow(ctx *ui.Context, cm *command) {
 					// The modifiers show as they are held, before the key
 					// that ends the recording.
 					if held := app.platform.modsLabel(ctx.Modifiers()); held != "" {
-						ui.Text(ctx, held+"…").Font("monospace").FontSize(12)
+						codeText(ctx, held+"…")
 					} else {
 						caption(ctx, "Press keys…")
 					}
@@ -122,7 +122,7 @@ func (app *app) shortcutRow(ctx *ui.Context, cm *command) {
 			if keys == "" {
 				button.TextColor(theme.TextMuted)
 			} else {
-				button.Font("monospace")
+				button.Font(monoFont)
 			}
 			if button.Clicked() {
 				app.startRecording(cm.id)

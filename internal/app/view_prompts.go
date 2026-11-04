@@ -80,7 +80,7 @@ func (app *app) promptsTab(ctx *ui.Context, form *promptForm) {
 		if _, ok := form.repo[tpl.Name]; ok {
 			ui.Field(ctx, "", func() {
 				warningBox(ctx).Children(func() {
-					ui.Text(ctx, "This repository gives its own prompt in "+repoPromptFile(tpl.Name)+", so its runs use that file. The text below goes to the runs in other repositories.").FontSize(12)
+					ui.Text(ctx, "This repository gives its own prompt in "+repoPromptFile(tpl.Name)+", so its runs use that file. The text below goes to the runs in other repositories.").FontSize(fontSmall)
 				})
 			})
 		}
@@ -92,7 +92,7 @@ func (app *app) promptsTab(ctx *ui.Context, form *promptForm) {
 			}
 		}
 		ui.Field(ctx.Key("prompt-"+string(tpl.Name)), "Text:", func() {
-			ui.TextArea(ctx, text).Lines(8, 16).Font("monospace").FontSize(12).Label(tpl.Title + " prompt")
+			ui.TextArea(ctx, text).Lines(8, 16).Font(monoFont).FontSize(fontSmall).Label(tpl.Title + " prompt")
 			ui.Row(ctx).Gap(theme.Space(2)).Justify(ui.End).Children(func() {
 				ui.Button(ctx, "Copy default").Tooltip("Copy the default text of this prompt, as a start for " + repoPromptFile(tpl.Name)).OnClick(func() {
 					copyText(ctx, tpl.Default, "Default prompt copied")
@@ -123,10 +123,10 @@ func (app *app) blockView(ctx *ui.Context, form *promptForm, name review.PromptN
 	}
 	ui.Column(ctx).Gap(theme.Space(1)).Padding(theme.Space(2), theme.Space(3)).Radius(radiusBox).Border(1, theme.Border).Children(func() {
 		ui.Row(ctx).Gap(theme.Space(2)).AlignItems(ui.Center).Children(func() {
-			ui.Text(ctx, "{{"+block.Name+"}}").Font("monospace").FontSize(12).Bold().Selectable()
+			codeText(ctx, "{{"+block.Name+"}}").Bold().Selectable()
 			smallCaption(ctx, need)
 		})
-		ui.Text(ctx, block.About).FontSize(12)
+		ui.Text(ctx, block.About).FontSize(fontSmall)
 		text, ok := app.blockText(name, block.Name)
 		if !ok {
 			return
@@ -136,7 +136,7 @@ func (app *app) blockView(ctx *ui.Context, form *promptForm, name review.PromptN
 			form.blocks[key] = new(bool)
 		}
 		ui.Collapsible(ctx, "Show the text", form.blocks[key], func() {
-			codeQuote(ctx, text).FontSize(11)
+			codeQuote(ctx, text).FontSize(fontTiny)
 		})
 	})
 }

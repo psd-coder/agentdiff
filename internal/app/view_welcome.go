@@ -110,7 +110,7 @@ func (app *app) welcomeView(ctx *ui.Context) {
 			if appIcon != nil {
 				ui.Image(ctx, appIcon).Size(128, 128).Fit(ui.Contain)
 			}
-			ui.Text(ctx, "AgentDiff").FontSize(30).Bold()
+			ui.Text(ctx, "AgentDiff").FontSize(fontHero).Bold()
 			if version := mygo.App.Version(); version != "" && app.win != nil {
 				ui.Text(ctx, "Version "+version).TextColor(theme.TextMuted)
 			}

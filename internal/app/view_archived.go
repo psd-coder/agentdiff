@@ -68,7 +68,7 @@ func (app *app) earlierStatus(earlier *continuity.Earlier) string {
 func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent string, nested bool, walkthrough *review.Walkthrough, seen map[string]bool) {
 	theme := ctx.Theme()
 	if walkthrough.Summary != "" {
-		ui.Text(ctx, walkthrough.Summary).FontSize(15).Selectable()
+		leadText(ctx, walkthrough.Summary).Selectable()
 	}
 	for i, s := range walkthrough.Steps {
 		card(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i))).Gap(theme.Space(2.5)).Children(func() {
@@ -157,7 +157,7 @@ func (app *app) savedGroups(ctx *ui.Context, groups []review.Group) {
 				ui.Text(ctx, g.Summary).TextColor(theme.TextMuted)
 			}
 			for _, f := range g.Files {
-				ui.Text(ctx.Key(f), f).Font("monospace").FontSize(12).Selectable()
+				codeText(ctx.Key(f), f).Selectable()
 			}
 		})
 	}
@@ -179,7 +179,7 @@ func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
 		outlineCard(ctx.Key("thread-" + th.ID)).Gap(theme.Space(2)).Children(func() {
 			anchorLabel(ctx, th.Anchor.Label())
 			if th.Anchor.Quote != "" && th.Anchor.Kind != review.AnchorSection {
-				codeQuote(ctx, strings.ReplaceAll(strings.TrimRight(th.Anchor.Quote, "\n"), "\t", "    ")).FontSize(12)
+				codeQuote(ctx, strings.ReplaceAll(strings.TrimRight(th.Anchor.Quote, "\n"), "\t", "    ")).FontSize(fontSmall)
 			}
 			for i, m := range th.Messages {
 				ui.Column(ctx.Key(i)).Gap(theme.Space(1)).Children(func() {
