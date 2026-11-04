@@ -2479,8 +2479,8 @@ func TestFocusAndShortcuts(t *testing.T) {
 		t.Errorf("open file: %q", app.nav.page.String())
 	}
 	click("Focus Changes")
-	if !tt.Focused("Changes") {
-		t.Error("changes sidebar has no focus")
+	if !tt.Focused("Uncommitted changes") {
+		t.Error("the uncommitted changes have no focus")
 	}
 
 	click("Keyboard Shortcuts")

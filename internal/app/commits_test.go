@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -71,7 +72,7 @@ func commitRows(tt *ui.Tester) int {
 // and fails the test when it never does.
 func scrollCommits(t *testing.T, app *app, tt *ui.Tester, done func() bool) {
 	t.Helper()
-	bounds, ok := tt.Find("Changes")
+	bounds, ok := tt.Find("Commits")
 	if !ok {
 		t.Fatalf("no commit list: %q", tt.Texts())
 	}
@@ -115,8 +116,8 @@ func TestCommitListPagesWithKeys(t *testing.T) {
 	app.queueCommand("focus-changes")
 	tt.Frame()
 	tt.Frame()
-	if !tt.Focused("Changes") {
-		t.Fatal("the list of changes has no focus")
+	if !tt.Focused("Uncommitted changes") {
+		t.Fatal("the uncommitted changes have no focus")
 	}
 	for range 5 {
 		tt.Key(0, ui.KeyEnd)
@@ -128,10 +129,8 @@ func TestCommitListPagesWithKeys(t *testing.T) {
 	}
 	tt.Key(0, ui.KeyHome)
 	tt.Frame()
-	tt.Key(0, ui.KeyDown)
-	tt.Frame()
 	if scope, ok := app.cmpr.allScope(); !ok || app.chosen != scope {
-		t.Errorf("Home then Down chose %+v", app.chosen)
+		t.Errorf("Home chose %+v", app.chosen)
 	}
 }
 
@@ -194,5 +193,45 @@ func TestPickBranchOpensNewestAfterRefresh(t *testing.T) {
 	pump(t, app, "the newest commit of main", func() bool { return app.chosen.Kind == gitx.ScopeCommit })
 	if app.chosen.Commit != tip {
 		t.Errorf("opened %s, want the tip of main %s", app.chosen.Commit, tip)
+	}
+}
+
+// TestChangesHeadingGoesWithUncommitted shows the heading Changes only
+// with the row of the uncommitted changes: a branch other than the one
+// checked out has neither.
+func TestChangesHeadingGoesWithUncommitted(t *testing.T) {
+	// The sidebar comes first in the texts, from its top.
+	app, tt := pagedApp(t, 3)
+	if top := tt.Texts()[:2]; !slices.Equal(top, []string{"Changes", "Uncommitted changes"}) {
+		t.Fatalf("checked-out branch: the sidebar starts with %q", top)
+	}
+	app.queue = make(chan func(), 64)
+	app.pickBranch("main")
+	pump(t, app, "the newest commit of main", func() bool { return app.chosen.Kind == gitx.ScopeCommit })
+	tt.Frame()
+	if top := tt.Texts()[0]; top != "Recent commits on main" {
+		t.Errorf("another branch: the sidebar starts with %q", top)
+	}
+}
+
+// TestDownLeavesUncommittedForCommits moves from the uncommitted changes
+// to the row under them with Down, over the window's material too, where
+// the titles of the list once stopped the keys.
+func TestDownLeavesUncommittedForCommits(t *testing.T) {
+	for _, material := range []bool{false, true} {
+		app, tt := pagedApp(t, 3)
+		tt.SetVibrancy(material)
+		app.queueCommand("focus-changes")
+		tt.Frame()
+		tt.Frame()
+		tt.Key(0, ui.KeyDown)
+		tt.Frame()
+		tt.Frame()
+		if scope, ok := app.cmpr.allScope(); !ok || app.chosen != scope {
+			t.Errorf("material %v: Down chose %+v", material, app.chosen)
+		}
+		if !tt.Focused("Commits") {
+			t.Errorf("material %v: the list of commits has no focus", material)
+		}
 	}
 }
