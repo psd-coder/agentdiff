@@ -3,11 +3,10 @@ package app
 import "github.com/egoist/mygo/ui"
 
 // The insets of a picker row line its icon and text up with those of
-// the search field above the list, which has a 15 DIP magnifier.
+// the search field above the list, which has an iconMenu magnifier.
 const (
 	menuInset = 9
 	menuGap   = 7
-	menuIcon  = 15
 )
 
 // pickList is a list in a dropdown that works as the options of a
@@ -113,7 +112,7 @@ func searchField(ctx *ui.Context, query *string, label string, onKey func(key ui
 	var in ui.Element
 	field := ui.Row(ctx).AlignItems(ui.Center).Gap(menuGap).Padding(6, menuInset-1).Radius(theme.Radius).Background(theme.Surface).Border(1, theme.Border).Cursor(ui.CursorText)
 	field.Children(func() {
-		ui.Icon(ctx, searchIcon).Size(menuIcon, menuIcon).TextColor(theme.TextMuted)
+		ui.Icon(ctx, searchIcon).FontSize(iconMenu).TextColor(theme.TextMuted)
 		in = ui.TextInputBase(ctx, query).Grow(1).Placeholder(label).Label(label).AutoFocus().OnTextKey(onKey)
 	})
 	if in.Focused() {
@@ -134,7 +133,7 @@ func pickerButton(ctx *ui.Context, svg *ui.SVG, label, detail string, open bool)
 		if detail != "" {
 			ui.Text(ctx, detail).TextColor(theme.TextMuted).SingleLine()
 		}
-		ui.Icon(ctx, chevronIcon).FontSize(12).TextColor(theme.TextMuted)
+		ui.Icon(ctx, chevronIcon).FontSize(iconSmall).TextColor(theme.TextMuted)
 	})
 }
 
@@ -142,7 +141,7 @@ func pickerButton(ctx *ui.Context, svg *ui.SVG, label, detail string, open bool)
 // technology, with the tooltip tip.
 func iconButton(ctx *ui.Context, svg *ui.SVG, label, tip string) ui.Element {
 	return ui.Button(ctx, "").Padding(4, 6).Label(label).Tooltip(tip).Children(func() {
-		ui.Icon(ctx, svg).FontSize(13)
+		ui.Icon(ctx, svg).FontSize(iconRow)
 	})
 }
 

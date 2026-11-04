@@ -191,7 +191,7 @@ func (app *app) logItemView(ctx *ui.Context, it *logItem) {
 			head.Background(theme.SurfaceHover)
 		}
 		head.Children(func() {
-			arrow := disclosureArrow(ctx, it.expanded).Size(10, 10)
+			arrow := disclosureArrow(ctx, it.expanded)
 			if it.Detail == "" {
 				arrow.Invisible()
 			}
