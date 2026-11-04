@@ -327,12 +327,14 @@ func (app *app) compareModal(ctx *ui.Context) {
 			ui.Segmented(ctx, &form.mode, "Branches", "Range").Label("Compare")
 			if form.mode == compareBranches {
 				caption(ctx, "Review the commits of a branch since it left its base. The branch does not have to be checked out.")
-				ui.Text(ctx, "Branch").FontSize(12).Bold()
-				app.takeFocus(ui.Combobox(ctx.Key("branch"), &form.branch, app.cmpr.branches).Label("Branch").AutoFocus(), "compare")
-				ui.Text(ctx, "Base").FontSize(12).Bold()
-				ui.Combobox(ctx.Key("base"), &form.base, app.cmpr.branches).Label("Base")
+				ui.Field(ctx, "Branch", func() {
+					app.takeFocus(ui.Combobox(ctx.Key("branch"), &form.branch, app.cmpr.branches).AutoFocus(), "compare")
+				})
+				base := ui.Field(ctx, "Base", func() {
+					ui.Combobox(ctx.Key("base"), &form.base, app.cmpr.branches)
+				})
 				if form.branch != "" && form.branch == form.base {
-					errorText(ctx, "Pick two different branches.")
+					base.Error("Pick two different branches.")
 				}
 			} else {
 				caption(ctx, "Review the changes between two commits, branches or tags, as git diff from..to shows them.")
