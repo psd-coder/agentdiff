@@ -87,6 +87,11 @@ func (app *app) sidebar(ctx *ui.Context) {
 		over := *base
 		over.Surface, over.Border = base.Text.Alpha(0.07), base.Text.Alpha(0.1)
 		over.SurfaceHover, over.SurfacePressed = base.Text.Alpha(0.06), base.Text.Alpha(0.1)
+		if !base.Dark {
+			// The gray of secondary text reads at 3.1:1 on a light
+			// material; this one at 4.9:1.
+			over.TextMuted = ui.Hex("#52525b")
+		}
 		ctx.SetTheme(&over)
 		defer ctx.SetTheme(base)
 	}
