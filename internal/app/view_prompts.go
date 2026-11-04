@@ -95,8 +95,7 @@ func (app *app) promptsTab(ctx *ui.Context, form *promptForm) {
 			ui.TextArea(ctx, text).Lines(8, 16).Font("monospace").FontSize(12).Label(tpl.Title + " prompt")
 			ui.Row(ctx).Gap(8).Justify(ui.End).Children(func() {
 				ui.Button(ctx, "Copy default").Tooltip("Copy the default text of this prompt, as a start for " + repoPromptFile(tpl.Name)).OnClick(func() {
-					ctx.WriteClipboard(tpl.Default)
-					ctx.Toast("Default prompt copied")
+					copyText(ctx, tpl.Default, "Default prompt copied")
 				})
 				ui.Button(ctx, "Reset").Disabled(*text == tpl.Default).OnClick(func() { *text = tpl.Default })
 			})

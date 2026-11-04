@@ -167,6 +167,12 @@ func linkCard(ctx *ui.Context) ui.Element {
 	return linkRow(ctx).Padding(10, 12).Gap(4).Column().AlignItems(ui.Stretch)
 }
 
+// copyText puts text on the clipboard and tells it in a toast.
+func copyText(ctx *ui.Context, text, toast string) {
+	ctx.WriteClipboard(text)
+	ctx.Toast(toast)
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {

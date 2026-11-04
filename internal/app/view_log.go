@@ -156,8 +156,7 @@ func (app *app) runView(ctx *ui.Context, run *logRun) {
 			}
 			ui.Row(ctx).Gap(8).Children(func() {
 				ui.Button(ctx, "Copy").Disabled(!run.loaded).OnClick(func() {
-					ctx.WriteClipboard(run.text())
-					ctx.Toast("Run log copied")
+					copyText(ctx, run.text(), "Run log copied")
 				})
 				if app.win != nil {
 					path := app.store.RunPath(rev.Repo, rev.Scope, run.info.ID)
