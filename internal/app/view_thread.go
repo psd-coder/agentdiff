@@ -57,7 +57,7 @@ func (app *app) threadPanel(ctx *ui.Context) {
 				}
 			})
 		})
-		app.composer(ctx, th)
+		app.threadComposer(ctx, th)
 		panelFooter(ctx).Children(func() {
 			app.cmdCheckbox(ctx, "include-thread", "exclude-thread", th.ID, "In feedback")
 			app.cmdCheckbox(ctx, "resolve-thread", "reopen-thread", th.ID, "Resolved")
@@ -113,41 +113,27 @@ func (app *app) message(ctx *ui.Context, th *review.Thread, index int) {
 	})
 }
 
-func (app *app) composer(ctx *ui.Context, th *review.Thread) {
-	theme := ctx.Theme()
-	draft := app.drafts[th.ID]
+func (app *app) threadComposer(ctx *ui.Context, th *review.Thread) {
 	busy := app.busy(th.ID)
-	ui.Column(ctx).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
-		placeholder := "Comment, or question for the agent"
-		if len(th.Messages) > 0 {
-			placeholder = "Reply"
+	placeholder := "Comment, or question for the agent"
+	if len(th.Messages) > 0 {
+		placeholder = "Reply"
+	}
+	send := func(text string) bool {
+		if app.busy(th.ID) {
+			return false
 		}
-		in := ui.TextArea(ctx.Key("draft-"+th.ID), &draft).Lines(3, 10).Placeholder(placeholder).AutoFocus().
-			OnTextKey(func(k ui.TextKey) bool {
-				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd && !app.busy(th.ID) {
-					app.ask(app.rev, th, k.Text())
-					k.SetText("")
-					app.drafts[th.ID] = ""
-					return true
-				}
-				return false
-			})
-		if in.Changed() {
-			app.drafts[th.ID] = draft
-		}
+		app.ask(app.rev, th, text)
+		return true
+	}
+	app.composer(ctx, th.ID, placeholder, send, func(draft string, submit func()) {
 		empty := strings.TrimSpace(draft) == ""
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			smallCaption(ctx, app.platform.cmdEnter()+" asks the agent").Grow(1)
-			app.cmdButton(ctx, "stop-thread", th.ID, "Stop")
-			ui.Button(ctx, "Comment").Disabled(empty).Tooltip("Add to the feedback without asking the agent").OnClick(func() {
-				app.comment(th, draft)
-				app.drafts[th.ID] = ""
-			})
-			ui.PrimaryButton(ctx, "Ask agent").Disabled(empty || busy).Tooltip("Send to the review agent (" + app.platform.keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() {
-				app.ask(app.rev, th, draft)
-				app.drafts[th.ID] = ""
-			})
+		app.cmdButton(ctx, "stop-thread", th.ID, "Stop")
+		ui.Button(ctx, "Comment").Disabled(empty).Tooltip("Add to the feedback without asking the agent").OnClick(func() {
+			app.comment(th, draft)
+			app.drafts[th.ID] = ""
 		})
+		ui.PrimaryButton(ctx, "Ask agent").Disabled(empty || busy).Tooltip("Send to the review agent (" + app.platform.keyLabel("CmdOrCtrl+Enter") + ")").OnClick(submit)
 	})
 }
 

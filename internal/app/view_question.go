@@ -215,45 +215,27 @@ func (app *app) compactStep(ctx *ui.Context, title string, step review.Step) {
 }
 
 func (app *app) questionComposer(ctx *ui.Context, walk *review.Walk, target *askTarget) {
-	theme := ctx.Theme()
 	busy := walk != nil && app.busy(walk.ID)
-	key := app.questionDraftKey(walk, *target)
-	draft := app.drafts[key]
-	send := func(text string) {
-		if strings.TrimSpace(text) == "" || busy {
-			return
-		}
-		app.drafts[key] = ""
-		if walk == nil {
-			app.askQuestion(target.parent, target.stepID, text)
-			return
-		}
-		app.askMore(app.rev, walk, text)
+	placeholder := "What do you want to know?"
+	if walk != nil {
+		placeholder = "Follow-up question"
 	}
-	ui.Column(ctx).Gap(8).Padding(10, 12).BorderWidth(1, 0, 0, 0).BorderColor(theme.Border).Children(func() {
-		placeholder := "What do you want to know?"
-		if walk != nil {
-			placeholder = "Follow-up question"
+	send := func(text string) bool {
+		switch {
+		case busy:
+			return false
+		case walk == nil:
+			app.askQuestion(target.parent, target.stepID, text)
+		default:
+			app.askMore(app.rev, walk, text)
 		}
-		in := ui.TextArea(ctx.Key("pane-"+key), &draft).Lines(2, 8).Placeholder(placeholder).AutoFocus().
-			OnTextKey(func(k ui.TextKey) bool {
-				if k.Key == ui.KeyEnter && k.Mods == ui.Cmd {
-					send(k.Text())
-					k.SetText("")
-					return true
-				}
-				return false
-			})
-		if in.Changed() {
-			app.drafts[key] = draft
+		return true
+	}
+	app.composer(ctx, app.questionDraftKey(walk, *target), placeholder, send, func(draft string, submit func()) {
+		if busy {
+			ui.Button(ctx, "Stop").OnClick(func() { app.runner.stop(app.rev, walk.ID) })
 		}
-		ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
-			smallCaption(ctx, app.platform.cmdEnter()+" asks").Grow(1)
-			if busy {
-				ui.Button(ctx, "Stop").OnClick(func() { app.runner.stop(app.rev, walk.ID) })
-			}
-			ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).Tooltip("Ask (" + app.platform.keyLabel("CmdOrCtrl+Enter") + ")").OnClick(func() { send(draft) })
-		})
+		ui.PrimaryButton(ctx, "Ask").Disabled(strings.TrimSpace(draft) == "" || busy).Tooltip("Ask (" + app.platform.keyLabel("CmdOrCtrl+Enter") + ")").OnClick(submit)
 	})
 }
 
