@@ -293,10 +293,7 @@ func (app *app) foldButton(ctx *ui.Context, file string) {
 	if folded {
 		tip, label = "Unfold the diff", "Unfold"
 	}
-	btn := ui.ButtonBase(ctx.Key("fold")).Padding(4).Radius(4).Expanded(!folded).Label(label).Tooltip(tip)
-	if btn.Hovered() {
-		btn.Background(theme.SurfaceHover)
-	}
+	btn := ghostButton(ctx.Key("fold")).Expanded(!folded).Label(label).Tooltip(tip)
 	btn.Children(func() {
 		arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(theme.TextMuted)
 		if folded {

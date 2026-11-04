@@ -623,15 +623,12 @@ func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bo
 		if !*open {
 			label = "Show files"
 		}
-		btn := ui.ButtonBase(ctx).Padding(2).Radius(4).Label(label).Tooltip(label).Children(func() {
+		btn := ghostButton(ctx).Padding(2).Label(label).Tooltip(label).Children(func() {
 			arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(theme.TextMuted)
 			if !*open {
 				arrow.Rotate(-90)
 			}
 		})
-		if btn.Hovered() {
-			btn.Background(theme.Text.Alpha(0.1))
-		}
 		if btn.Clicked() {
 			*open = !*open
 		}
