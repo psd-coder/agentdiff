@@ -614,7 +614,6 @@ func (app *app) groupOpen(id string) *bool {
 // groupItem is the title of a group in the sidebar. Choosing it opens
 // the group page, and its chevron shows and hides the group's files.
 func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bool) {
-	theme := ctx.Theme()
 	item := ui.SidebarItem(ctx, page{kindGroup, id}.String(), nil, title).Tooltip(title).FontSize(12).Bold().Expanded(*open)
 	item.ContextMenu(func(m *ui.Menu) { app.cmdMenu(ctx, m, id, "mark-group-viewed", "mark-group-not-viewed") })
 	item.Children(func() {
@@ -623,12 +622,7 @@ func (app *app) groupItem(ctx *ui.Context, id, title string, files int, open *bo
 		if !*open {
 			label = "Show files"
 		}
-		btn := ghostButton(ctx).Padding(2).Label(label).Tooltip(label).Children(func() {
-			arrow := ui.Icon(ctx, chevronIcon).Size(12, 12).TextColor(theme.TextMuted)
-			if !*open {
-				arrow.Rotate(-90)
-			}
-		})
+		btn := ghostButton(ctx).Padding(2).Label(label).Tooltip(label).Children(func() { disclosureArrow(ctx, *open) })
 		if btn.Clicked() {
 			*open = !*open
 		}
