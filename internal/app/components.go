@@ -247,6 +247,17 @@ func linkCard(ctx *ui.Context) ui.Element {
 	return linkRow(ctx).Padding(theme.Space(2.5), theme.Space(3)).Gap(theme.Space(1)).Column().AlignItems(ui.Stretch)
 }
 
+// textLink is a text that leads to another place in the app. It takes
+// the focus with Tab, and Enter or Space follows it, as a click does.
+// style styles the text.
+func textLink(ctx *ui.Context, label string, style func(text ui.Element)) ui.Element {
+	theme := ctx.Theme()
+	return ui.ButtonBase(ctx).Role(ui.RoleLink).Cursor(ui.CursorPointer).Shrink(1).Radius(radiusSmall).Children(func() {
+		text := ui.Text(ctx, label).TextColor(theme.Accent).SingleLine()
+		style(text)
+	})
+}
+
 // copyText puts text on the clipboard and tells it in a toast.
 func copyText(ctx *ui.Context, text, toast string) {
 	ctx.WriteClipboard(text)
