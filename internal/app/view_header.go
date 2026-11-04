@@ -40,7 +40,6 @@ func (app *app) toolbar(ctx *ui.Context) {
 				caption(ctx, label).SingleLine()
 			})
 			app.toolButton(ctx, "agent-log", logIcon, "Agent log", "Agent log", 0)
-			app.toolButton(ctx, "refresh", refreshIcon, "Refresh", "Refresh", 0)
 			feedbackCount := len(review.ExportedThreads(app.rev, review.ExportOptions{}))
 			app.toolButton(ctx, "go-feedback", sendIcon, "Feedback", "Feedback", feedbackCount)
 		}).Shrink(0).Label("Actions")

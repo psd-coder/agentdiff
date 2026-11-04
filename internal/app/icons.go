@@ -48,6 +48,5 @@ var (
 	backIcon     = icon(`<path d="m15 18-6-6 6-6"/>`)
 	forwardIcon  = icon(`<path d="m9 18 6-6-6-6"/>`)
 	logIcon      = icon(`<path d="M15 12h-5M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/>`)
-	refreshIcon  = icon(`<path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1 6.7 2.7L21 8"/><path d="M21 3v5h-5"/>`)
 	keyboardIcon = icon(`<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>`)
 )
