@@ -21,7 +21,7 @@ func (app *app) archivedPage(ctx *ui.Context, id string) {
 	}
 	rev, ov := earlier.Rev, earlier.Rev.Overview
 	app.pageScroll(ctx, page{kindArchived, id}).Grow(1).FillWidth().Children(func() {
-		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
+		pageColumn(ctx).Gap(16).Children(func() {
 			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
 				pageTitle(ctx, "Earlier review")
 				ui.Spacer(ctx)
@@ -65,12 +65,11 @@ func (app *app) earlierStatus(earlier *continuity.Earlier) string {
 // or the overview version it belongs to. seen keeps a walk from showing
 // twice.
 func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent string, nested bool, walkthrough *review.Walkthrough, seen map[string]bool) {
-	theme := ctx.Theme()
 	if walkthrough.Summary != "" {
 		ui.Text(ctx, walkthrough.Summary).FontSize(15).Selectable()
 	}
 	for i, s := range walkthrough.Steps {
-		ui.Column(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i))).Gap(10).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border).Children(func() {
+		card(ctx.Key(fmt.Sprintf("step-%s-%d", parent, i))).Gap(10).Children(func() {
 			cardTitle(ctx, fmt.Sprintf("%d. %s", i+1, s.Title))
 			if s.Text != "" {
 				markdown.View(ctx, s.Text, &app.md)
@@ -91,7 +90,7 @@ func (app *app) savedWalkthrough(ctx *ui.Context, rev *review.Review, parent str
 			sectionHeading(ctx.Key(fmt.Sprintf("part-%s-%d", parent, si)), sec.Title)
 		}
 		for i, it := range sec.Items {
-			ui.Column(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Padding(12, 16).Radius(10).Border(1, theme.Border).Children(func() {
+			outlineCard(ctx.Key(fmt.Sprintf("part-%s-%d-%d", parent, si, i))).Gap(6).Children(func() {
 				if it.Title != "" {
 					ui.Text(ctx, it.Title).Bold()
 				}
@@ -150,7 +149,7 @@ func (app *app) savedGroups(ctx *ui.Context, groups []review.Group) {
 	}
 	sectionHeading(ctx, "Review order")
 	for gi, g := range groups {
-		ui.Column(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Padding(14, 18).Radius(10).Border(1, theme.Border).Children(func() {
+		outlineCard(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Children(func() {
 			ui.Text(ctx, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold()
 			if g.Summary != "" {
 				ui.Text(ctx, g.Summary).TextColor(theme.TextMuted)
@@ -163,7 +162,6 @@ func (app *app) savedGroups(ctx *ui.Context, groups []review.Group) {
 }
 
 func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
-	theme := ctx.Theme()
 	var shown []*review.Thread
 	for _, th := range threads {
 		if len(th.Messages) > 0 {
@@ -175,7 +173,7 @@ func (app *app) savedThreads(ctx *ui.Context, threads []*review.Thread) {
 	}
 	sectionHeading(ctx, "Comments")
 	for _, th := range shown {
-		ui.Column(ctx.Key("thread-"+th.ID)).Gap(8).Padding(12, 16).Radius(10).Border(1, theme.Border).Children(func() {
+		outlineCard(ctx.Key("thread-" + th.ID)).Gap(8).Children(func() {
 			anchorLabel(ctx, th.Anchor.Label())
 			if th.Anchor.Quote != "" && th.Anchor.Kind != review.AnchorSection {
 				codeQuote(ctx, strings.ReplaceAll(strings.TrimRight(th.Anchor.Quote, "\n"), "\t", "    ")).FontSize(12)

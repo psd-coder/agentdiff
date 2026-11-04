@@ -63,6 +63,39 @@ func errorText(ctx *ui.Context, err string) ui.Element {
 	return ui.Text(ctx, err).FontSize(12).TextColor(ctx.Theme().Danger).Selectable()
 }
 
+// pageColumn holds the content of a page that scrolls. Callers set its
+// gap and children.
+func pageColumn(ctx *ui.Context) ui.Element {
+	return ui.Column(ctx).Padding(24, 32).MaxWidth(980)
+}
+
+func cardBase(ctx *ui.Context) ui.Element {
+	return ui.Column(ctx).Radius(10).Border(1, ctx.Theme().Border)
+}
+
+// card holds a main part of a page: a step, a section of the overview.
+// Callers set its gap and children.
+func card(ctx *ui.Context) ui.Element {
+	return cardBase(ctx).Padding(16, 20).Background(ctx.Theme().Surface)
+}
+
+// outlineCard holds a smaller part of a page: an item of a section, a
+// group of files, a follow-up. Callers set its gap and children.
+func outlineCard(ctx *ui.Context) ui.Element {
+	return cardBase(ctx).Padding(12, 16)
+}
+
+// linkRow is a bordered row that opens what it shows. Callers set its
+// padding, direction and children, and act on Clicked.
+func linkRow(ctx *ui.Context) ui.Element {
+	theme := ctx.Theme()
+	row := ui.ButtonBase(ctx).Radius(8).Border(1, theme.Border)
+	if row.Hovered() {
+		row.Background(theme.SurfaceHover)
+	}
+	return row
+}
+
 // failureBox shows the error of a page's answer in a red box, or Stopped
 // in gray for a run the user stopped.
 func failureBox(ctx *ui.Context, err string) {

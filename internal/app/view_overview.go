@@ -185,7 +185,7 @@ func (app *app) overviewPage(ctx *ui.Context, key string) {
 		parent = ov.ID
 	}
 	app.pageScroll(ctx, page{kindOverview, key}).Grow(1).FillWidth().Children(func() {
-		ui.Column(ctx).Padding(24, 32).Gap(16).MaxWidth(980).Children(func() {
+		pageColumn(ctx).Gap(16).Children(func() {
 			ui.Row(ctx).Gap(12).AlignItems(ui.Center).Children(func() {
 				pageTitle(ctx, "Overview")
 				ui.Spacer(ctx)
@@ -318,7 +318,7 @@ func (app *app) summaryLine(ctx *ui.Context) {
 
 func (app *app) overviewIntro(ctx *ui.Context, agentName string) {
 	theme := ctx.Theme()
-	ui.Column(ctx).Gap(12).Padding(20).Radius(10).Background(theme.Surface).Border(1, theme.Border).Children(func() {
+	card(ctx).Gap(12).Children(func() {
 		cardTitle(ctx, "Get a walkthrough of these changes")
 		ui.Text(ctx, agentName+" reads the changes in read-only mode and walks you through them in a few short steps, each with the code that shows it. Go deeper into any step, or ask about it, and you get a walkthrough one level closer to the code. It also answers your checklist and groups the files in the order to review them.").TextColor(theme.TextMuted)
 		caption(ctx, "It runs with your own subscription, through the CLI on this Mac. Change the agent and the prompts in Settings.")
@@ -343,7 +343,6 @@ func (app *app) streamingOverview(ctx *ui.Context, run *agentRun) {
 }
 
 func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
-	theme := ctx.Theme()
 	meta := fmt.Sprintf("By %s", ov.Agent.Name())
 	if ov.Model != "" {
 		meta += " (" + ov.Model + ")"
@@ -355,7 +354,7 @@ func (app *app) overviewSections(ctx *ui.Context, ov *review.Overview) {
 		if title == "" {
 			title = "Summary"
 		}
-		card := ui.Column(ctx.Key(fmt.Sprintf("section-%d-%s", i, s.Title))).Gap(8).Padding(16, 20).Radius(10).Background(theme.Surface).Border(1, theme.Border)
+		card := card(ctx.Key(fmt.Sprintf("section-%d-%s", i, s.Title))).Gap(8)
 		app.discussMenu(card, title, s.Body)
 		card.Children(func() {
 			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -408,7 +407,7 @@ func (app *app) groupCards(ctx *ui.Context) {
 	}
 	sectionHeading(ctx, title)
 	for gi, g := range groups {
-		card := ui.Column(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6).Padding(14, 18).Radius(10).Border(1, theme.Border)
+		card := outlineCard(ctx.Key(fmt.Sprintf("group-%d", gi))).Gap(6)
 		card.Children(func() {
 			ui.Row(ctx).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(ctx, fmt.Sprintf("%d. %s", gi+1, g.Title)).Bold().Grow(1)
